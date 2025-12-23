@@ -84,21 +84,40 @@ export default function EditProductPage() {
       } else {
         const productData = response.data as Product
         setProduct(productData)
+
+        // Derive chunking configuration (prefer resolved_settings, then manual/auto settings, then defaults)
+        const cfg = (productData as any).chunking_config || {}
+        const resolved = cfg.resolved_settings || cfg.manual_settings || cfg.auto_settings || cfg
+        const chunkingMode = cfg.mode || 'auto'
+
+        const derivedChunkSize = resolved.chunk_size || resolved.max_tokens || 1000
+        const derivedChunkOverlap =
+          resolved.chunk_overlap ??
+          (resolved.overlap_sentences ? resolved.overlap_sentences * 20 : 200)
+        const derivedMinChunk = resolved.min_chunk_size || 100
+        const derivedMaxChunk = resolved.max_chunk_size || 2000
+        const derivedStrategy = resolved.chunking_strategy || resolved.strategy || 'fixed_size'
+        const derivedContentType = resolved.content_type || 'general'
+        const derivedModelOptimized = resolved.model_optimized ?? true
+        const derivedConfidence = resolved.confidence || resolved.analysis_confidence || 0.7
+        const derivedEmbedder = resolved.embedder_name || 'minilm'
+        const derivedDim = resolved.embedding_dimension || 384
+
         setFormData({
           name: productData.name,
           status: productData.status,
           // Load chunking configuration from product (if available)
-          chunking_mode: 'auto',
-          chunk_size: 1000,
-          chunk_overlap: 200,
-          min_chunk_size: 100,
-          max_chunk_size: 2000,
-          chunking_strategy: 'fixed_size',
-          content_type: 'general',
-          model_optimized: true,
-          confidence_threshold: 0.7,
-          embedder_name: 'minilm',
-          embedding_dimension: 384
+          chunking_mode: chunkingMode,
+          chunk_size: derivedChunkSize,
+          chunk_overlap: derivedChunkOverlap,
+          min_chunk_size: derivedMinChunk,
+          max_chunk_size: derivedMaxChunk,
+          chunking_strategy: derivedStrategy,
+          content_type: derivedContentType,
+          model_optimized: derivedModelOptimized,
+          confidence_threshold: derivedConfidence,
+          embedder_name: derivedEmbedder,
+          embedding_dimension: derivedDim
         })
       }
     } catch (err) {
