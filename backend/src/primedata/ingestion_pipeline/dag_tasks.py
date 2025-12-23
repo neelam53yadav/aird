@@ -758,8 +758,36 @@ def task_preprocess(**context) -> Dict[str, Any]:
             # Update product preprocessing stats
             if product and result.status == StageStatus.SUCCEEDED:
                 product.preprocessing_stats = result.metrics
-                if playbook_id:
-                    product.playbook_id = playbook_id
+                # Get playbook_id from result metrics (if auto-routed) or use the one from params
+                final_playbook_id = result.metrics.get('playbook_id') or playbook_id
+                if final_playbook_id:
+                    product.playbook_id = final_playbook_id
+                    logger.info(f"Updated product {product_id} with playbook_id: {final_playbook_id}")
+                
+                # Persist resolved chunking configuration if available (so UI can display actual used config)
+                resolved_chunking = result.metrics.get('chunking_config_used')
+                if resolved_chunking:
+                    product.chunking_config = {
+                        "mode": resolved_chunking.get("mode", "auto"),
+                        "resolved_settings": resolved_chunking,
+                    }
+                    logger.info(f"Updated product {product_id} with chunking_config: {product.chunking_config}")
+                
+                # Store playbook selection metadata for verification
+                playbook_selection = result.metrics.get('playbook_selection')
+                if playbook_selection:
+                    # Ensure playbook_id is included in metadata
+                    playbook_selection['playbook_id'] = final_playbook_id
+                    product.playbook_selection = playbook_selection
+                    logger.info(f"Updated product {product_id} with playbook_selection: {playbook_selection}")
+                elif final_playbook_id and not product.playbook_selection:
+                    # If playbook was provided but no metadata exists, mark as manual
+                    product.playbook_selection = {
+                        "playbook_id": final_playbook_id,
+                        "method": "manual",
+                        "reason": None,
+                        "detected_at": None,
+                    }
             
             # IMPORTANT: Do NOT mark raw files as PROCESSED here - only mark them in finalize task
             # when entire pipeline completes successfully. Files remain PROCESSING during pipeline run.

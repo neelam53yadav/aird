@@ -66,6 +66,7 @@ class ProductResponse(BaseModel):
     current_version: int
     promoted_version: Optional[int] = None
     playbook_id: Optional[str] = None  # M1
+    playbook_selection: Optional[Dict[str, Any]] = None  # Auto-detection metadata: method, reason, detected_at
     preprocessing_stats: Optional[Dict[str, Any]] = None  # M1
     trust_score: Optional[float] = None  # M2
     policy_status: Optional[str] = None  # M2: "passed" or "failed"
@@ -128,12 +129,23 @@ async def create_product(
         )
     
     # Create new product
+    # Initialize playbook_selection metadata if playbook is provided
+    playbook_selection = None
+    if request_body.playbook_id:
+        playbook_selection = {
+            "playbook_id": request_body.playbook_id,
+            "method": "manual",  # User manually selected during creation
+            "reason": None,
+            "detected_at": None,
+        }
+    
     product = Product(
         workspace_id=request_body.workspace_id,
         owner_user_id=get_user_id(current_user),
         name=request_body.name,
         status=ProductStatus.DRAFT,
         playbook_id=request_body.playbook_id,  # M1
+        playbook_selection=playbook_selection,  # Store selection metadata
         chunking_config=request_body.chunking_config,  # Chunking configuration
         embedding_config=request_body.embedding_config or {  # Embedding configuration
             "embedder_name": "minilm",

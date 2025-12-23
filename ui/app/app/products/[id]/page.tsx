@@ -27,6 +27,12 @@ interface Product {
   current_version: number
   promoted_version?: number
   playbook_id?: string  // M1
+  playbook_selection?: {  // Auto-detection metadata
+    playbook_id?: string
+    method?: 'auto_detected' | 'manual' | 'document_type_mapped'
+    reason?: string
+    detected_at?: string
+  }
   preprocessing_stats?: {  // M1
     sections?: number
     chunks?: number
@@ -941,27 +947,73 @@ export default function ProductDetailPage() {
                     </dd>
                   </div>
                 )}
-                {product.playbook_id && (
-                  <div>
-                    <dt className="text-sm font-medium text-gray-500">Preprocessing Playbook</dt>
-                    <dd className="mt-1">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                        {product.playbook_id}
-                      </span>
-                    </dd>
-                  </div>
-                )}
+                {(() => {
+                  // Get playbook_id from product or fallback to preprocessing_stats
+                  const playbookId = product.playbook_id || 
+                    (product.preprocessing_stats && typeof product.preprocessing_stats === 'object' &&
+                     product.preprocessing_stats.playbook_id) ||
+                    (product.playbook_selection && product.playbook_selection.playbook_id)
+                  
+                  const selection = product.playbook_selection
+                  const isAutoDetected = selection?.method === 'auto_detected'
+                  const detectionReason = selection?.reason
+                  
+                  return playbookId ? (
+                    <div>
+                      <dt className="text-sm font-medium text-gray-500">Preprocessing Playbook</dt>
+                      <dd className="mt-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            {playbookId}
+                          </span>
+                          {isAutoDetected && (
+                            <span 
+                              className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"
+                              title={detectionReason ? `Auto-detected: ${detectionReason}` : 'Auto-detected'}
+                            >
+                              Auto-detected
+                            </span>
+                          )}
+                          {selection?.method === 'manual' && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                              Manual
+                            </span>
+                          )}
+                        </div>
+                        {isAutoDetected && detectionReason && (
+                          <p className="mt-1 text-xs text-gray-500">
+                            Reason: {detectionReason.replace(/_/g, ' ')}
+                          </p>
+                        )}
+                        {selection?.detected_at && (
+                          <p className="mt-1 text-xs text-gray-400">
+                            Detected: {new Date(selection.detected_at).toLocaleString()}
+                          </p>
+                        )}
+                      </dd>
+                    </div>
+                  ) : null
+                })()}
                 {product.trust_score !== undefined && (
                   <div>
                     <dt className="text-sm font-medium text-gray-500">AI Trust Score</dt>
                     <dd className="mt-1">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        (product.trust_score || 0) >= 0.8 ? 'bg-green-100 text-green-800' :
-                        (product.trust_score || 0) >= 0.6 ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-red-100 text-red-800'
-                      }`}>
-                        {((product.trust_score || 0) * 100).toFixed(1)}%
-                      </span>
+                      {(() => {
+                        // Normalize trust_score: backend stores 0-100, normalize to 0-1 for comparison
+                        const rawScore = product.trust_score || 0
+                        const normalizedScore = rawScore > 1 ? rawScore / 100 : rawScore
+                        const displayPercentage = rawScore > 1 ? rawScore : rawScore * 100
+                        
+                        return (
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            normalizedScore >= 0.8 ? 'bg-green-100 text-green-800' :
+                            normalizedScore >= 0.6 ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-red-100 text-red-800'
+                          }`}>
+                            {displayPercentage.toFixed(1)}%
+                          </span>
+                        )
+                      })()}
                     </dd>
                   </div>
                 )}

@@ -199,6 +199,8 @@ class Product(Base):
     promoted_version = Column(Integer, nullable=True, default=None)
     # AIRD playbook configuration (M1)
     playbook_id = Column(String(50), nullable=True, default=None)  # e.g., "TECH", "SCANNED", "REGULATORY"
+    # Playbook selection metadata (for auto-detection verification)
+    playbook_selection = Column(JSON, nullable=True, default=None)  # Stores: method, reason, detected_at, confidence
     # Preprocessing statistics (M1)
     preprocessing_stats = Column(JSON, nullable=True, default=None)  # sections, chunks, mid_sentence_boundary_rate
     # Trust scoring and policy (M2)

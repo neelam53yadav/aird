@@ -117,8 +117,15 @@ class PreprocessStage(AirdStage):
         started_at = datetime.utcnow()
         storage = context.get("storage")
         raw_files = context.get("raw_files", [])
-        playbook_id = context.get("playbook_id") or self.config.get("playbook_id")
+        initial_playbook_id = context.get("playbook_id") or self.config.get("playbook_id")
         chunking_config = context.get("chunking_config", {})  # Get product chunking config
+        
+        # Track playbook selection metadata for verification
+        playbook_selection_metadata = {
+            "method": "manual" if initial_playbook_id else None,  # Will be updated if auto-detected
+            "reason": None,
+            "detected_at": None,
+        }
         
         if not storage:
             return self._create_result(
@@ -146,6 +153,7 @@ class PreprocessStage(AirdStage):
         total_mid_sentence_ends = 0
         processed_files = []
         failed_files = []
+        chunking_config_used: Optional[Dict[str, Any]] = None
         
         for file_stem in raw_files:
             file_start_time = datetime.utcnow()
@@ -209,10 +217,22 @@ class PreprocessStage(AirdStage):
                 self.logger.info(f"[PreprocessStage] ✓ Successfully loaded raw text for {file_stem}: {len(raw_text)} characters")
                 
                 # Route playbook if not provided
-                if not playbook_id:
+                file_playbook_id = initial_playbook_id  # Use initial playbook_id for this file
+                if not file_playbook_id:
                     chosen_id, reason = route_playbook(sample_text=raw_text[:1000], filename=file_stem)
-                    playbook_id = chosen_id
-                    self.logger.info(f"Auto-routed to playbook {playbook_id} ({reason})")
+                    file_playbook_id = chosen_id
+                    # Update selection metadata for auto-detection (only on first file)
+                    if not playbook_selection_metadata.get("method") or playbook_selection_metadata["method"] is None:
+                        playbook_selection_metadata["method"] = "auto_detected"
+                        playbook_selection_metadata["reason"] = reason
+                        playbook_selection_metadata["detected_at"] = datetime.utcnow().isoformat() + "Z"
+                    self.logger.info(f"Auto-routed to playbook {file_playbook_id} ({reason})")
+                elif not playbook_selection_metadata.get("method") or playbook_selection_metadata["method"] is None:
+                    # Playbook was provided, mark as manual
+                    playbook_selection_metadata["method"] = "manual"
+                
+                # Use file_playbook_id for this file's processing
+                playbook_id = file_playbook_id
                 
                 # Load playbook
                 try:
@@ -234,6 +254,8 @@ class PreprocessStage(AirdStage):
                 all_records.extend(records)
                 total_sections += stats.get("sections", 0)
                 total_mid_sentence_ends += stats.get("mid_sentence_ends", 0)
+                if not chunking_config_used and stats.get("chunking_config_used"):
+                    chunking_config_used = stats.get("chunking_config_used")
                 processed_files.append(file_stem)
                 
                 # Store processed JSONL for this file
@@ -299,12 +321,14 @@ class PreprocessStage(AirdStage):
         
         metrics = {
             "playbook_id": playbook_id,
+            "playbook_selection": playbook_selection_metadata,  # Include selection metadata
             "processed_files": len(processed_files),
             "failed_files": len(failed_files),
             "total_sections": total_sections,
             "total_chunks": total_chunks,
             "mid_sentence_boundary_rate": mid_sentence_rate,
             "processed_file_list": processed_files,
+            "chunking_config_used": chunking_config_used,
         }
         
         return self._create_result(
@@ -343,6 +367,12 @@ class PreprocessStage(AirdStage):
         # 3) Get chunking config (product config overrides playbook defaults)
         playbook_chunking = playbook.get("chunking", {})
         
+        # Track the resolved chunking configuration actually used
+        resolved_chunking_config: Dict[str, Any] = {
+            "mode": (chunking_config or {}).get("mode", "auto"),
+            "source": None,  # manual | product_auto | playbook_default
+        }
+        
         # Priority: Product manual settings > Product auto settings > Playbook defaults
         if chunking_config and chunking_config.get("mode") == "manual":
             manual_settings = chunking_config.get("manual_settings", {})
@@ -359,18 +389,42 @@ class PreprocessStage(AirdStage):
                 strategy = "char"
             elif strategy in ["semantic", "sentence"]:
                 strategy = "sentence"
+            resolved_chunking_config.update({
+                "source": "manual",
+                "chunk_size": max_tokens,
+                "chunk_overlap": chunk_overlap,
+                "min_chunk_size": int(manual_settings.get("min_chunk_size", playbook_chunking.get("min_chunk_size", 100))),
+                "max_chunk_size": int(manual_settings.get("max_chunk_size", playbook_chunking.get("max_chunk_size", 2000))),
+                "chunking_strategy": manual_settings.get("chunking_strategy", "sentence"),
+            })
         elif chunking_config and chunking_config.get("mode") == "auto":
             # Use playbook settings but respect product content_type recommendations if available
             max_tokens = int(playbook_chunking.get("max_tokens", 900))
             overlap_sents = int(playbook_chunking.get("overlap_sentences", 2))
             hard_overlap = int(playbook_chunking.get("hard_overlap_chars", 300))
             strategy = (playbook_chunking.get("strategy", "sentence") or "sentence").lower()
+            resolved_chunking_config.update({
+                "source": "product_auto",
+                "chunk_size": max_tokens,
+                "chunk_overlap": overlap_sents * 20,  # approximate tokens
+                "min_chunk_size": int(playbook_chunking.get("min_chunk_size", 100)),
+                "max_chunk_size": int(playbook_chunking.get("max_chunk_size", 2000)),
+                "chunking_strategy": "fixed_size" if strategy == "char" else "semantic",
+            })
         else:
             # Fallback to playbook defaults
             max_tokens = int(playbook_chunking.get("max_tokens", 900))
             overlap_sents = int(playbook_chunking.get("overlap_sentences", 2))
             hard_overlap = int(playbook_chunking.get("hard_overlap_chars", 300))
             strategy = (playbook_chunking.get("strategy", "sentence") or "sentence").lower()
+            resolved_chunking_config.update({
+                "source": "playbook_default",
+                "chunk_size": max_tokens,
+                "chunk_overlap": overlap_sents * 20,  # approximate tokens
+                "min_chunk_size": int(playbook_chunking.get("min_chunk_size", 100)),
+                "max_chunk_size": int(playbook_chunking.get("max_chunk_size", 2000)),
+                "chunking_strategy": "fixed_size" if strategy == "char" else "semantic",
+            })
         
         # 4) Process pages and sections
         records: List[Dict[str, Any]] = []
@@ -447,6 +501,7 @@ class PreprocessStage(AirdStage):
             "chunks": total_chunks,
             "mid_sentence_boundary_rate": mid_sentence_rate,
             "mid_sentence_ends": mid_sentence_ends,
+            "chunking_config_used": resolved_chunking_config,
         }
         
         return records, stats

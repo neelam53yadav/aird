@@ -118,13 +118,49 @@ export function AITrustScoreDisplay({ productId, showTitle = true }: AITrustScor
   }
 
   const formatMetricValue = (key: string, value: number) => {
+    // Token count: show as integer with separators (never as percentage)
     if (key === 'Token_Count') {
-      return value.toLocaleString()
+      return Math.round(value).toLocaleString()
     }
-    if (key === 'AI_Trust_Score' || key.includes('Score') || key.includes('Quality') || key.includes('Confidence')) {
-      return (value * 100).toFixed(1) + '%'
+
+    // All other metrics are percentage-like (scores, quality, readiness, confidence, etc.)
+    // Backend returns metrics in 0-100 scale, but some might be in 0-1 or >100
+    // Normalize to 0-100 scale for display:
+    let normalized = value
+    
+    // Handle different input scales
+    if (normalized > 100) {
+      // Values > 100: likely incorrectly scaled (e.g., 7500 means 75.0)
+      // Divide by 100 to get back to 0-100 scale
+      normalized = normalized / 100
+    } else if (normalized <= 1 && normalized >= 0) {
+      // Values 0-1: convert to percentage (multiply by 100)
+      normalized = normalized * 100
     }
-    return value.toFixed(2)
+    // Values 1-100: use as-is (already in correct scale)
+    
+    // Ensure normalized is between 0-100
+    normalized = Math.max(0, Math.min(100, normalized))
+    
+    return `${normalized.toFixed(2)}%`
+  }
+
+  // Helper to get normalized value for progress bar (0-1 scale)
+  const getNormalizedValueForProgress = (key: string, value: number): number => {
+    if (key === 'Token_Count') {
+      // Token count: normalize to 0-1 based on reasonable max (e.g., 1000 tokens = 100%)
+      return Math.min(value / 1000, 1.0)
+    }
+    
+    // Normalize percentage metrics to 0-1 for progress bar
+    let normalized = value
+    if (normalized > 100) {
+      normalized = normalized / 100
+    } else if (normalized <= 1 && normalized >= 0) {
+      normalized = normalized * 100
+    }
+    normalized = Math.max(0, Math.min(100, normalized))
+    return normalized / 100  // Convert to 0-1 for progress bar
   }
 
   if (loading) {
@@ -250,8 +286,10 @@ export function AITrustScoreDisplay({ productId, showTitle = true }: AITrustScor
             const displayName = METRIC_NAMES[key] || key.replace(/_/g, ' ')
             const description = METRIC_DESCRIPTIONS[key] || ''
             const numericValue = typeof value === 'number' ? value : parseFloat(value as any) || 0
-            const normalizedValue = numericValue > 1 ? numericValue / 100 : numericValue
-            const scoreColor = normalizedValue >= 0.8 ? 'text-green-600' : normalizedValue >= 0.6 ? 'text-yellow-600' : 'text-red-600'
+            
+            // Normalize value for color determination and progress bar (0-1 scale)
+            const normalizedForColor = getNormalizedValueForProgress(key, numericValue)
+            const scoreColor = normalizedForColor >= 0.8 ? 'text-green-600' : normalizedForColor >= 0.6 ? 'text-yellow-600' : 'text-red-600'
             
             return (
               <div key={key} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
@@ -269,9 +307,9 @@ export function AITrustScoreDisplay({ productId, showTitle = true }: AITrustScor
                 <div className="w-full bg-gray-200 rounded-full h-2">
                   <div
                     className={`h-2 rounded-full ${
-                      normalizedValue >= 0.8 ? 'bg-green-500' : normalizedValue >= 0.6 ? 'bg-yellow-500' : 'bg-red-500'
+                      normalizedForColor >= 0.8 ? 'bg-green-500' : normalizedForColor >= 0.6 ? 'bg-yellow-500' : 'bg-red-500'
                     }`}
-                    style={{ width: `${Math.min(normalizedValue * 100, 100)}%` }}
+                    style={{ width: `${Math.min(normalizedForColor * 100, 100)}%` }}
                   />
                 </div>
               </div>
