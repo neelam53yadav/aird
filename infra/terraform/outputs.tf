@@ -30,11 +30,11 @@ output "database_connection_name" {
 }
 
 output "bucket_names" {
-  description = "GCS bucket names"
+  description = "GCS bucket names (manually created buckets)"
   value = {
-    raw       = data.google_storage_bucket.primedata_raw.name
-    processed = data.google_storage_bucket.primedata_processed.name
-    exports   = data.google_storage_bucket.primedata_exports.name
+    raw       = "primedata-raw"
+    processed = "primedata-processed"
+    exports   = "primedata-exports"
   }
 }
 
