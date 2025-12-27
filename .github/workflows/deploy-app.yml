@@ -277,6 +277,9 @@ jobs:
           echo "  VM IP: ${{ steps.get-vm-ip.outputs.vm_ip }}"
           echo ""
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Detect changed files and determine which services to rebuild
         id: detect-changes
         run: |
@@ -398,6 +401,69 @@ jobs:
             echo "deploy_path=~/primedata" >> $GITHUB_OUTPUT
           fi
 
+      - name: Build and save Docker images
+        id: build-images
+        if: steps.detect-changes.outputs.skip_build != 'true'
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Building Docker images in GitHub Actions..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          
+          # Get version tag from commit SHA (short)
+          IMAGE_VERSION="${GITHUB_SHA:0:7}"
+          IMAGE_TAG="v${IMAGE_VERSION}"
+          
+          echo "Image version tag: ${IMAGE_TAG}"
+          
+          # Build images conditionally based on what changed
+          REBUILD_BACKEND="${{ steps.detect-changes.outputs.rebuild_backend }}"
+          REBUILD_FRONTEND="${{ steps.detect-changes.outputs.rebuild_frontend }}"
+          REBUILD_AIRFLOW="${{ steps.detect-changes.outputs.rebuild_airflow }}"
+          
+          # Build backend if needed
+          if [ "$REBUILD_BACKEND" = "true" ]; then
+            echo "Building backend image..."
+            docker build -t infra-backend:latest -t infra-backend:${IMAGE_TAG} -f backend/Dockerfile backend/
+          fi
+          
+          # Build frontend if needed
+          if [ "$REBUILD_FRONTEND" = "true" ]; then
+            echo "Building frontend image..."
+            docker build -t infra-frontend:latest -t infra-frontend:${IMAGE_TAG} -f ui/Dockerfile ui/
+          fi
+          
+          # Build Airflow if needed
+          if [ "$REBUILD_AIRFLOW" = "true" ]; then
+            echo "Building Airflow images..."
+            docker build -t infra-airflow-webserver:latest -t infra-airflow-webserver:${IMAGE_TAG} -f infra/airflow/Dockerfile infra/airflow/
+            docker tag infra-airflow-webserver:latest infra-airflow-scheduler:latest
+            docker tag infra-airflow-webserver:${IMAGE_TAG} infra-airflow-scheduler:${IMAGE_TAG}
+          fi
+          
+          # Save all built images to tar file (only save images that exist)
+          IMAGES_TO_SAVE=""
+          if [ "$REBUILD_BACKEND" = "true" ]; then
+            IMAGES_TO_SAVE="${IMAGES_TO_SAVE} infra-backend:latest infra-backend:${IMAGE_TAG}"
+          fi
+          if [ "$REBUILD_FRONTEND" = "true" ]; then
+            IMAGES_TO_SAVE="${IMAGES_TO_SAVE} infra-frontend:latest infra-frontend:${IMAGE_TAG}"
+          fi
+          if [ "$REBUILD_AIRFLOW" = "true" ]; then
+            IMAGES_TO_SAVE="${IMAGES_TO_SAVE} infra-airflow-webserver:latest infra-airflow-webserver:${IMAGE_TAG} infra-airflow-scheduler:latest infra-airflow-scheduler:${IMAGE_TAG}"
+          fi
+          
+          if [ -n "$IMAGES_TO_SAVE" ]; then
+            echo "Saving images to tar file..."
+            docker save $IMAGES_TO_SAVE | gzip > /tmp/docker-images-${IMAGE_TAG}.tar.gz
+            echo "✅ Images saved to /tmp/docker-images-${IMAGE_TAG}.tar.gz"
+            echo "image_version=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+            echo "images_built=true" >> $GITHUB_OUTPUT
+          else
+            echo "No images to build"
+            echo "images_built=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Copy files to VM
         run: |
           DEPLOY_PATH="${{ steps.prepare-vm-dir.outputs.deploy_path }}"
@@ -405,6 +471,42 @@ jobs:
           rsync -avz --exclude='.git' --exclude='node_modules' --exclude='venv' \
             -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
             ./ ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }}:${DEPLOY_PATH}/
+
+      - name: Transfer and load Docker images
+        if: steps.build-images.outputs.images_built == 'true'
+        run: |
+          DEPLOY_PATH="${{ steps.prepare-vm-dir.outputs.deploy_path }}"
+          DEPLOY_PATH_EXPANDED=$(ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} "echo ${DEPLOY_PATH}")
+          IMAGE_VERSION="${{ steps.build-images.outputs.image_version }}"
+          
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Transferring Docker images to VM..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          
+          # Create images directory on VM
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+            "mkdir -p ${DEPLOY_PATH_EXPANDED}/images"
+          
+          # Transfer compressed tar file
+          echo "Transferring docker-images-${IMAGE_VERSION}.tar.gz to VM..."
+          scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+            /tmp/docker-images-${IMAGE_VERSION}.tar.gz \
+            ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }}:${DEPLOY_PATH_EXPANDED}/images/
+          
+          # Load images on VM
+          echo "Loading images on VM..."
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+            "gunzip -c ${DEPLOY_PATH_EXPANDED}/images/docker-images-${IMAGE_VERSION}.tar.gz | docker load"
+          
+          echo "✅ Images loaded successfully"
+          
+          # Cleanup old images (keep last 3 versions)
+          echo "Cleaning up old image versions (keeping last 3)..."
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+            "cd ${DEPLOY_PATH_EXPANDED}/images && \
+             ls -t docker-images-*.tar.gz 2>/dev/null | tail -n +4 | xargs -r rm -f && \
+             echo 'Old image files cleaned up' || echo 'No old images to clean'"
 
       - name: Deploy on VM
         run: |
@@ -425,41 +527,10 @@ jobs:
           # Ensure Docker network exists (idempotent)
           docker network create primedata-network 2>/dev/null || echo "Network already exists"
           
-          # Build strategy variables (passed as arguments)
-          REBUILD_BACKEND="$1"
-          REBUILD_FRONTEND="$2"
-          REBUILD_AIRFLOW="$3"
-          SKIP_BUILD="$4"
-          
-          echo "Build plan:"
-          echo "  Backend: $REBUILD_BACKEND"
-          echo "  Frontend: $REBUILD_FRONTEND"
-          echo "  Airflow: $REBUILD_AIRFLOW"
-          echo "  Skip build: $SKIP_BUILD"
-          
-          if [ "$SKIP_BUILD" = "true" ]; then
-            echo "Skipping build - no relevant changes detected"
-            docker-compose -f infra/docker-compose.prod.yml up -d --remove-orphans
-          else
-            # Build only services that changed
-            if [ "$REBUILD_BACKEND" = "true" ]; then
-              echo "Building backend..."
-              docker-compose -f infra/docker-compose.prod.yml build backend || true
-            fi
-            
-            if [ "$REBUILD_FRONTEND" = "true" ]; then
-              echo "Building frontend..."
-              docker-compose -f infra/docker-compose.prod.yml build frontend || true
-            fi
-            
-            if [ "$REBUILD_AIRFLOW" = "true" ]; then
-              echo "Building Airflow services..."
-              docker-compose -f infra/docker-compose.prod.yml build airflow-webserver airflow-scheduler || true
-            fi
-            
-            echo "Starting all services..."
-            docker-compose -f infra/docker-compose.prod.yml up -d --remove-orphans
-          fi
+          # Images are already built and loaded in GitHub Actions
+          # Just start services using pre-loaded images
+          echo "Starting services with pre-loaded Docker images..."
+          docker-compose -f infra/docker-compose.prod.yml up -d --remove-orphans
           
           sleep 10
           
@@ -475,11 +546,7 @@ jobs:
           
           ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
             ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
-            "bash /tmp/deploy_script.sh \
-            '${{ steps.detect-changes.outputs.rebuild_backend }}' \
-            '${{ steps.detect-changes.outputs.rebuild_frontend }}' \
-            '${{ steps.detect-changes.outputs.rebuild_airflow }}' \
-            '${{ steps.detect-changes.outputs.skip_build }}'"
+            "bash /tmp/deploy_script.sh"
 
       - name: Health Check
         run: |
