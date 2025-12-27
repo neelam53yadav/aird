@@ -19,9 +19,7 @@ services:
       - primedata-network
 
   airflow-webserver:
-    build:
-      context: ../infra/airflow
-      dockerfile: Dockerfile
+    image: infra-airflow-webserver:latest
     container_name: primedata-airflow-webserver
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
@@ -70,9 +68,7 @@ services:
       - primedata-network
 
   airflow-scheduler:
-    build:
-      context: ../infra/airflow
-      dockerfile: Dockerfile
+    image: infra-airflow-scheduler:latest
     container_name: primedata-airflow-scheduler
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
@@ -109,9 +105,7 @@ services:
       - primedata-network
 
   backend:
-    build:
-      context: ../../backend
-      dockerfile: Dockerfile
+    image: infra-backend:latest
     container_name: primedata-backend
     environment:
       DATABASE_URL: ${DATABASE_URL}
@@ -143,9 +137,7 @@ services:
       - primedata-network
 
   frontend:
-    build:
-      context: ../../ui
-      dockerfile: Dockerfile
+    image: infra-frontend:latest
     container_name: primedata-frontend
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
