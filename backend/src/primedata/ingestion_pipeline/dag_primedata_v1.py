@@ -31,7 +31,7 @@ from primedata.storage.paths import raw_prefix, clean_prefix, chunk_prefix, embe
 from primedata.connectors.web import WebConnector
 from primedata.connectors.folder import FolderConnector
 from primedata.db.database import get_db, SessionLocal
-from primedata.db.models import Product, DataSource, PipelineRun, DqViolation
+from primedata.db.models import Product, ProductStatus, DataSource, PipelineRun, DqViolation
 from primedata.indexing.embeddings import EmbeddingGenerator
 from primedata.indexing.qdrant_client import QdrantClient
 from primedata.dq.validator import DataQualityValidator

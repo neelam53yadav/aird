@@ -1689,6 +1689,23 @@ gcloud iam service-accounts get-iam-policy \
   github-actions@project-f3c8a334-a3f2-4f66-a06.iam.gserviceaccount.com
 ```
 
+**Important: Fix Authentication Permission Error**
+
+If you see the error `Permission 'iam.serviceAccounts.getAccessToken' denied`, grant the service account token creator role:
+
+```bash
+PROJECT_ID="project-f3c8a334-a3f2-4f66-a06"
+GITHUB_SA_EMAIL="github-actions@${PROJECT_ID}.iam.gserviceaccount.com"
+
+# Grant the service account token creator role
+gcloud iam service-accounts add-iam-policy-binding ${GITHUB_SA_EMAIL} \
+  --project=${PROJECT_ID} \
+  --role="roles/iam.serviceAccountTokenCreator" \
+  --member="serviceAccount:${GITHUB_SA_EMAIL}"
+```
+
+This allows the service account to create tokens for itself, which is required for Workload Identity Federation.
+
 #### **CI Workflow Optimizations**
 
 **Lightweight CI Requirements:**

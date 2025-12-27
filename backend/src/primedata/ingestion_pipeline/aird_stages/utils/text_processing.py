@@ -159,7 +159,7 @@ def detect_sections_configured(
     aliases = aliases or {}
 
     def flush():
-        nonlocal buf, title_raw
+        nonlocal buf
         if buf:
             canon = aliases.get(title_raw, _canon_from_title(title_raw))
             sections.append((title_raw, canon, "\n".join(buf).strip()))

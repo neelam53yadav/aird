@@ -16,6 +16,7 @@ from ..db.models_enterprise import DataQualityRule, DataQualityRuleAudit, RuleSe
 from ..dq.rules_schema import DataQualityRules, DataQualityViolation
 from ..core.security import get_current_user
 from ..core.user_utils import get_user_id
+from ..storage.minio_client import MinIOClient
 from datetime import datetime
 
 router = APIRouter(prefix="/data-quality", tags=["data-quality"])
