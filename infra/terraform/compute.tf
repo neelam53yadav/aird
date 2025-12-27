@@ -15,7 +15,7 @@ resource "google_compute_instance" "primedata_vm" {
 
   network_interface {
     network = "default"
-    
+
     dynamic "access_config" {
       for_each = var.enable_public_ip ? [1] : []
       content {
@@ -56,7 +56,7 @@ resource "google_compute_firewall" "allow_http" {
 
   source_ranges = ["0.0.0.0/0"]
   target_tags   = ["http-server"]
-  
+
   description = "Allow HTTP traffic for PrimeData services"
 }
 
@@ -71,7 +71,7 @@ resource "google_compute_firewall" "allow_https" {
 
   source_ranges = ["0.0.0.0/0"]
   target_tags   = ["https-server"]
-  
+
   description = "Allow HTTPS traffic for PrimeData services"
 }
 
@@ -86,7 +86,7 @@ resource "google_compute_firewall" "allow_ssh" {
 
   source_ranges = ["0.0.0.0/0"]
   target_tags   = ["primedata"]
-  
+
   description = "Allow SSH access for deployment"
 }
 
