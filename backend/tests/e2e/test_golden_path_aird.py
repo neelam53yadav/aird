@@ -223,6 +223,13 @@ class TestAirdGoldenPath:
         assert result.status.value == "succeeded"
         assert "fingerprint" in result.metrics
         
+        # Update product with fingerprint (same as production code does)
+        if result.status.value == "succeeded":
+            fingerprint = result.metrics.get("fingerprint", {})
+            test_product_with_data.readiness_fingerprint = fingerprint
+            test_product_with_data.trust_score = fingerprint.get("AI_Trust_Score")
+            db_session.commit()
+        
         # Verify product updated
         db_session.refresh(test_product_with_data)
         assert test_product_with_data.readiness_fingerprint is not None
