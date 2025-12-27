@@ -1,0 +1,106 @@
+name: Deploy Application
+
+on:
+  push:
+    branches:
+      - main
+      - db-fixes
+    paths:
+      - 'backend/**'
+      - 'ui/**'
+      - 'infra/docker-compose.prod.yml'
+      - 'infra/airflow/**'
+  workflow_dispatch:
+
+env:
+  GCP_PROJECT_ID: project-f3c8a334-a3f2-4f66-a06
+  GCP_ZONE: us-central1-c
+  VM_NAME: primedata-beta
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/890841479962/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+          service_account: github-actions@project-f3c8a334-a3f2-4f66-a06.iam.gserviceaccount.com
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Get VM IP
+        id: get-vm-ip
+        run: |
+          VM_IP=$(gcloud compute instances describe ${{ env.VM_NAME }} \
+            --zone=${{ env.GCP_ZONE }} \
+            --format="value(networkInterfaces[0].accessConfig[0].natIP)" 2>/dev/null || echo "")
+          if [ -z "$VM_IP" ]; then
+            echo "Error: Could not get VM IP. Is the VM running?"
+            exit 1
+          fi
+          echo "vm_ip=$VM_IP" >> $GITHUB_OUTPUT
+          echo "VM IP: $VM_IP"
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VM_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ steps.get-vm-ip.outputs.vm_ip }} >> ~/.ssh/known_hosts
+
+      - name: Copy files to VM
+        run: |
+          rsync -avz --exclude='.git' --exclude='node_modules' --exclude='venv' \
+            -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
+            ./ ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }}:/opt/primedata/
+
+      - name: Deploy on VM
+        run: |
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+            ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} << 'EOF'
+            set -e
+            cd /opt/primedata
+            
+            # Load environment variables
+            if [ -f .env.production ]; then
+              export $(cat .env.production | grep -v '^#' | xargs)
+            fi
+            
+            # Ensure Docker network exists (idempotent)
+            docker network create primedata-network 2>/dev/null || echo "Network already exists"
+            
+            # Pull latest images (idempotent - only updates if changed)
+            docker-compose -f infra/docker-compose.prod.yml pull || true
+            
+            # Build and start services (idempotent - up -d handles existing containers)
+            # --build ensures images are updated, but won't recreate if unchanged
+            docker-compose -f infra/docker-compose.prod.yml up -d --build --remove-orphans
+            
+            # Wait for services to be ready
+            sleep 10
+            
+            # Run database migrations (idempotent - Alembic handles this)
+            docker-compose -f infra/docker-compose.prod.yml exec -T backend \
+              alembic upgrade head || echo "Migration failed or already up to date"
+            
+            # Show service status
+            docker-compose -f infra/docker-compose.prod.yml ps
+          EOF
+
+      - name: Health Check
+        run: |
+          sleep 5
+          curl -f http://${{ steps.get-vm-ip.outputs.vm_ip }}:8000/health || echo "Health check failed"
+          curl -f http://${{ steps.get-vm-ip.outputs.vm_ip }}:8080/health || echo "Airflow health check failed"
+

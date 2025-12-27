@@ -1,0 +1,21 @@
+# Terraform Variables Example
+# Copy this file to terraform.tfvars and fill in your values
+
+project_id = "project-f3c8a334-a3f2-4f66-a06"
+region     = "us-central1"
+zone       = "us-central1-c"
+
+# VM Configuration
+vm_machine_type = "e2-medium"
+vm_disk_size    = 50
+vm_name         = "primedata-beta"
+
+# Environment
+environment = "beta"
+
+# Database (already exists)
+db_instance_name = "primedata-postgres"
+
+# Networking
+enable_public_ip = true
+
