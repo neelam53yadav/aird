@@ -69,6 +69,61 @@ jobs:
         working-directory: infra/terraform
         run: terraform init
 
+      - name: Auto-Import Existing Resources
+        working-directory: infra/terraform
+        env:
+          PROJECT_ID: ${{ env.GCP_PROJECT_ID }}
+          ZONE: ${{ env.GCP_ZONE }}
+          ENVIRONMENT: beta
+          VM_NAME: primedata-beta
+        run: |
+          set +e  # Don't fail on errors - imports may already exist
+          
+          SA_EMAIL="primedata-compute-sa-${ENVIRONMENT}@${PROJECT_ID}.iam.gserviceaccount.com"
+          
+          echo "Checking for existing resources and importing if needed..."
+          
+          # Check if service account exists and import
+          if gcloud iam service-accounts describe ${SA_EMAIL} --project=${PROJECT_ID} &>/dev/null; then
+            echo "Importing service account..."
+            terraform import google_service_account.primedata_sa projects/${PROJECT_ID}/serviceAccounts/${SA_EMAIL} 2>/dev/null || echo "Service account already in state"
+          fi
+          
+          # Check and import firewall rules
+          if gcloud compute firewall-rules describe primedata-allow-http-${ENVIRONMENT} --project=${PROJECT_ID} &>/dev/null; then
+            echo "Importing HTTP firewall rule..."
+            terraform import google_compute_firewall.allow_http projects/${PROJECT_ID}/global/firewalls/primedata-allow-http-${ENVIRONMENT} 2>/dev/null || echo "HTTP firewall already in state"
+          fi
+          
+          if gcloud compute firewall-rules describe primedata-allow-https-${ENVIRONMENT} --project=${PROJECT_ID} &>/dev/null; then
+            echo "Importing HTTPS firewall rule..."
+            terraform import google_compute_firewall.allow_https projects/${PROJECT_ID}/global/firewalls/primedata-allow-https-${ENVIRONMENT} 2>/dev/null || echo "HTTPS firewall already in state"
+          fi
+          
+          if gcloud compute firewall-rules describe primedata-allow-ssh-${ENVIRONMENT} --project=${PROJECT_ID} &>/dev/null; then
+            echo "Importing SSH firewall rule..."
+            terraform import google_compute_firewall.allow_ssh projects/${PROJECT_ID}/global/firewalls/primedata-allow-ssh-${ENVIRONMENT} 2>/dev/null || echo "SSH firewall already in state"
+          fi
+          
+          # Check and import VM
+          if gcloud compute instances describe ${VM_NAME} --zone=${ZONE} --project=${PROJECT_ID} &>/dev/null; then
+            echo "Importing VM instance..."
+            terraform import google_compute_instance.primedata_vm projects/${PROJECT_ID}/zones/${ZONE}/instances/${VM_NAME} 2>/dev/null || echo "VM already in state"
+          fi
+          
+          # Import IAM bindings (these are harder to check, so just try to import)
+          echo "Importing IAM bindings..."
+          terraform import google_project_iam_member.storage_admin "${PROJECT_ID} roles/storage.admin serviceAccount:${SA_EMAIL}" 2>/dev/null || echo "Storage admin binding already in state or doesn't exist"
+          terraform import google_project_iam_member.cloudsql_client "${PROJECT_ID} roles/cloudsql.client serviceAccount:${SA_EMAIL}" 2>/dev/null || echo "CloudSQL client binding already in state or doesn't exist"
+          terraform import google_project_iam_member.compute_instance_admin "${PROJECT_ID} roles/compute.instanceAdmin.v1 serviceAccount:${SA_EMAIL}" 2>/dev/null || echo "Compute admin binding already in state or doesn't exist"
+          
+          echo "✅ Import check complete"
+          set -e  # Re-enable error checking
+          
+          # Refresh state to ensure everything is synced
+          echo "Refreshing Terraform state..."
+          terraform refresh -no-color || echo "Refresh completed (warnings are OK)"
+
       - name: Terraform Format Check
         working-directory: infra/terraform
         run: terraform fmt -check
@@ -101,6 +156,39 @@ jobs:
           echo "4. Missing required APIs (enable them in GCP)"
           exit 1
 
+      - name: Ensure VM Startup Script
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
+        working-directory: infra/terraform
+        run: |
+          VM_NAME="primedata-beta"
+          ZONE="us-central1-c"
+          
+          # Check if VM exists and add startup script if missing
+          if gcloud compute instances describe ${VM_NAME} --zone=${ZONE} --project=${{ env.GCP_PROJECT_ID }} &>/dev/null; then
+            echo "Checking VM startup script..."
+            CURRENT_SCRIPT=$(gcloud compute instances describe ${VM_NAME} \
+              --zone=${ZONE} \
+              --project=${{ env.GCP_PROJECT_ID }} \
+              --format="value(metadata.items[key=startup-script].value)" 2>/dev/null || echo "")
+            
+            if [ -z "$CURRENT_SCRIPT" ] || [ "$CURRENT_SCRIPT" == "" ]; then
+              echo "Adding startup script to VM..."
+              if [ -f "scripts/startup.sh" ]; then
+                gcloud compute instances add-metadata ${VM_NAME} \
+                  --zone=${ZONE} \
+                  --project=${{ env.GCP_PROJECT_ID }} \
+                  --metadata-from-file=startup-script=scripts/startup.sh
+                echo "✅ Startup script added"
+              else
+                echo "⚠️  Warning: startup script file not found at scripts/startup.sh"
+              fi
+            else
+              echo "✅ Startup script already exists on VM"
+            fi
+          else
+            echo "VM does not exist yet, will be created by Terraform"
+          fi
+
       - name: Terraform Apply
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
         working-directory: infra/terraform
@@ -109,6 +197,39 @@ jobs:
             terraform apply -auto-approve tfplan
           else
             terraform apply tfplan
+          fi
+
+      - name: Ensure VM Startup Script (Auto)
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/db-fixes'
+        working-directory: infra/terraform
+        run: |
+          VM_NAME="primedata-beta"
+          ZONE="us-central1-c"
+          
+          # Check if VM exists and add startup script if missing
+          if gcloud compute instances describe ${VM_NAME} --zone=${ZONE} --project=${{ env.GCP_PROJECT_ID }} &>/dev/null; then
+            echo "Checking VM startup script..."
+            CURRENT_SCRIPT=$(gcloud compute instances describe ${VM_NAME} \
+              --zone=${ZONE} \
+              --project=${{ env.GCP_PROJECT_ID }} \
+              --format="value(metadata.items[key=startup-script].value)" 2>/dev/null || echo "")
+            
+            if [ -z "$CURRENT_SCRIPT" ] || [ "$CURRENT_SCRIPT" == "" ]; then
+              echo "Adding startup script to VM..."
+              if [ -f "scripts/startup.sh" ]; then
+                gcloud compute instances add-metadata ${VM_NAME} \
+                  --zone=${ZONE} \
+                  --project=${{ env.GCP_PROJECT_ID }} \
+                  --metadata-from-file=startup-script=scripts/startup.sh
+                echo "✅ Startup script added"
+              else
+                echo "⚠️  Warning: startup script file not found at scripts/startup.sh"
+              fi
+            else
+              echo "✅ Startup script already exists on VM"
+            fi
+          else
+            echo "VM does not exist yet, will be created by Terraform"
           fi
 
       - name: Terraform Apply (Auto on main/db-fixes)
