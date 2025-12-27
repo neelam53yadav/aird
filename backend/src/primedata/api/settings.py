@@ -17,6 +17,7 @@ router = APIRouter(prefix="/api/v1/settings", tags=["Settings"])
 
 class SettingsResponse(BaseModel):
     """Settings response model."""
+
     workspace_id: str
     openai_api_key: Optional[str] = None  # Masked key (shows only last 4 chars)
     openai_api_key_configured: bool = False
@@ -24,44 +25,37 @@ class SettingsResponse(BaseModel):
 
 class SettingsUpdateRequest(BaseModel):
     """Settings update request model."""
+
     openai_api_key: Optional[str] = None
 
 
 @router.get("/workspace/{workspace_id}", response_model=SettingsResponse)
 async def get_workspace_settings(
-    workspace_id: UUID,
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    workspace_id: UUID, request: Request, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)
 ):
     """
     Get workspace settings.
-    
+
     Returns settings with masked API keys for security.
     """
     # Ensure user has access to the workspace
     ensure_workspace_access(db, request, workspace_id)
-    
+
     workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
     if not workspace:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Workspace not found"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+
     # Get settings from workspace.settings JSON column
     settings = workspace.settings or {}
     openai_key = settings.get("openai_api_key")
-    
+
     # Mask the API key for display (show only last 4 characters)
     masked_key = None
     if openai_key:
         masked_key = f"sk-...{openai_key[-4:]}" if len(openai_key) > 4 else "sk-****"
-    
+
     return SettingsResponse(
-        workspace_id=str(workspace_id),
-        openai_api_key=masked_key,
-        openai_api_key_configured=bool(openai_key)
+        workspace_id=str(workspace_id), openai_api_key=masked_key, openai_api_key_configured=bool(openai_key)
     )
 
 
@@ -71,27 +65,24 @@ async def update_workspace_settings(
     request_body: SettingsUpdateRequest,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Update workspace settings.
-    
+
     Stores API keys securely in the workspace settings JSON column.
     """
     # Ensure user has access to the workspace
     ensure_workspace_access(db, request, workspace_id)
-    
+
     workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
     if not workspace:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Workspace not found"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+
     # Initialize settings if it doesn't exist
     if workspace.settings is None:
         workspace.settings = {}
-    
+
     # Update OpenAI API key if provided
     if request_body.openai_api_key is not None:
         # If empty string, remove the key
@@ -102,28 +93,22 @@ async def update_workspace_settings(
             if not request_body.openai_api_key.startswith("sk-"):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid OpenAI API key format. OpenAI keys should start with 'sk-'"
+                    detail="Invalid OpenAI API key format. OpenAI keys should start with 'sk-'",
                 )
             workspace.settings["openai_api_key"] = request_body.openai_api_key.strip()
-    
+
     db.commit()
     db.refresh(workspace)
-    
+
     # Get updated settings
     settings = workspace.settings or {}
     openai_key = settings.get("openai_api_key")
-    
+
     # Mask the API key for response
     masked_key = None
     if openai_key:
         masked_key = f"sk-...{openai_key[-4:]}" if len(openai_key) > 4 else "sk-****"
-    
+
     return SettingsResponse(
-        workspace_id=str(workspace_id),
-        openai_api_key=masked_key,
-        openai_api_key_configured=bool(openai_key)
+        workspace_id=str(workspace_id), openai_api_key=masked_key, openai_api_key_configured=bool(openai_key)
     )
-
-
-
-

@@ -17,29 +17,29 @@ from primedata.ingestion_pipeline.aird_stages.config import get_aird_config
 
 class PolicyStage(AirdStage):
     """Policy stage that evaluates fingerprints against policy thresholds."""
-    
+
     @property
     def stage_name(self) -> str:
         return "policy"
-    
+
     def get_required_artifacts(self) -> list[str]:
         """Policy requires fingerprint from fingerprint stage."""
         return ["fingerprint_json"]
-    
+
     def execute(self, context: Dict[str, Any]) -> StageResult:
         """Execute policy evaluation stage.
-        
+
         Args:
             context: Stage execution context with:
                 - storage: AirdStorageAdapter
                 - fingerprint_result: Optional result from fingerprint stage
-                
+
         Returns:
             StageResult with policy evaluation metrics
         """
         started_at = datetime.utcnow()
         storage = context.get("storage")
-        
+
         if not storage:
             return self._create_result(
                 status=StageStatus.FAILED,
@@ -47,7 +47,7 @@ class PolicyStage(AirdStage):
                 error="Storage adapter not found in context",
                 started_at=started_at,
             )
-        
+
         try:
             # Get fingerprint from previous stage or load from storage
             fingerprint_result = context.get("fingerprint_result")
@@ -58,6 +58,7 @@ class PolicyStage(AirdStage):
                 fingerprint_data = storage.get_artifact("fingerprint.json")
                 if fingerprint_data:
                     import json
+
                     fingerprint_obj = json.loads(fingerprint_data.decode("utf-8"))
                     fingerprint = fingerprint_obj.get("fingerprint", {})
                 else:
@@ -67,7 +68,7 @@ class PolicyStage(AirdStage):
                         metrics={"reason": "no_fingerprint"},
                         started_at=started_at,
                     )
-            
+
             if not fingerprint:
                 return self._create_result(
                     status=StageStatus.FAILED,
@@ -75,9 +76,9 @@ class PolicyStage(AirdStage):
                     error="Empty fingerprint",
                     started_at=started_at,
                 )
-            
+
             self.logger.info("Evaluating policy against fingerprint")
-            
+
             # Get policy thresholds from config
             config = get_aird_config()
             thresholds = {
@@ -86,26 +87,26 @@ class PolicyStage(AirdStage):
                 "min_metadata_presence": config.policy_min_metadata_presence,
                 "min_kb_ready": config.policy_min_kb_ready,
             }
-            
+
             # Evaluate policy
             policy_result = evaluate_policy(fingerprint, thresholds)
-            
+
             finished_at = datetime.utcnow()
-            
+
             metrics = {
                 "policy_passed": policy_result["policy_passed"],
                 "violations": policy_result["violations"],
                 "violations_count": len(policy_result["violations"]),
                 "thresholds": policy_result["thresholds"],
             }
-            
+
             return self._create_result(
                 status=StageStatus.SUCCEEDED if policy_result["policy_passed"] else StageStatus.FAILED,
                 metrics=metrics,
                 started_at=started_at,
                 finished_at=finished_at,
             )
-            
+
         except Exception as e:
             self.logger.error(f"Policy evaluation failed: {e}", exc_info=True)
             return self._create_result(
@@ -114,7 +115,3 @@ class PolicyStage(AirdStage):
                 error=str(e),
                 started_at=started_at,
             )
-
-
-
-

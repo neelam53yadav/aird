@@ -19,11 +19,13 @@ router = APIRouter()
 
 class SessionExchangeRequest(BaseModel):
     """Request model for session exchange."""
+
     token: str
 
 
 class SessionExchangeResponse(BaseModel):
     """Response model for session exchange."""
+
     access_token: str
     token_type: str = "bearer"
     user: Dict[str, Any]
@@ -32,6 +34,7 @@ class SessionExchangeResponse(BaseModel):
 
 class UserResponse(BaseModel):
     """User response model."""
+
     id: str
     email: str
     name: str
@@ -44,6 +47,7 @@ class UserResponse(BaseModel):
 
 class WorkspaceResponse(BaseModel):
     """Workspace response model."""
+
     id: str
     name: str
     role: str
@@ -51,29 +55,27 @@ class WorkspaceResponse(BaseModel):
 
 
 @router.post("/api/v1/auth/session/exchange", response_model=SessionExchangeResponse)
-async def exchange_session(
-    request: SessionExchangeRequest,
-    db: Session = Depends(get_db)
-):
+async def exchange_session(request: SessionExchangeRequest, db: Session = Depends(get_db)):
     """
     Exchange NextAuth token for backend JWT.
-    
+
     Args:
         request: Session exchange request with NextAuth token
         db: Database session
-        
+
     Returns:
         Backend JWT token and user information
     """
     from primedata.core.settings import get_settings
+
     settings = get_settings()
-    
+
     # In dev mode with DISABLE_AUTH=True, bypass token verification and use dev user
     if settings.DISABLE_AUTH:
         # Use dev user ID from settings
         user_id = uuid.UUID(settings.DEV_USER_ID)
         user = db.query(User).filter(User.id == user_id).first()
-        
+
         if not user:
             # Create dev user if it doesn't exist
             user = User(
@@ -81,17 +83,15 @@ async def exchange_session(
                 email="dev@primedata.local",
                 name="Development User",
                 auth_provider=AuthProvider.NONE,
-                roles=["owner", "admin"]
+                roles=["owner", "admin"],
             )
             db.add(user)
             db.commit()
             db.refresh(user)
-        
+
         # Get or create workspace memberships
-        workspace_memberships = db.query(WorkspaceMember).filter(
-            WorkspaceMember.user_id == user.id
-        ).all()
-        
+        workspace_memberships = db.query(WorkspaceMember).filter(WorkspaceMember.user_id == user.id).all()
+
         default_workspace_id = None
         if not workspace_memberships:
             # Use the default workspace ID from settings
@@ -102,30 +102,23 @@ async def exchange_session(
                 db.add(workspace)
                 db.commit()
                 db.refresh(workspace)
-            
-            membership = WorkspaceMember(
-                workspace_id=workspace.id,
-                user_id=user.id,
-                role=WorkspaceRole.OWNER
-            )
+
+            membership = WorkspaceMember(workspace_id=workspace.id, user_id=user.id, role=WorkspaceRole.OWNER)
             db.add(membership)
             db.commit()
             default_workspace_id = str(workspace.id)
         else:
             default_workspace_id = str(workspace_memberships[0].workspace_id)
-        
-        workspace_ids = [str(m.workspace_id) for m in workspace_memberships] if workspace_memberships else [default_workspace_id]
-        
+
+        workspace_ids = (
+            [str(m.workspace_id) for m in workspace_memberships] if workspace_memberships else [default_workspace_id]
+        )
+
         # Sign backend JWT
-        payload = {
-            "sub": str(user.id),
-            "email": user.email,
-            "roles": user.roles,
-            "workspaces": workspace_ids
-        }
-        
+        payload = {"sub": str(user.id), "email": user.email, "roles": user.roles, "workspaces": workspace_ids}
+
         access_token = sign_jwt(payload, exp_s=3600)
-        
+
         return SessionExchangeResponse(
             access_token=access_token,
             user={
@@ -133,28 +126,25 @@ async def exchange_session(
                 "email": user.email,
                 "name": user.name,
                 "roles": user.roles,
-                "picture_url": user.picture_url
+                "picture_url": user.picture_url,
             },
-            default_workspace_id=default_workspace_id
+            default_workspace_id=default_workspace_id,
         )
-    
+
     # Production mode: Verify NextAuth token
     claims = verify_nextauth_token(request.token)
     if not claims:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired NextAuth token"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired NextAuth token")
 
     email = claims["email"]
     name = claims["name"]
     picture = claims["picture"]
     provider = claims["provider"]
     google_sub = claims.get("google_sub")
-    
+
     # Upsert user
     user = db.query(User).filter(User.email == email).first()
-    
+
     if not user:
         # Create new user
         user = User(
@@ -163,7 +153,7 @@ async def exchange_session(
             picture_url=picture,
             auth_provider=AuthProvider(provider) if provider else AuthProvider.NONE,
             google_sub=google_sub,
-            roles=["viewer"]
+            roles=["viewer"],
         )
         db.add(user)
         db.commit()
@@ -176,48 +166,37 @@ async def exchange_session(
         if google_sub:
             user.google_sub = google_sub
         db.commit()
-    
+
     # Check if user has any workspace memberships
-    workspace_memberships = db.query(WorkspaceMember).filter(
-        WorkspaceMember.user_id == user.id
-    ).all()
-    
+    workspace_memberships = db.query(WorkspaceMember).filter(WorkspaceMember.user_id == user.id).all()
+
     default_workspace_id = None
-    
+
     if not workspace_memberships:
         # Create default workspace and add user as owner
         workspace = Workspace(name=f"{user.name}'s Workspace")
         db.add(workspace)
         db.commit()
         db.refresh(workspace)
-        
+
         # Add user as owner
-        membership = WorkspaceMember(
-            workspace_id=workspace.id,
-            user_id=user.id,
-            role=WorkspaceRole.OWNER
-        )
+        membership = WorkspaceMember(workspace_id=workspace.id, user_id=user.id, role=WorkspaceRole.OWNER)
         db.add(membership)
         db.commit()
-        
+
         default_workspace_id = str(workspace.id)
     else:
         # Use the first workspace as default
         default_workspace_id = str(workspace_memberships[0].workspace_id)
-    
+
     # Gather workspace IDs
     workspace_ids = [str(m.workspace_id) for m in workspace_memberships]
-    
+
     # Sign backend JWT
-    payload = {
-        "sub": str(user.id),
-        "email": user.email,
-        "roles": user.roles,
-        "workspaces": workspace_ids
-    }
-    
+    payload = {"sub": str(user.id), "email": user.email, "roles": user.roles, "workspaces": workspace_ids}
+
     access_token = sign_jwt(payload, exp_s=3600)
-    
+
     return SessionExchangeResponse(
         access_token=access_token,
         user={
@@ -225,36 +204,30 @@ async def exchange_session(
             "email": user.email,
             "name": user.name,
             "roles": user.roles,
-            "picture_url": user.picture_url
+            "picture_url": user.picture_url,
         },
-        default_workspace_id=default_workspace_id
+        default_workspace_id=default_workspace_id,
     )
 
 
 @router.get("/api/v1/users/me", response_model=UserResponse)
-async def get_current_user_info(
-    user: Dict[str, Any] = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
+async def get_current_user_info(user: Dict[str, Any] = Depends(get_current_user), db: Session = Depends(get_db)):
     """
     Get current user information.
-    
+
     Args:
         user: Current authenticated user
         db: Database session
-        
+
     Returns:
         User information
     """
     user_id = uuid.UUID(user["sub"])
     db_user = db.query(User).filter(User.id == user_id).first()
-    
+
     if not db_user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
     # Convert roles from JSON format (e.g., {"global": ["admin"]}) to flat list
     roles_list = []
     if db_user.roles:
@@ -269,7 +242,7 @@ async def get_current_user_info(
             roles_list = db_user.roles
         elif isinstance(db_user.roles, str):
             roles_list = [db_user.roles]
-    
+
     return UserResponse(
         id=str(db_user.id),
         email=db_user.email,
@@ -278,51 +251,55 @@ async def get_current_user_info(
         last_name=db_user.last_name,
         timezone=db_user.timezone,
         roles=roles_list,
-        picture_url=db_user.picture_url
+        picture_url=db_user.picture_url,
     )
 
 
 @router.get("/api/v1/workspaces", response_model=List[WorkspaceResponse])
-async def get_user_workspaces(
-    user: Dict[str, Any] = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
+async def get_user_workspaces(user: Dict[str, Any] = Depends(get_current_user), db: Session = Depends(get_db)):
     """
     Get user's workspaces.
-    
+
     Args:
         user: Current authenticated user
         db: Database session
-        
+
     Returns:
         List of user's workspaces
     """
     user_id = uuid.UUID(user["sub"])
-    
+
     # Get workspace memberships with workspace details
-    memberships = db.query(WorkspaceMember, Workspace).join(
-        Workspace, WorkspaceMember.workspace_id == Workspace.id
-    ).filter(WorkspaceMember.user_id == user_id).all()
-    
+    memberships = (
+        db.query(WorkspaceMember, Workspace)
+        .join(Workspace, WorkspaceMember.workspace_id == Workspace.id)
+        .filter(WorkspaceMember.user_id == user_id)
+        .all()
+    )
+
     workspaces = []
     for membership, workspace in memberships:
-        workspaces.append(WorkspaceResponse(
-            id=str(workspace.id),
-            name=workspace.name,
-            role=membership.role.value,
-            created_at=workspace.created_at.isoformat()
-        ))
-    
+        workspaces.append(
+            WorkspaceResponse(
+                id=str(workspace.id),
+                name=workspace.name,
+                role=membership.role.value,
+                created_at=workspace.created_at.isoformat(),
+            )
+        )
+
     return workspaces
 
 
 class WorkspaceCreateRequest(BaseModel):
     """Workspace creation request model."""
+
     name: Optional[str] = None  # Optional name, defaults to "{user.name}'s Workspace"
 
 
 class WorkspaceCreateResponse(BaseModel):
     """Workspace creation response model."""
+
     id: str
     name: str
     created_at: str
@@ -330,64 +307,49 @@ class WorkspaceCreateResponse(BaseModel):
 
 @router.post("/api/v1/workspaces", response_model=WorkspaceCreateResponse)
 async def create_workspace(
-    request_body: WorkspaceCreateRequest,
-    user: Dict[str, Any] = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    request_body: WorkspaceCreateRequest, user: Dict[str, Any] = Depends(get_current_user), db: Session = Depends(get_db)
 ):
     """
     Create a new workspace for the current user.
-    
+
     If user already has workspaces, returns the first one.
     Otherwise, creates a new workspace and adds user as owner.
     """
     from primedata.db.models import Workspace, WorkspaceMember, WorkspaceRole
     from primedata.core.user_utils import get_user_id
-    
+
     user_id = get_user_id(user)
-    
+
     # Check if user already has workspaces
-    existing_memberships = db.query(WorkspaceMember).filter(
-        WorkspaceMember.user_id == user_id
-    ).all()
-    
+    existing_memberships = db.query(WorkspaceMember).filter(WorkspaceMember.user_id == user_id).all()
+
     if existing_memberships:
         # Return the first existing workspace
-        workspace = db.query(Workspace).filter(
-            Workspace.id == existing_memberships[0].workspace_id
-        ).first()
-        
+        workspace = db.query(Workspace).filter(Workspace.id == existing_memberships[0].workspace_id).first()
+
         if workspace:
             return WorkspaceCreateResponse(
-                id=str(workspace.id),
-                name=workspace.name,
-                created_at=workspace.created_at.isoformat()
+                id=str(workspace.id), name=workspace.name, created_at=workspace.created_at.isoformat()
             )
-    
+
     # Create new workspace
     workspace_name = request_body.name or f"{user.get('name', 'User')}'s Workspace"
     workspace = Workspace(name=workspace_name)
     db.add(workspace)
     db.commit()
     db.refresh(workspace)
-    
+
     # Add user as owner
-    membership = WorkspaceMember(
-        workspace_id=workspace.id,
-        user_id=user_id,
-        role=WorkspaceRole.OWNER
-    )
+    membership = WorkspaceMember(workspace_id=workspace.id, user_id=user_id, role=WorkspaceRole.OWNER)
     db.add(membership)
     db.commit()
-    
-    return WorkspaceCreateResponse(
-        id=str(workspace.id),
-        name=workspace.name,
-        created_at=workspace.created_at.isoformat()
-    )
+
+    return WorkspaceCreateResponse(id=str(workspace.id), name=workspace.name, created_at=workspace.created_at.isoformat())
 
 
 class UserProfileUpdateRequest(BaseModel):
     """User profile update request model."""
+
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     timezone: Optional[str] = None
@@ -395,6 +357,7 @@ class UserProfileUpdateRequest(BaseModel):
 
 class UserProfileResponse(BaseModel):
     """User profile response model."""
+
     id: str
     email: str
     name: str
@@ -406,55 +369,50 @@ class UserProfileResponse(BaseModel):
 
 @router.put("/api/v1/user/profile", response_model=UserProfileResponse)
 async def update_user_profile(
-    request_body: UserProfileUpdateRequest,
-    user: Dict[str, Any] = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    request_body: UserProfileUpdateRequest, user: Dict[str, Any] = Depends(get_current_user), db: Session = Depends(get_db)
 ):
     """
     Update user profile information.
-    
+
     Args:
         request_body: Profile update request
         user: Current authenticated user
         db: Database session
-        
+
     Returns:
         Updated user profile information
     """
     user_id = uuid.UUID(user["sub"])
     db_user = db.query(User).filter(User.id == user_id).first()
-    
+
     if not db_user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
     # Update user profile fields
     if request_body.first_name is not None:
         db_user.first_name = request_body.first_name
-    
+
     if request_body.last_name is not None:
         db_user.last_name = request_body.last_name
-    
+
     if request_body.timezone is not None:
         db_user.timezone = request_body.timezone
-    
+
     # Update the name field if first_name or last_name changed
     if request_body.first_name is not None or request_body.last_name is not None:
         first_name = request_body.first_name if request_body.first_name is not None else db_user.first_name
         last_name = request_body.last_name if request_body.last_name is not None else db_user.last_name
-        
+
         if first_name and last_name:
             db_user.name = f"{first_name} {last_name}"
         elif first_name:
             db_user.name = first_name
         elif last_name:
             db_user.name = last_name
-    
+
     db.commit()
     db.refresh(db_user)
-    
+
     return UserProfileResponse(
         id=str(db_user.id),
         email=db_user.email,
@@ -462,5 +420,5 @@ async def update_user_profile(
         first_name=db_user.first_name,
         last_name=db_user.last_name,
         timezone=db_user.timezone,
-        picture_url=db_user.picture_url
+        picture_url=db_user.picture_url,
     )

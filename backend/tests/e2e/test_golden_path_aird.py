@@ -14,7 +14,6 @@ from typing import Dict, Any
 from sqlalchemy.orm import Session
 
 from primedata.db.models import Product, PipelineRun, User, Workspace, ACL
-from primedata.services.trust_scoring import TrustScoringService
 from primedata.services.fingerprint import FingerprintService
 from primedata.services.policy_engine import PolicyEngineService
 from primedata.services.optimizer import suggest_next_config

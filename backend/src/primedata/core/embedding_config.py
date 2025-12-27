@@ -13,6 +13,7 @@ from enum import Enum
 
 class EmbeddingModelType(str, Enum):
     """Types of embedding models."""
+
     SENTENCE_TRANSFORMERS = "sentence_transformers"
     OPENAI = "openai"
     HUGGINGFACE = "huggingface"
@@ -22,6 +23,7 @@ class EmbeddingModelType(str, Enum):
 @dataclass
 class EmbeddingModelConfig:
     """Configuration for an embedding model."""
+
     id: str
     name: str
     description: str
@@ -37,7 +39,7 @@ class EmbeddingModelConfig:
 
 class EmbeddingModelRegistry:
     """Registry for all available embedding models."""
-    
+
     # Default models configuration
     MODELS: Dict[str, EmbeddingModelConfig] = {
         "minilm": EmbeddingModelConfig(
@@ -49,12 +51,7 @@ class EmbeddingModelRegistry:
             model_path="all-MiniLM-L6-v2",
             is_available=True,
             requires_api_key=False,
-            metadata={
-                "provider": "sentence-transformers",
-                "license": "apache-2.0",
-                "performance": "fast",
-                "quality": "good"
-            }
+            metadata={"provider": "sentence-transformers", "license": "apache-2.0", "performance": "fast", "quality": "good"},
         ),
         "minilm-l12": EmbeddingModelConfig(
             id="minilm-l12",
@@ -69,8 +66,8 @@ class EmbeddingModelRegistry:
                 "provider": "sentence-transformers",
                 "license": "apache-2.0",
                 "performance": "medium",
-                "quality": "better"
-            }
+                "quality": "better",
+            },
         ),
         "mpnet": EmbeddingModelConfig(
             id="mpnet",
@@ -85,8 +82,8 @@ class EmbeddingModelRegistry:
                 "provider": "sentence-transformers",
                 "license": "apache-2.0",
                 "performance": "slower",
-                "quality": "excellent"
-            }
+                "quality": "excellent",
+            },
         ),
         "openai-ada-002": EmbeddingModelConfig(
             id="openai-ada-002",
@@ -99,12 +96,7 @@ class EmbeddingModelRegistry:
             requires_api_key=True,
             cost_per_token=0.0001,  # $0.0001 per 1K tokens
             max_tokens=8191,
-            metadata={
-                "provider": "openai",
-                "license": "commercial",
-                "performance": "fast",
-                "quality": "excellent"
-            }
+            metadata={"provider": "openai", "license": "commercial", "performance": "fast", "quality": "excellent"},
         ),
         "openai-3-small": EmbeddingModelConfig(
             id="openai-3-small",
@@ -117,12 +109,7 @@ class EmbeddingModelRegistry:
             requires_api_key=True,
             cost_per_token=0.00002,  # $0.00002 per 1K tokens
             max_tokens=8191,
-            metadata={
-                "provider": "openai",
-                "license": "commercial",
-                "performance": "fast",
-                "quality": "excellent"
-            }
+            metadata={"provider": "openai", "license": "commercial", "performance": "fast", "quality": "excellent"},
         ),
         "openai-3-large": EmbeddingModelConfig(
             id="openai-3-large",
@@ -135,12 +122,7 @@ class EmbeddingModelRegistry:
             requires_api_key=True,
             cost_per_token=0.00013,  # $0.00013 per 1K tokens
             max_tokens=8191,
-            metadata={
-                "provider": "openai",
-                "license": "commercial",
-                "performance": "medium",
-                "quality": "excellent"
-            }
+            metadata={"provider": "openai", "license": "commercial", "performance": "medium", "quality": "excellent"},
         ),
         # Open-source models with 768 dimensions
         "e5-base": EmbeddingModelConfig(
@@ -157,8 +139,8 @@ class EmbeddingModelRegistry:
                 "license": "mit",
                 "performance": "medium",
                 "quality": "excellent",
-                "multilingual": False
-            }
+                "multilingual": False,
+            },
         ),
         "bge-base-en": EmbeddingModelConfig(
             id="bge-base-en",
@@ -174,8 +156,8 @@ class EmbeddingModelRegistry:
                 "license": "mit",
                 "performance": "medium",
                 "quality": "excellent",
-                "multilingual": False
-            }
+                "multilingual": False,
+            },
         ),
         "instructor-base": EmbeddingModelConfig(
             id="instructor-base",
@@ -191,8 +173,8 @@ class EmbeddingModelRegistry:
                 "license": "apache-2.0",
                 "performance": "medium",
                 "quality": "excellent",
-                "instruction_tuned": True
-            }
+                "instruction_tuned": True,
+            },
         ),
         # Open-source models with 1024 dimensions
         "e5-large": EmbeddingModelConfig(
@@ -209,8 +191,8 @@ class EmbeddingModelRegistry:
                 "license": "mit",
                 "performance": "slower",
                 "quality": "excellent",
-                "multilingual": False
-            }
+                "multilingual": False,
+            },
         ),
         "bge-large-en": EmbeddingModelConfig(
             id="bge-large-en",
@@ -226,8 +208,8 @@ class EmbeddingModelRegistry:
                 "license": "mit",
                 "performance": "slower",
                 "quality": "excellent",
-                "multilingual": False
-            }
+                "multilingual": False,
+            },
         ),
         "gte-large": EmbeddingModelConfig(
             id="gte-large",
@@ -243,8 +225,8 @@ class EmbeddingModelRegistry:
                 "license": "apache-2.0",
                 "performance": "slower",
                 "quality": "excellent",
-                "multilingual": False
-            }
+                "multilingual": False,
+            },
         ),
         "instructor-large": EmbeddingModelConfig(
             id="instructor-large",
@@ -260,8 +242,8 @@ class EmbeddingModelRegistry:
                 "license": "apache-2.0",
                 "performance": "slower",
                 "quality": "excellent",
-                "instruction_tuned": True
-            }
+                "instruction_tuned": True,
+            },
         ),
         # Additional open-source models with other dimensions
         "e5-small": EmbeddingModelConfig(
@@ -278,8 +260,8 @@ class EmbeddingModelRegistry:
                 "license": "mit",
                 "performance": "fast",
                 "quality": "good",
-                "multilingual": False
-            }
+                "multilingual": False,
+            },
         ),
         "bge-small-en": EmbeddingModelConfig(
             id="bge-small-en",
@@ -290,13 +272,7 @@ class EmbeddingModelRegistry:
             model_path="BAAI/bge-small-en-v1.5",
             is_available=True,
             requires_api_key=False,
-            metadata={
-                "provider": "baai",
-                "license": "mit",
-                "performance": "fast",
-                "quality": "good",
-                "multilingual": False
-            }
+            metadata={"provider": "baai", "license": "mit", "performance": "fast", "quality": "good", "multilingual": False},
         ),
         "gte-base": EmbeddingModelConfig(
             id="gte-base",
@@ -312,8 +288,8 @@ class EmbeddingModelRegistry:
                 "license": "apache-2.0",
                 "performance": "medium",
                 "quality": "excellent",
-                "multilingual": False
-            }
+                "multilingual": False,
+            },
         ),
         # Multilingual models
         "multilingual-e5-base": EmbeddingModelConfig(
@@ -331,8 +307,8 @@ class EmbeddingModelRegistry:
                 "performance": "medium",
                 "quality": "excellent",
                 "multilingual": True,
-                "languages": "100+"
-            }
+                "languages": "100+",
+            },
         ),
         "multilingual-e5-large": EmbeddingModelConfig(
             id="multilingual-e5-large",
@@ -349,8 +325,8 @@ class EmbeddingModelRegistry:
                 "performance": "slower",
                 "quality": "excellent",
                 "multilingual": True,
-                "languages": "100+"
-            }
+                "languages": "100+",
+            },
         ),
         "bge-m3": EmbeddingModelConfig(
             id="bge-m3",
@@ -367,8 +343,8 @@ class EmbeddingModelRegistry:
                 "performance": "slower",
                 "quality": "excellent",
                 "multilingual": True,
-                "languages": "100+"
-            }
+                "languages": "100+",
+            },
         ),
         "paraphrase-multilingual": EmbeddingModelConfig(
             id="paraphrase-multilingual",
@@ -385,63 +361,54 @@ class EmbeddingModelRegistry:
                 "performance": "medium",
                 "quality": "good",
                 "multilingual": True,
-                "languages": "50+"
-            }
-        )
+                "languages": "50+",
+            },
+        ),
     }
-    
+
     @classmethod
     def get_model(cls, model_id: str) -> Optional[EmbeddingModelConfig]:
         """Get a specific model configuration by ID."""
         return cls.MODELS.get(model_id)
-    
+
     @classmethod
     def get_available_models(cls) -> List[EmbeddingModelConfig]:
         """Get all available models."""
         return [model for model in cls.MODELS.values() if model.is_available]
-    
+
     @classmethod
     def get_models_by_type(cls, model_type: EmbeddingModelType) -> List[EmbeddingModelConfig]:
         """Get models filtered by type."""
-        return [
-            model for model in cls.MODELS.values() 
-            if model.model_type == model_type and model.is_available
-        ]
-    
+        return [model for model in cls.MODELS.values() if model.model_type == model_type and model.is_available]
+
     @classmethod
     def get_free_models(cls) -> List[EmbeddingModelConfig]:
         """Get models that don't require API keys."""
-        return [
-            model for model in cls.MODELS.values() 
-            if model.is_available and not model.requires_api_key
-        ]
-    
+        return [model for model in cls.MODELS.values() if model.is_available and not model.requires_api_key]
+
     @classmethod
     def get_paid_models(cls) -> List[EmbeddingModelConfig]:
         """Get models that require API keys."""
-        return [
-            model for model in cls.MODELS.values() 
-            if model.is_available and model.requires_api_key
-        ]
-    
+        return [model for model in cls.MODELS.values() if model.is_available and model.requires_api_key]
+
     @classmethod
     def validate_model_id(cls, model_id: str) -> bool:
         """Validate if a model ID exists and is available."""
         model = cls.get_model(model_id)
         return model is not None and model.is_available
-    
+
     @classmethod
     def get_model_dimension(cls, model_id: str) -> Optional[int]:
         """Get the dimension for a specific model."""
         model = cls.get_model(model_id)
         return model.dimension if model else None
-    
+
     @classmethod
     def get_model_display_name(cls, model_id: str) -> str:
         """Get the display name for a model."""
         model = cls.get_model(model_id)
         return model.name if model else model_id
-    
+
     @classmethod
     def get_models_for_ui(cls) -> List[Dict]:
         """Get models formatted for UI consumption."""
@@ -453,7 +420,7 @@ class EmbeddingModelRegistry:
                 "dimension": model.dimension,
                 "requires_api_key": model.requires_api_key,
                 "cost_per_token": model.cost_per_token,
-                "metadata": model.metadata
+                "metadata": model.metadata,
             }
             for model in cls.get_available_models()
         ]

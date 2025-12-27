@@ -8,6 +8,3 @@ from .pattern_based import PatternBasedOptimizer
 from .hybrid import HybridOptimizer
 
 __all__ = ["PatternBasedOptimizer", "HybridOptimizer"]
-
-
-

@@ -40,7 +40,7 @@ async def list_raw_artifacts(
     version: Optional[int] = Query(None, description="Version number (defaults to latest)"),
     request: Request = None,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     """
     List raw artifacts for a product and version.
@@ -48,72 +48,65 @@ async def list_raw_artifacts(
     # Get the product
     product = db.query(Product).filter(Product.id == product_id).first()
     if not product:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Product not found"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+
     # Ensure user has access to the product
     ensure_product_access(db, request, product_id)
-    
+
     # Determine version
     if version is None:
         version = product.current_version
-    
+
     # Generate prefix
     prefix = raw_prefix(product.workspace_id, product_id, version)
-    
+
     # Also include artifacts (M3: validation summary and trust report)
     artifacts_prefix = f"ws/{product.workspace_id}/prod/{product_id}/v/{version}/artifacts/"
-    
+
     # List objects from MinIO
     try:
         objects = minio_client.list_objects("primedata-raw", prefix)
-        
+
         artifacts = []
         total_bytes = 0
-        
+
         # Process raw artifacts
         for obj in objects:
             # Generate presigned URL
-            presigned_url = minio_client.presign("primedata-raw", obj['name'], expiry=3600)
-            
+            presigned_url = minio_client.presign("primedata-raw", obj["name"], expiry=3600)
+
             if presigned_url:
-                artifacts.append(ArtifactInfo(
-                    name=obj['name'].split('/')[-1],  # Just the filename
-                    size=obj['size'],
-                    last_modified=obj['last_modified'] if obj['last_modified'] else '',
-                    url=presigned_url,
-                    content_type=obj.get('content_type')
-                ))
-                total_bytes += obj['size']
-        
+                artifacts.append(
+                    ArtifactInfo(
+                        name=obj["name"].split("/")[-1],  # Just the filename
+                        size=obj["size"],
+                        last_modified=obj["last_modified"] if obj["last_modified"] else "",
+                        url=presigned_url,
+                        content_type=obj.get("content_type"),
+                    )
+                )
+                total_bytes += obj["size"]
+
         # Add artifacts from primedata-exports bucket (M3: validation summary and trust report)
         try:
             artifact_objects = minio_client.list_objects("primedata-exports", artifacts_prefix)
             for obj in artifact_objects:
-                presigned_url = minio_client.presign("primedata-exports", obj['name'], expiry=3600)
+                presigned_url = minio_client.presign("primedata-exports", obj["name"], expiry=3600)
                 if presigned_url:
-                    artifacts.append(ArtifactInfo(
-                        name=obj['name'].split('/')[-1],  # Just the filename
-                        size=obj['size'],
-                        last_modified=obj['last_modified'] if obj['last_modified'] else '',
-                        url=presigned_url,
-                        content_type=obj.get('content_type')
-                    ))
-                    total_bytes += obj['size']
+                    artifacts.append(
+                        ArtifactInfo(
+                            name=obj["name"].split("/")[-1],  # Just the filename
+                            size=obj["size"],
+                            last_modified=obj["last_modified"] if obj["last_modified"] else "",
+                            url=presigned_url,
+                            content_type=obj.get("content_type"),
+                        )
+                    )
+                    total_bytes += obj["size"]
         except Exception as e:
             logger.warning(f"Failed to list artifacts from exports bucket: {e}")
-        
-        return RawArtifactsResponse(
-            artifacts=artifacts,
-            total_files=len(artifacts),
-            total_bytes=total_bytes,
-            prefix=prefix
-        )
-        
+
+        return RawArtifactsResponse(artifacts=artifacts, total_files=len(artifacts), total_bytes=total_bytes, prefix=prefix)
+
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to list artifacts: {str(e)}"
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to list artifacts: {str(e)}")

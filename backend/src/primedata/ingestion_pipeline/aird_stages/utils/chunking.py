@@ -33,7 +33,7 @@ def char_chunk(text: str, max_tokens: int, overlap_chars: int) -> List[str]:
 
 def sentence_chunk(body: str, max_tokens: int, overlap_sents: int, hard_overlap_chars: int) -> List[str]:
     """Sentence-based chunking with overlap, falling back to char chunking for long sentences.
-    
+
     This preserves semantic boundaries better than character-based chunking by respecting
     sentence boundaries and maintaining context within chunks.
     """
@@ -68,25 +68,25 @@ def sentence_chunk(body: str, max_tokens: int, overlap_sents: int, hard_overlap_
 
 def paragraph_chunk(body: str, max_tokens: int, overlap_paras: int, hard_overlap_chars: int) -> List[str]:
     """Paragraph-based chunking with overlap for better semantic preservation.
-    
+
     Splits on double newlines (paragraph boundaries) to preserve semantic units.
     Falls back to sentence chunking if paragraphs are too large, ensuring we never
     cut mid-sentence.
     """
     # Split on paragraph boundaries (double newlines or multiple whitespace)
-    paras = re.split(r'\n\s*\n+', body)
+    paras = re.split(r"\n\s*\n+", body)
     paras = [p.strip() for p in paras if p and p.strip()]
-    
+
     if not paras:
         # Fallback to sentence chunking if no paragraphs found
         return sentence_chunk(body, max_tokens, max(1, overlap_paras * 2), hard_overlap_chars)
-    
+
     chunks, buf = [], []
     for para in paras:
         cand = "\n\n".join(buf + [para]) if buf else para
         para_tokens = tokens_estimate(para)
         cand_tokens = tokens_estimate(cand)
-        
+
         # If single paragraph exceeds max_tokens, use sentence chunking on it
         if para_tokens > max_tokens:
             # Flush buffer first if it exists
@@ -106,10 +106,10 @@ def paragraph_chunk(body: str, max_tokens: int, overlap_paras: int, hard_overlap
             # Keep last N paragraphs for overlap
             buf = buf[-overlap_paras:] if overlap_paras > 0 else []
             buf.append(para)
-    
+
     if buf:
         chunks.append("\n\n".join(buf))
-    
+
     # Final pass: ensure no chunk exceeds max_tokens (shouldn't happen, but safety check)
     out: List[str] = []
     for c in chunks:
@@ -119,7 +119,3 @@ def paragraph_chunk(body: str, max_tokens: int, overlap_paras: int, hard_overlap
         else:
             out.append(c)
     return out
-
-
-
-

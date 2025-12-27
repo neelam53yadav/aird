@@ -31,11 +31,11 @@ from primedata.db.models import (
 
 def calculate_checksum(data: bytes, algorithm: str = "sha256") -> str:
     """Calculate checksum for data integrity verification.
-    
+
     Args:
         data: Data bytes to checksum
         algorithm: Hash algorithm ("md5" or "sha256")
-        
+
     Returns:
         Hexadecimal checksum string
     """
@@ -68,9 +68,9 @@ def register_artifact(
 ) -> PipelineArtifact:
     """
     Register a new pipeline artifact.
-    
+
     Phase 1 & 2: Basic tracking + lineage
-    
+
     Args:
         db: Database session
         pipeline_run_id: Pipeline run that generated this artifact
@@ -89,7 +89,7 @@ def register_artifact(
         metadata: Stage-specific metadata dictionary
         retention_policy: Retention policy (Phase 3)
         created_by: Optional user ID if user-triggered
-        
+
     Returns:
         Created PipelineArtifact instance
     """
@@ -97,25 +97,25 @@ def register_artifact(
     input_artifacts_data = []
     if input_artifact_ids:
         # Fetch input artifacts to get their details for lineage
-        input_artifacts = db.query(PipelineArtifact).filter(
-            PipelineArtifact.id.in_(input_artifact_ids)
-        ).all()
-        
+        input_artifacts = db.query(PipelineArtifact).filter(PipelineArtifact.id.in_(input_artifact_ids)).all()
+
         for input_artifact in input_artifacts:
-            input_artifacts_data.append({
-                "artifact_id": str(input_artifact.id),
-                "stage": input_artifact.stage_name,
-                "artifact_name": input_artifact.artifact_name,
-                "minio_key": input_artifact.minio_key,
-            })
-    
+            input_artifacts_data.append(
+                {
+                    "artifact_id": str(input_artifact.id),
+                    "stage": input_artifact.stage_name,
+                    "artifact_name": input_artifact.artifact_name,
+                    "minio_key": input_artifact.minio_key,
+                }
+            )
+
     # Determine retention policy based on pipeline run status
     if retention_policy == RetentionPolicy.DAYS_90:
         # Check if pipeline failed - use longer retention for failures
         pipeline_run = db.query(PipelineRun).filter(PipelineRun.id == pipeline_run_id).first()
         if pipeline_run and pipeline_run.status == PipelineRunStatus.FAILED:
             retention_policy = RetentionPolicy.ON_FAILURE_KEEP_90
-    
+
     artifact = PipelineArtifact(
         pipeline_run_id=pipeline_run_id,
         workspace_id=workspace_id,
@@ -135,17 +135,17 @@ def register_artifact(
         status=ArtifactStatus.ACTIVE,
         created_by=created_by,
     )
-    
+
     db.add(artifact)
     db.commit()
     db.refresh(artifact)
-    
+
     logger.info(
         f"Registered artifact: {artifact_name} ({artifact_type.value}) from {stage_name} "
         f"for product {product_id} v{version}, size={file_size} bytes, "
         f"lineage={len(input_artifacts_data)} inputs"
     )
-    
+
     return artifact
 
 
@@ -155,20 +155,24 @@ def get_artifacts_by_stage(
     stage_name: str,
 ) -> List[PipelineArtifact]:
     """Get all artifacts for a specific stage in a pipeline run.
-    
+
     Args:
         db: Database session
         pipeline_run_id: Pipeline run ID
         stage_name: Stage name
-        
+
     Returns:
         List of PipelineArtifact instances
     """
-    return db.query(PipelineArtifact).filter(
-        PipelineArtifact.pipeline_run_id == pipeline_run_id,
-        PipelineArtifact.stage_name == stage_name,
-        PipelineArtifact.status != ArtifactStatus.PURGED,
-    ).all()
+    return (
+        db.query(PipelineArtifact)
+        .filter(
+            PipelineArtifact.pipeline_run_id == pipeline_run_id,
+            PipelineArtifact.stage_name == stage_name,
+            PipelineArtifact.status != ArtifactStatus.PURGED,
+        )
+        .all()
+    )
 
 
 def get_artifact_lineage(
@@ -177,19 +181,19 @@ def get_artifact_lineage(
     direction: str = "downstream",  # "upstream" or "downstream"
 ) -> List[PipelineArtifact]:
     """Get artifact lineage (Phase 2).
-    
+
     Args:
         db: Database session
         artifact_id: Artifact ID
         direction: "upstream" (inputs) or "downstream" (outputs using this)
-        
+
     Returns:
         List of related artifacts
     """
     artifact = db.query(PipelineArtifact).filter(PipelineArtifact.id == artifact_id).first()
     if not artifact:
         return []
-    
+
     if direction == "upstream":
         # Get input artifacts (artifacts this one depends on)
         input_ids = []
@@ -199,41 +203,47 @@ def get_artifact_lineage(
                     input_ids.append(UUID(input_ref["artifact_id"]))
                 except (ValueError, TypeError):
                     continue
-        
+
         if not input_ids:
             return []
-        
-        return db.query(PipelineArtifact).filter(
-            PipelineArtifact.id.in_(input_ids),
-            PipelineArtifact.status != ArtifactStatus.PURGED,
-        ).all()
-    
+
+        return (
+            db.query(PipelineArtifact)
+            .filter(
+                PipelineArtifact.id.in_(input_ids),
+                PipelineArtifact.status != ArtifactStatus.PURGED,
+            )
+            .all()
+        )
+
     elif direction == "downstream":
         # Get artifacts that depend on this one (artifacts with this in their input_artifacts)
         # This requires a JSON query - PostgreSQL supports this
         artifact_id_str = str(artifact_id)
-        
+
         # Query artifacts where input_artifacts contains this artifact_id
         # PostgreSQL JSON query: WHERE input_artifacts @> '[{"artifact_id": "..."}]'::jsonb
         from sqlalchemy import text
-        
+
         result = db.execute(
-            text("""
+            text(
+                """
                 SELECT * FROM pipeline_artifacts
                 WHERE input_artifacts::text LIKE :pattern
                 AND status != 'purged'
-            """),
-            {"pattern": f"%{artifact_id_str}%"}
+            """
+            ),
+            {"pattern": f"%{artifact_id_str}%"},
         )
-        
+
         artifacts = []
         for row in result:
             artifact_obj = db.query(PipelineArtifact).filter(PipelineArtifact.id == row.id).first()
             if artifact_obj:
                 artifacts.append(artifact_obj)
-        
+
         return artifacts
-    
+
     else:
         raise ValueError(f"Invalid direction: {direction}. Use 'upstream' or 'downstream'")
 
@@ -246,32 +256,32 @@ def update_artifact_status(
     deleted_at: Optional[datetime] = None,
 ) -> PipelineArtifact:
     """Update artifact status (Phase 3: retention).
-    
+
     Args:
         db: Database session
         artifact_id: Artifact ID
         status: New status
         archived_at: Timestamp if archiving
         deleted_at: Timestamp if deleting
-        
+
     Returns:
         Updated PipelineArtifact instance
     """
     artifact = db.query(PipelineArtifact).filter(PipelineArtifact.id == artifact_id).first()
     if not artifact:
         raise ValueError(f"Artifact {artifact_id} not found")
-    
+
     artifact.status = status
     if archived_at:
         artifact.archived_at = archived_at
     if deleted_at:
         artifact.deleted_at = deleted_at
-    
+
     db.commit()
     db.refresh(artifact)
-    
+
     logger.info(f"Updated artifact {artifact_id} status to {status.value}")
-    
+
     return artifact
 
 
@@ -281,23 +291,28 @@ def get_artifacts_for_retention(
     older_than_days: int,
 ) -> List[PipelineArtifact]:
     """Get artifacts that should be archived/deleted based on retention policy (Phase 3).
-    
+
     Args:
         db: Database session
         retention_policy: Retention policy to check
         older_than_days: Artifacts older than this many days
-        
+
     Returns:
         List of artifacts that match criteria
     """
     from datetime import timedelta
+
     cutoff_date = datetime.utcnow() - timedelta(days=older_than_days)
-    
-    return db.query(PipelineArtifact).filter(
-        PipelineArtifact.retention_policy == retention_policy,
-        PipelineArtifact.status == ArtifactStatus.ACTIVE,
-        PipelineArtifact.created_at < cutoff_date,
-    ).all()
+
+    return (
+        db.query(PipelineArtifact)
+        .filter(
+            PipelineArtifact.retention_policy == retention_policy,
+            PipelineArtifact.status == ArtifactStatus.ACTIVE,
+            PipelineArtifact.created_at < cutoff_date,
+        )
+        .all()
+    )
 
 
 def get_artifact_summary_for_run(
@@ -305,28 +320,32 @@ def get_artifact_summary_for_run(
     pipeline_run_id: UUID,
 ) -> Dict[str, Any]:
     """Get artifact summary for a pipeline run (for lightweight metadata in pipeline_runs.metrics).
-    
+
     Returns lightweight summary for pipeline_runs.metrics JSON field.
-    
+
     Args:
         db: Database session
         pipeline_run_id: Pipeline run ID
-        
+
     Returns:
         Dictionary with artifact summary
     """
-    artifacts = db.query(PipelineArtifact).filter(
-        PipelineArtifact.pipeline_run_id == pipeline_run_id,
-        PipelineArtifact.status != ArtifactStatus.PURGED,
-    ).all()
-    
+    artifacts = (
+        db.query(PipelineArtifact)
+        .filter(
+            PipelineArtifact.pipeline_run_id == pipeline_run_id,
+            PipelineArtifact.status != ArtifactStatus.PURGED,
+        )
+        .all()
+    )
+
     summary = {
         "total_artifacts": len(artifacts),
         "total_size_bytes": sum(a.file_size for a in artifacts),
         "by_stage": {},
         "by_type": {},
     }
-    
+
     for artifact in artifacts:
         # By stage
         if artifact.stage_name not in summary["by_stage"]:
@@ -335,23 +354,24 @@ def get_artifact_summary_for_run(
                 "total_size_bytes": 0,
                 "artifacts": [],
             }
-        
+
         summary["by_stage"][artifact.stage_name]["count"] += 1
         summary["by_stage"][artifact.stage_name]["total_size_bytes"] += artifact.file_size
-        summary["by_stage"][artifact.stage_name]["artifacts"].append({
-            "id": str(artifact.id),
-            "name": artifact.artifact_name,
-            "type": artifact.artifact_type.value,
-            "size_bytes": artifact.file_size,
-            "minio_key": artifact.minio_key,
-        })
-        
+        summary["by_stage"][artifact.stage_name]["artifacts"].append(
+            {
+                "id": str(artifact.id),
+                "name": artifact.artifact_name,
+                "type": artifact.artifact_type.value,
+                "size_bytes": artifact.file_size,
+                "minio_key": artifact.minio_key,
+            }
+        )
+
         # By type
         type_key = artifact.artifact_type.value
         if type_key not in summary["by_type"]:
             summary["by_type"][type_key] = {"count": 0, "total_size_bytes": 0}
         summary["by_type"][type_key]["count"] += 1
         summary["by_type"][type_key]["total_size_bytes"] += artifact.file_size
-    
-    return summary
 
+    return summary

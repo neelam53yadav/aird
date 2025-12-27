@@ -12,45 +12,39 @@ from primedata.db.models import Workspace, Product, WorkspaceMember, WorkspaceRo
 def allowed_workspaces(request: Request, db: Optional[Session] = None) -> List[UUID]:
     """
     Get list of workspace IDs that the current user has access to.
-    
+
     Args:
         request: FastAPI request object with user state
         db: Optional database session to query actual workspace memberships (used in dev mode)
-        
+
     Returns:
         List of workspace UUIDs the user can access
     """
-    if not hasattr(request.state, 'user') or not request.state.user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not authenticated"
-        )
-    
-    user_id = UUID(request.state.user['sub'])
-    
+    if not hasattr(request.state, "user") or not request.state.user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not authenticated")
+
+    user_id = UUID(request.state.user["sub"])
+
     # If database session is provided, query actual workspace memberships (more reliable, especially in dev mode)
     if db:
         from primedata.core.settings import get_settings
+
         settings = get_settings()
-        
+
         # In dev mode, always query database for actual memberships (more accurate than middleware)
         # In production, prefer database query for consistency, but can fall back to token
         if settings.DISABLE_AUTH:
             # Dev mode: always use database
-            memberships = db.query(WorkspaceMember).filter(
-                WorkspaceMember.user_id == user_id
-            ).all()
+            memberships = db.query(WorkspaceMember).filter(WorkspaceMember.user_id == user_id).all()
             return [m.workspace_id for m in memberships]
         else:
             # Production: try database first, fall back to token if needed
-            memberships = db.query(WorkspaceMember).filter(
-                WorkspaceMember.user_id == user_id
-            ).all()
+            memberships = db.query(WorkspaceMember).filter(WorkspaceMember.user_id == user_id).all()
             if memberships:
                 return [m.workspace_id for m in memberships]
-    
+
     # Fallback: use workspaces from user token/state
-    user_workspaces = request.state.user.get('workspaces', [])
+    user_workspaces = request.state.user.get("workspaces", [])
     # Handle both string and UUID workspace IDs
     result = []
     for ws_id in user_workspaces:
@@ -65,129 +59,100 @@ def allowed_workspaces(request: Request, db: Optional[Session] = None) -> List[U
     return result
 
 
-def ensure_workspace_access(
-    db: Session, 
-    request: Request, 
-    workspace_id: UUID, 
-    roles: Optional[List[str]] = None
-) -> Workspace:
+def ensure_workspace_access(db: Session, request: Request, workspace_id: UUID, roles: Optional[List[str]] = None) -> Workspace:
     """
     Ensure the current user has access to the specified workspace.
-    
+
     Args:
         db: Database session
         request: FastAPI request object with user state
         workspace_id: UUID of the workspace to check access for
         roles: Optional list of required roles (if None, any role is sufficient)
-        
+
     Returns:
         Workspace object if access is granted
-        
+
     Raises:
         HTTPException: 403 if access is denied, 404 if workspace not found
     """
-    if not hasattr(request.state, 'user') or not request.state.user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not authenticated"
-        )
-    
+    if not hasattr(request.state, "user") or not request.state.user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not authenticated")
+
     from primedata.core.settings import get_settings
+
     settings = get_settings()
-    
-    user_id = UUID(request.state.user['sub'])
-    
+
+    user_id = UUID(request.state.user["sub"])
+
     # Get workspace
     workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
-    
+
     # In dev mode, auto-create workspace and membership if they don't exist
     if not workspace and settings.DISABLE_AUTH:
-        workspace = Workspace(
-            id=workspace_id,
-            name="Default Workspace"
-        )
+        workspace = Workspace(id=workspace_id, name="Default Workspace")
         db.add(workspace)
         # Also create workspace membership for the user
-        membership = WorkspaceMember(
-            workspace_id=workspace_id,
-            user_id=user_id,
-            role=WorkspaceRole.OWNER
-        )
+        membership = WorkspaceMember(workspace_id=workspace_id, user_id=user_id, role=WorkspaceRole.OWNER)
         db.add(membership)
         db.commit()
         db.refresh(workspace)
-    
+
     if not workspace:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Workspace not found"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+
     # Check database membership first (more reliable)
-    membership = db.query(WorkspaceMember).filter(
-        WorkspaceMember.workspace_id == workspace_id,
-        WorkspaceMember.user_id == user_id
-    ).first()
-    
+    membership = (
+        db.query(WorkspaceMember)
+        .filter(WorkspaceMember.workspace_id == workspace_id, WorkspaceMember.user_id == user_id)
+        .first()
+    )
+
     # In dev mode, if no membership exists but workspace exists, create it
     if not membership and settings.DISABLE_AUTH:
-        membership = WorkspaceMember(
-            workspace_id=workspace_id,
-            user_id=user_id,
-            role=WorkspaceRole.OWNER
-        )
+        membership = WorkspaceMember(workspace_id=workspace_id, user_id=user_id, role=WorkspaceRole.OWNER)
         db.add(membership)
         db.commit()
     elif not membership:
         # Check if workspace is in allowed list (fallback for non-database cases)
         allowed_workspace_ids = allowed_workspaces(request, db)
         if workspace_id not in allowed_workspace_ids:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Access denied to workspace"
-            )
-    
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to workspace")
+
     # If specific roles are required, check user's role in this workspace
     if roles and membership:
         if membership.role.value not in roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Required role not found. Required: {roles}, Current: {membership.role.value}"
+                detail=f"Required role not found. Required: {roles}, Current: {membership.role.value}",
             )
-    
+
     return workspace
 
 
 def ensure_product_access(db: Session, request: Request, product_id: UUID) -> Product:
     """
     Ensure the current user has access to the specified product.
-    
+
     Args:
         db: Database session
         request: FastAPI request object with user state
         product_id: UUID of the product to check access for
-        
+
     Returns:
         Product object if access is granted
-        
+
     Raises:
         HTTPException: 403 if access is denied, 404 if product not found
     """
-    if not hasattr(request.state, 'user') or not request.state.user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not authenticated"
-        )
-    
+    if not hasattr(request.state, "user") or not request.state.user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not authenticated")
+
     # Get the product
     product = db.query(Product).filter(Product.id == product_id).first()
     if not product:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Product not found"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+
     # Check workspace access
     ensure_workspace_access(db, request, product.workspace_id)
-    
+
     return product

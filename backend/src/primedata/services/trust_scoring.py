@@ -14,6 +14,7 @@ from loguru import logger
 # Try to import primary scorer
 try:
     from primedata.services.scoring_utils import score_file_data, load_weights
+
     _PRIMARY_SCORER = True
     logger.info("Primary scorer (scoring_utils) available")
 except ImportError:
@@ -184,68 +185,65 @@ def get_scoring_weights(config_path: Optional[str] = None) -> Dict[str, float]:
                 return load_weights(config_path)
             # Try default path
             from primedata.ingestion_pipeline.aird_stages.config import get_aird_config
+
             config = get_aird_config()
             if config.scoring_weights_path:
                 return load_weights(config.scoring_weights_path)
         except Exception as e:
             logger.warning(f"Failed to load weights from config: {e}, using fallback")
-    
+
     return _fallback_weights()
 
 
 def score_record(record: Dict[str, Any], weights: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
     """
     Score a single record (chunk).
-    
+
     Args:
         record: Chunk record with text, metadata, etc.
         weights: Optional scoring weights (uses defaults if not provided)
-        
+
     Returns:
         Dict with all 13 metrics + AI_Trust_Score (0-100 scale)
     """
     if weights is None:
         weights = get_scoring_weights()
-    
+
     if _PRIMARY_SCORER and score_file_data:
         try:
             return score_file_data(record, weights)
         except Exception as e:
             logger.warning(f"Primary scorer failed: {e}, falling back to heuristic scorer")
-    
+
     return _fallback_score_record(record, weights)
 
 
 def aggregate_metrics(metrics: List[Dict[str, Any]]) -> Dict[str, float]:
     """
     Aggregate metrics across multiple chunks by averaging.
-    
+
     Args:
         metrics: List of metric dictionaries (one per chunk)
-        
+
     Returns:
         Aggregated metrics dictionary (Readiness Fingerprint)
     """
     if not metrics:
         return {}
-    
+
     sums: Dict[str, float] = {}
     counts: Dict[str, int] = {}
-    
+
     for m in metrics:
         for k, v in m.items():
             if isinstance(v, (int, float)) and k != "file":  # Exclude non-numeric and file tag
                 sums[k] = sums.get(k, 0.0) + float(v)
                 counts[k] = counts.get(k, 0) + 1
-    
+
     agg: Dict[str, float] = {}
     for k, total in sums.items():
         c = counts.get(k, 0)
         if c > 0:
             agg[k] = round(total / c, 4)
-    
+
     return agg
-
-
-
-
