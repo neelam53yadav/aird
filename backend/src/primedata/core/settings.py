@@ -3,8 +3,12 @@ Application settings and configuration.
 """
 
 import os
-from typing import List
-from pydantic_settings import BaseSettings
+from typing import List, Optional
+try:
+    from pydantic_settings import BaseSettings
+except ImportError:
+    # Fallback for pydantic v1
+    from pydantic import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -44,6 +48,9 @@ class Settings(BaseSettings):
     QDRANT_HOST: str = "localhost"
     QDRANT_PORT: int = 6333
     QDRANT_GRPC_PORT: int = 6334
+    
+    # OpenAI Configuration
+    OPENAI_API_KEY: Optional[str] = None  # OpenAI API key for embedding models
     
     # AIRD Configuration (M0)
     AIRD_PLAYBOOK_DIR: str = ""  # Path to playbook directory (empty = auto-detect)

@@ -155,6 +155,7 @@ class Workspace(Base):
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     name = Column(String(255), nullable=False)
+    settings = Column(JSON, nullable=True, default=dict)  # Workspace settings (API keys, etc.)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
@@ -197,6 +198,8 @@ class Product(Base):
     status = Column(SQLEnum(ProductStatus), nullable=False, default=ProductStatus.DRAFT)
     current_version = Column(Integer, nullable=False, default=0)
     promoted_version = Column(Integer, nullable=True, default=None)
+    # AIRD configuration
+    aird_enabled = Column(Boolean, nullable=False, default=True)  # Enable AIRD pipeline processing
     # AIRD playbook configuration (M1)
     playbook_id = Column(String(50), nullable=True, default=None)  # e.g., "TECH", "SCANNED", "REGULATORY"
     # Playbook selection metadata (for auto-detection verification)
@@ -243,9 +246,8 @@ class Product(Base):
     owner = relationship("User", back_populates="owned_products")
     data_sources = relationship("DataSource", back_populates="product")
     data_quality_rules = relationship("DataQualityRule", back_populates="product")
-    document_metadata = relationship("DocumentMetadata", back_populates="product")  # M4
+    # Metadata is now stored in Qdrant payloads, not PostgreSQL tables
     raw_files = relationship("RawFile", back_populates="product")  # Track ingested raw files
-    vector_metadata = relationship("VectorMetadata", back_populates="product")  # M4
     acls = relationship("ACL", back_populates="product")  # M5
     pipeline_artifacts = relationship("PipelineArtifact", back_populates="product")  # Track pipeline artifacts
     
@@ -332,58 +334,8 @@ class RawFile(Base):
     )
 
 
-class DocumentMetadata(Base):
-    """Document metadata model for tracking chunk-level information (M4)."""
-    __tablename__ = "document_metadata"
-    
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False, index=True)
-    version = Column(Integer, nullable=False, default=0)
-    chunk_id = Column(String(255), nullable=False, index=True)
-    score = Column(Float, nullable=True)  # AI_Trust_Score for chunk
-    source_file = Column(String(500), nullable=True)
-    page_number = Column(Integer, nullable=True)
-    section = Column(String(255), nullable=True)
-    field_name = Column(String(255), nullable=True)
-    extra_tags = Column(JSON, nullable=True, default=None)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
-    # Relationships
-    product = relationship("Product", back_populates="document_metadata")
-    
-    # Indexes
-    __table_args__ = (
-        Index('idx_document_metadata_product_version', 'product_id', 'version'),
-        Index('idx_document_metadata_chunk_id', 'chunk_id'),
-        Index('idx_document_metadata_field_name', 'field_name'),
-    )
-
-
-class VectorMetadata(Base):
-    """Vector metadata model for tracking Qdrant vector information (M4)."""
-    __tablename__ = "vector_metadata"
-    
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False, index=True)
-    version = Column(Integer, nullable=False, default=0)
-    collection_id = Column(String(255), nullable=False)  # Qdrant collection name
-    chunk_id = Column(String(255), nullable=False, index=True)
-    page_number = Column(Integer, nullable=True)
-    section = Column(String(255), nullable=True)
-    field_name = Column(String(255), nullable=True, index=True)  # For ACL field_scope
-    tags = Column(JSON, nullable=True, default=None)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
-    # Relationships
-    product = relationship("Product", back_populates="vector_metadata")
-    
-    # Indexes
-    __table_args__ = (
-        Index('idx_vector_metadata_product_version', 'product_id', 'version'),
-        Index('idx_vector_metadata_chunk_id', 'chunk_id'),
-        Index('idx_vector_metadata_field_name', 'field_name'),
-        Index('idx_vector_metadata_collection', 'collection_id'),
-    )
+# DocumentMetadata and VectorMetadata models removed - metadata is now stored in Qdrant payloads
+# This eliminates data duplication and reduces database costs
 
 
 class ACL(Base):
@@ -441,6 +393,36 @@ class PipelineRun(Base):
         Index('idx_pipeline_runs_product_version', 'product_id', 'version'),
         Index('idx_pipeline_runs_workspace_id', 'workspace_id'),
         Index('idx_pipeline_runs_dag_run_id', 'dag_run_id'),
+    )
+
+
+class CustomPlaybook(Base):
+    """Custom playbook model for user-created playbooks."""
+    __tablename__ = "custom_playbooks"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+    workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id"), nullable=False, index=True)
+    owner_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    name = Column(String(255), nullable=False)  # User-friendly name
+    playbook_id = Column(String(100), nullable=False)  # Unique identifier (e.g., "CUSTOM_MY_PLAYBOOK")
+    description = Column(Text, nullable=True)  # Optional description
+    yaml_content = Column(Text, nullable=False)  # Full YAML content
+    config = Column(JSON, nullable=True)  # Parsed YAML as JSON for quick access
+    base_playbook_id = Column(String(50), nullable=True)  # Original playbook this was based on (e.g., "ACADEMIC")
+    is_active = Column(Boolean, nullable=False, default=True)  # Soft delete flag
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Relationships
+    workspace = relationship("Workspace")
+    owner = relationship("User")
+    
+    # Indexes
+    __table_args__ = (
+        UniqueConstraint('workspace_id', 'playbook_id', name='unique_workspace_playbook_id'),
+        Index('idx_custom_playbooks_workspace_id', 'workspace_id'),
+        Index('idx_custom_playbooks_owner_user_id', 'owner_user_id'),
+        Index('idx_custom_playbooks_playbook_id', 'playbook_id'),
     )
 
 

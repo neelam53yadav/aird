@@ -47,7 +47,7 @@ class DataSourceResponse(BaseModel):
     updated_at: Optional[datetime] = None
 
     class Config:
-        from_attributes = True
+        orm_mode = True  # Pydantic v1 uses orm_mode instead of from_attributes
 
 
 class TestConnectionResponse(BaseModel):
@@ -118,7 +118,7 @@ async def create_datasource(
     db.commit()
     db.refresh(datasource)
     
-    return DataSourceResponse.model_validate(datasource)
+    return DataSourceResponse.from_orm(datasource)
 
 
 @router.get("/", response_model=List[DataSourceResponse])
@@ -134,17 +134,18 @@ async def list_datasources(
     """
     from primedata.core.scope import allowed_workspaces
     
-    allowed_workspace_ids = allowed_workspaces(request)
-    
-    query = db.query(DataSource).filter(DataSource.workspace_id.in_(allowed_workspace_ids))
-    
     if product_id:
-        # Ensure user has access to the product
-        ensure_product_access(db, request, product_id)
-        query = query.filter(DataSource.product_id == product_id)
+        # Ensure user has access to the product and get the product's workspace
+        product = ensure_product_access(db, request, product_id)
+        # Filter by product_id directly - ensure_product_access already verified access
+        query = db.query(DataSource).filter(DataSource.product_id == product_id)
+    else:
+        # No product_id provided - filter by allowed workspaces
+        allowed_workspace_ids = allowed_workspaces(request, db)
+        query = db.query(DataSource).filter(DataSource.workspace_id.in_(allowed_workspace_ids))
     
     datasources = query.all()
-    return [DataSourceResponse.model_validate(datasource) for datasource in datasources]
+    return [DataSourceResponse.from_orm(datasource) for datasource in datasources]
 
 
 @router.get("/{datasource_id}", response_model=DataSourceResponse)
@@ -168,7 +169,7 @@ async def get_datasource(
     # Ensure user has access to the product
     ensure_product_access(db, request, datasource.product_id)
     
-    return DataSourceResponse.model_validate(datasource)
+    return DataSourceResponse.from_orm(datasource)
 
 
 @router.patch("/{datasource_id}", response_model=DataSourceResponse)
@@ -204,7 +205,7 @@ async def update_datasource(
     db.commit()
     db.refresh(datasource)
     
-    return DataSourceResponse.model_validate(datasource)
+    return DataSourceResponse.from_orm(datasource)
 
 
 def _test_connector_config(datasource_type: DataSourceType, config: Dict[str, Any]) -> Tuple[bool, str]:

@@ -140,13 +140,14 @@ class MinIOClient:
             logger.error(f"Failed to list objects in {bucket} with prefix {prefix}: {e}")
             return []
     
-    def presign(self, bucket: str, key: str, expiry: int = 3600) -> Optional[str]:
+    def presign(self, bucket: str, key: str, expiry: int = 3600, inline: bool = False) -> Optional[str]:
         """Generate presigned URL for object access.
         
         Args:
             bucket: Bucket name
             key: Object key
             expiry: URL expiry time in seconds (default: 1 hour)
+            inline: If True, add response-content-disposition=inline to make content display in browser instead of downloading (default: False)
             
         Returns:
             Presigned URL or None if failed
@@ -154,10 +155,27 @@ class MinIOClient:
         try:
             self._ensure_buckets()
             from datetime import timedelta
-            url = self.client.presigned_get_object(bucket, key, expires=timedelta(seconds=expiry))
+            
+            # Prepare response headers for inline viewing (to display in browser instead of downloading)
+            response_headers = None
+            if inline:
+                response_headers = {
+                    'response-content-disposition': 'inline'
+                }
+            
+            url = self.client.presigned_get_object(
+                bucket_name=bucket,
+                object_name=key,
+                expires=timedelta(seconds=expiry),
+                response_headers=response_headers
+            )
+            
             return url
         except S3Error as e:
             logger.error(f"Failed to generate presigned URL for {bucket}/{key}: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Failed to generate presigned URL for {bucket}/{key}: {e}", exc_info=True)
             return None
     
     def get_object(self, bucket: str, key: str) -> Optional[bytes]:
@@ -260,6 +278,46 @@ class MinIOClient:
         except (json.JSONDecodeError, UnicodeDecodeError) as e:
             logger.error(f"Failed to parse JSON from {bucket}/{key}: {e}")
             return None
+    
+    def copy_object(self, source_bucket: str, source_key: str, dest_bucket: str, dest_key: str) -> bool:
+        """Copy an object from source to destination within MinIO.
+        
+        Args:
+            source_bucket: Source bucket name
+            source_key: Source object key
+            dest_bucket: Destination bucket name
+            dest_key: Destination object key
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            self._ensure_buckets()
+            
+            # Read the source object
+            source_data = self.get_object(source_bucket, source_key)
+            if source_data is None:
+                logger.error(f"Failed to read source object {source_bucket}/{source_key}")
+                return False
+            
+            # Get content type from source object
+            try:
+                stat = self.client.stat_object(source_bucket, source_key)
+                content_type = stat.content_type or 'application/octet-stream'
+            except S3Error:
+                content_type = 'application/octet-stream'
+            
+            # Write to destination
+            success = self.put_object(dest_bucket, dest_key, source_data, content_type)
+            if success:
+                logger.info(f"Copied object from {source_bucket}/{source_key} to {dest_bucket}/{dest_key}")
+            return success
+        except S3Error as e:
+            logger.error(f"Failed to copy object from {source_bucket}/{source_key} to {dest_bucket}/{dest_key}: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error copying object: {e}", exc_info=True)
+            return False
 
 
 # Global instance

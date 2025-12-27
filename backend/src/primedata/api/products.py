@@ -3,18 +3,20 @@ Products API router.
 """
 
 from typing import List, Optional, Dict, Any
-from uuid import UUID
+from uuid import UUID, uuid4 as uuid_uuid4
 from datetime import datetime
 import logging
+import uuid
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Query, Response, File, UploadFile, Form
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 from primedata.core.scope import ensure_workspace_access, allowed_workspaces, ensure_product_access
 from primedata.core.security import get_current_user
 from primedata.core.user_utils import get_user_id
 from primedata.db.database import get_db
-from primedata.db.models import Product, ProductStatus, PipelineRun, PipelineRunStatus
+from primedata.db.models import Product, ProductStatus, PipelineRun, PipelineRunStatus, Workspace
 from primedata.api.billing import check_billing_limits
 from primedata.analysis.content_analyzer import content_analyzer, ChunkingConfig
 from primedata.core.settings import get_settings
@@ -47,12 +49,14 @@ class ProductCreateRequest(BaseModel):
 
 class ChunkingConfigRequest(BaseModel):
     mode: Optional[str] = None  # "auto" or "manual"
+    optimization_mode: Optional[str] = None  # "pattern", "hybrid", or "llm"
     auto_settings: Optional[Dict[str, Any]] = None
     manual_settings: Optional[Dict[str, Any]] = None
 
 class ProductUpdateRequest(BaseModel):
     name: Optional[str] = None
     status: Optional[ProductStatus] = None
+    playbook_id: Optional[str] = None
     chunking_config: Optional[ChunkingConfigRequest] = None
     embedding_config: Optional[Dict[str, Any]] = None
 
@@ -65,16 +69,23 @@ class ProductResponse(BaseModel):
     status: ProductStatus
     current_version: int
     promoted_version: Optional[int] = None
+    aird_enabled: bool = True  # AIRD pipeline enabled flag
     playbook_id: Optional[str] = None  # M1
     playbook_selection: Optional[Dict[str, Any]] = None  # Auto-detection metadata: method, reason, detected_at
     preprocessing_stats: Optional[Dict[str, Any]] = None  # M1
     trust_score: Optional[float] = None  # M2
     policy_status: Optional[str] = None  # M2: "passed" or "failed"
+    policy_violations: Optional[List[str]] = None  # M2
+    chunk_metrics: Optional[List[Dict[str, Any]]] = None  # M2
+    validation_summary_path: Optional[str] = None  # M3
+    trust_report_path: Optional[str] = None  # M3
+    chunking_config: Optional[Dict[str, Any]] = None
+    embedding_config: Optional[Dict[str, Any]] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
 
     class Config:
-        from_attributes = True
+        orm_mode = True  # Pydantic v1 uses orm_mode instead of from_attributes
 
 
 class TrustMetricsResponse(BaseModel):
@@ -102,62 +113,84 @@ async def create_product(
     """
     Create a new product in the specified workspace.
     """
-    # Ensure user has access to the workspace
-    ensure_workspace_access(db, request, request_body.workspace_id)
-    
-    # Check billing limits for product creation
-    current_product_count = db.query(Product).filter(
-        Product.workspace_id == request_body.workspace_id
-    ).count()
-    
-    if not check_billing_limits(str(request_body.workspace_id), 'max_products', current_product_count, db):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Product limit exceeded. Please upgrade your plan to create more products."
+    try:
+        # Ensure user has access to the workspace
+        ensure_workspace_access(db, request, request_body.workspace_id)
+        
+        # Check billing limits for product creation
+        current_product_count = db.query(Product).filter(
+            Product.workspace_id == request_body.workspace_id
+        ).count()
+        
+        if not check_billing_limits(str(request_body.workspace_id), 'max_products', current_product_count, db):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Product limit exceeded. Please upgrade your plan to create more products."
+            )
+        
+        # Check if product name already exists in workspace
+        existing_product = db.query(Product).filter(
+            Product.workspace_id == request_body.workspace_id,
+            Product.name == request_body.name
+        ).first()
+        
+        if existing_product:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Product name already exists in this workspace"
+            )
+        
+        # Create new product
+        # Initialize playbook_selection metadata if playbook is provided
+        playbook_selection = None
+        if request_body.playbook_id:
+            playbook_selection = {
+                "playbook_id": request_body.playbook_id,
+                "method": "manual",  # User manually selected during creation
+                "reason": None,
+                "detected_at": None,
+            }
+        
+        product = Product(
+            workspace_id=request_body.workspace_id,
+            owner_user_id=get_user_id(current_user),
+            name=request_body.name,
+            status=ProductStatus.DRAFT,
+            aird_enabled=True,  # Enable AIRD by default
+            playbook_id=request_body.playbook_id,  # M1
+            playbook_selection=playbook_selection,  # Store selection metadata
+            chunking_config=request_body.chunking_config,  # Chunking configuration
+            embedding_config=request_body.embedding_config or {  # Embedding configuration
+                "embedder_name": "minilm",
+                "embedding_dimension": 384
+            },
         )
-    
-    # Check if product name already exists in workspace
-    existing_product = db.query(Product).filter(
-        Product.workspace_id == request_body.workspace_id,
-        Product.name == request_body.name
-    ).first()
-    
-    if existing_product:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Product name already exists in this workspace"
+        
+        # Log the chunking config being saved
+        logger.info(
+            f"Creating product '{request_body.name}' with chunking_config: {request_body.chunking_config}"
         )
-    
-    # Create new product
-    # Initialize playbook_selection metadata if playbook is provided
-    playbook_selection = None
-    if request_body.playbook_id:
-        playbook_selection = {
-            "playbook_id": request_body.playbook_id,
-            "method": "manual",  # User manually selected during creation
-            "reason": None,
-            "detected_at": None,
-        }
-    
-    product = Product(
-        workspace_id=request_body.workspace_id,
-        owner_user_id=get_user_id(current_user),
-        name=request_body.name,
-        status=ProductStatus.DRAFT,
-        playbook_id=request_body.playbook_id,  # M1
-        playbook_selection=playbook_selection,  # Store selection metadata
-        chunking_config=request_body.chunking_config,  # Chunking configuration
-        embedding_config=request_body.embedding_config or {  # Embedding configuration
-            "embedder_name": "minilm",
-            "embedding_dimension": 384
-        },
-    )
-    
-    db.add(product)
-    db.commit()
-    db.refresh(product)
-    
-    return ProductResponse.model_validate(product)
+        
+        db.add(product)
+        db.commit()
+        db.refresh(product)
+        
+        logger.info(
+            f"Product created with ID {product.id}. Saved chunking_config: {product.chunking_config}"
+        )
+        
+        return ProductResponse.from_orm(product)
+    except HTTPException:
+        # Re-raise HTTP exceptions (they already have proper error messages)
+        raise
+    except Exception as e:
+        # Log the full error for debugging
+        logger.error(f"Failed to create product: {e}", exc_info=True)
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create product: {str(e)}"
+        )
 
 
 @router.get("/", response_model=List[ProductResponse])
@@ -171,7 +204,7 @@ async def list_products(
     List products. If workspace_id is provided, filter by that workspace.
     Otherwise, return products from all accessible workspaces.
     """
-    allowed_workspace_ids = allowed_workspaces(request)
+    allowed_workspace_ids = allowed_workspaces(request, db)
     
     query = db.query(Product).filter(Product.workspace_id.in_(allowed_workspace_ids))
     
@@ -185,7 +218,7 @@ async def list_products(
         query = query.filter(Product.workspace_id == workspace_id)
     
     products = query.all()
-    return [ProductResponse.model_validate(product) for product in products]
+    return [ProductResponse.from_orm(product) for product in products]
 
 
 @router.get("/{product_id}", response_model=ProductResponse)
@@ -201,7 +234,9 @@ async def get_product(
     from primedata.core.scope import ensure_product_access
     
     product = ensure_product_access(db, request, product_id)
-    return ProductResponse.model_validate(product)
+    # Refresh to ensure we get the latest data from database (in case of recent updates)
+    db.refresh(product)
+    return ProductResponse.from_orm(product)
 
 
 @router.patch("/{product_id}", response_model=ProductResponse)
@@ -215,53 +250,157 @@ async def update_product(
     """
     Update a product's name or status.
     """
-    from primedata.core.scope import ensure_product_access
+    logger.info(f"PATCH /api/v1/products/{product_id} - Received update request")
+    logger.info(f"Request body: {request_body.dict()}")
     
-    product = ensure_product_access(db, request, product_id)
-    
-    # Check if new name conflicts with existing product in same workspace
-    if request_body.name and request_body.name != product.name:
-        existing_product = db.query(Product).filter(
-            Product.workspace_id == product.workspace_id,
-            Product.name == request_body.name,
-            Product.id != product_id
-        ).first()
+    try:
+        from primedata.core.scope import ensure_product_access
         
-        if existing_product:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Product name already exists in this workspace"
+        product = ensure_product_access(db, request, product_id)
+        
+        # Check if new name conflicts with existing product in same workspace
+        if request_body.name and request_body.name != product.name:
+            existing_product = db.query(Product).filter(
+                Product.workspace_id == product.workspace_id,
+                Product.name == request_body.name,
+                Product.id != product_id
+            ).first()
+            
+            if existing_product:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Product name already exists in this workspace"
+                )
+        
+        # Update fields
+        if request_body.name is not None:
+            product.name = request_body.name
+        if request_body.status is not None:
+            product.status = request_body.status
+        if request_body.playbook_id is not None:
+            product.playbook_id = request_body.playbook_id
+        
+        # Update chunking configuration
+        if request_body.chunking_config is not None:
+            current_config = product.chunking_config or {}
+            
+            # Preserve resolved_settings if it exists (from previous pipeline runs) before updating
+            resolved_settings = current_config.get('resolved_settings')
+            
+            if request_body.chunking_config.mode is not None:
+                current_config['mode'] = request_body.chunking_config.mode
+            
+            # Update optimization_mode if provided (preserve existing if not provided, default to 'pattern')
+            if request_body.chunking_config.optimization_mode is not None:
+                current_config['optimization_mode'] = request_body.chunking_config.optimization_mode
+                logger.info(f"Updated optimization_mode to: {request_body.chunking_config.optimization_mode}")
+            elif 'optimization_mode' not in current_config:
+                # Set default if not present
+                current_config['optimization_mode'] = 'pattern'
+                logger.info(f"Set default optimization_mode to: pattern")
+            
+            # Get the new mode to determine what to update
+            new_mode = request_body.chunking_config.mode if request_body.chunking_config.mode is not None else current_config.get('mode', 'auto')
+            
+            # Update auto_settings
+            if request_body.chunking_config.auto_settings is not None:
+                current_config['auto_settings'] = request_body.chunking_config.auto_settings
+            elif new_mode == 'auto':
+                # If switching to auto mode but auto_settings not provided, ensure we have defaults
+                if 'auto_settings' not in current_config or not current_config.get('auto_settings'):
+                    current_config['auto_settings'] = {
+                        'content_type': 'general',
+                        'model_optimized': True,
+                        'confidence_threshold': 0.7
+                    }
+            
+            # Update manual_settings - ALWAYS overwrite when provided, even if mode is manual
+            if request_body.chunking_config.manual_settings is not None:
+                # Completely replace manual_settings with new values (don't merge)
+                # Create a fresh dict to ensure no reference issues
+                current_config['manual_settings'] = dict(request_body.chunking_config.manual_settings)
+                logger.info(f"🔄 REPLACING manual_settings with: {current_config['manual_settings']}")
+                logger.info(f"   Old manual_settings was: {current_config.get('manual_settings', 'None')}")
+            elif new_mode == 'manual':
+                # If switching to manual mode but manual_settings not provided, keep existing or use defaults
+                if 'manual_settings' not in current_config or not current_config.get('manual_settings'):
+                    current_config['manual_settings'] = {
+                        'chunk_size': 1000,
+                        'chunk_overlap': 200,
+                        'min_chunk_size': 100,
+                        'max_chunk_size': 2000,
+                        'chunking_strategy': 'fixed_size'
+                    }
+                    logger.info(f"Using default manual_settings for new manual mode")
+            
+            # Restore resolved_settings if it existed (for reference only, won't affect editing)
+            if resolved_settings:
+                current_config['resolved_settings'] = resolved_settings
+            
+            # CRITICAL: Assign the entire config dict to ensure SQLAlchemy detects the change
+            # Create a fresh dict to avoid any reference issues
+            product.chunking_config = dict(current_config)
+            
+            # Force SQLAlchemy to mark this as changed (required for JSON columns)
+            flag_modified(product, 'chunking_config')
+            
+            logger.info(f"📝 Product chunking_config assigned: {product.chunking_config}")
+            
+            # Log the saved configuration for verification
+            logger.info(
+                f"Updated chunking_config for product {product_id}: "
+                f"mode={current_config.get('mode')}, "
+                f"optimization_mode={current_config.get('optimization_mode')}, "
+                f"manual_settings={current_config.get('manual_settings')}, "
+                f"auto_settings={current_config.get('auto_settings')}"
             )
     
-    # Update fields
-    if request_body.name is not None:
-        product.name = request_body.name
-    if request_body.status is not None:
-        product.status = request_body.status
-    
-    # Update chunking configuration
-    if request_body.chunking_config is not None:
-        current_config = product.chunking_config or {}
+        # Update embedding configuration
+        if request_body.embedding_config is not None:
+            product.embedding_config = request_body.embedding_config
+            logger.info(f"Updated embedding_config for product {product_id}: {product.embedding_config}")
         
-        if request_body.chunking_config.mode is not None:
-            current_config['mode'] = request_body.chunking_config.mode
+        # Log playbook_id update
+        if request_body.playbook_id is not None:
+            logger.info(f"Updated playbook_id for product {product_id}: {product.playbook_id}")
         
-        if request_body.chunking_config.auto_settings is not None:
-            current_config['auto_settings'] = request_body.chunking_config.auto_settings
+        # Commit all changes
+        logger.info(f"Committing changes to database for product {product_id}")
+        db.commit()
+        logger.info(f"Commit successful, refreshing product")
+        db.refresh(product)
         
-        if request_body.chunking_config.manual_settings is not None:
-            current_config['manual_settings'] = request_body.chunking_config.manual_settings
+        # Log final saved state for verification
+        logger.info(
+            f"Product {product_id} saved successfully. "
+            f"chunking_config={product.chunking_config}, "
+            f"embedding_config={product.embedding_config}, "
+            f"playbook_id={product.playbook_id}"
+        )
         
-        product.chunking_config = current_config
-    
-    # Update embedding configuration
-    if request_body.embedding_config is not None:
-        product.embedding_config = request_body.embedding_config
-    
-    db.commit()
-    db.refresh(product)
-    
-    return ProductResponse.model_validate(product)
+        # Verify the saved values, especially manual_settings
+        if product.chunking_config and product.chunking_config.get('manual_settings'):
+            manual = product.chunking_config['manual_settings']
+            logger.info(
+                f"✅ Verified saved manual_settings: "
+                f"chunk_size={manual.get('chunk_size')}, "
+                f"chunk_overlap={manual.get('chunk_overlap')}, "
+                f"strategy={manual.get('chunking_strategy')}"
+            )
+        
+        return ProductResponse.from_orm(product)
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions (they already have proper error messages)
+        raise
+    except Exception as e:
+        # Log the full error for debugging
+        logger.error(f"Failed to update product {product_id}: {e}", exc_info=True)
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update product: {str(e)}"
+        )
 
 
 @router.delete("/{product_id}")
@@ -272,16 +411,66 @@ async def delete_product(
     current_user: dict = Depends(get_current_user)
 ):
     """
-    Delete a product.
+    Delete a product and all related data.
     """
+    from primedata.db.models import (
+        DataSource, RawFile, PipelineRun, ACL,
+        PipelineArtifact, DqViolation
+    )
+    
+    # Try to import enterprise models if available
+    try:
+        from primedata.db.models_enterprise import DataQualityRule
+        has_dq_rules = True
+    except ImportError:
+        has_dq_rules = False
+    
     # Ensure user has access to the product
     product = ensure_product_access(db, request, product_id)
     
-    # Delete the product
-    db.delete(product)
-    db.commit()
-    
-    return {"message": "Product deleted successfully"}
+    try:
+        # Delete all related records that have foreign key constraints
+        # Use synchronize_session=False to avoid loading objects into memory
+        # IMPORTANT: Delete order matters due to foreign key constraints
+        
+        # Delete raw files FIRST (they reference data_sources via data_source_id)
+        db.query(RawFile).filter(RawFile.product_id == product_id).delete(synchronize_session=False)
+        
+        # Delete data sources (after raw files, since raw_files references data_sources)
+        db.query(DataSource).filter(DataSource.product_id == product_id).delete(synchronize_session=False)
+        
+        # Delete pipeline artifacts (deleted before pipeline runs due to foreign key)
+        db.query(PipelineArtifact).filter(PipelineArtifact.product_id == product_id).delete(synchronize_session=False)
+        
+        # Delete pipeline runs
+        db.query(PipelineRun).filter(PipelineRun.product_id == product_id).delete(synchronize_session=False)
+        
+        # Delete data quality violations
+        db.query(DqViolation).filter(DqViolation.product_id == product_id).delete(synchronize_session=False)
+        
+        # Delete data quality rules (if available)
+        if has_dq_rules:
+            db.query(DataQualityRule).filter(DataQualityRule.product_id == product_id).delete(synchronize_session=False)
+        
+        # Delete document metadata
+        # Note: Metadata is now stored in Qdrant payloads, not PostgreSQL
+        # Qdrant collections are deleted separately when product is deleted
+        
+        # Delete ACLs
+        db.query(ACL).filter(ACL.product_id == product_id).delete(synchronize_session=False)
+        
+        # Now delete the product itself
+        db.delete(product)
+        db.commit()
+        
+        return {"message": "Product deleted successfully"}
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Failed to delete product {product_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete product: {str(e)}"
+        )
 
 
 @router.get("/{product_id}/trust-metrics", response_model=TrustMetricsResponse)
@@ -429,6 +618,300 @@ async def get_product_insights(
         policy=policy_result,
         optimizer=optimizer,
     )
+
+
+class ApplyRecommendationRequest(BaseModel):
+    """Request model for applying an optimizer recommendation."""
+    action: str = Field(..., description="Action to apply: 'increase_chunk_overlap', 'switch_playbook', 'enhance_normalization', 'extract_metadata'")
+    recommendation_config: Dict[str, Any] = Field(default_factory=dict, description="Configuration for the recommendation action")
+
+
+class ApplyRecommendationResponse(BaseModel):
+    """Response model for applying an optimizer recommendation."""
+    success: bool
+    message: str
+    applied_changes: Dict[str, Any]
+    requires_pipeline_rerun: bool = Field(default=True, description="Whether a pipeline rerun is required to see the changes")
+
+
+@router.post("/{product_id}/apply-recommendation", response_model=ApplyRecommendationResponse)
+async def apply_recommendation(
+    product_id: UUID,
+    request_body: ApplyRecommendationRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Apply an optimizer recommendation to improve AI readiness.
+    
+    This endpoint allows users to apply specific recommendations from the optimizer
+    service, such as increasing chunk overlap, switching playbooks, or enhancing
+    text normalization.
+    """
+    from primedata.core.scope import ensure_product_access
+    from sqlalchemy.orm.attributes import flag_modified
+    from primedata.services.optimizer import suggest_next_config
+    from primedata.services.policy_engine import evaluate_policy
+    from primedata.ingestion_pipeline.aird_stages.config import get_aird_config
+    
+    logger.info(f"POST /api/v1/products/{product_id}/apply-recommendation - Action: {request_body.action}")
+    
+    try:
+        product = ensure_product_access(db, request, product_id)
+        
+        # Get current optimizer recommendations to validate the action
+        fingerprint_data = product.readiness_fingerprint
+        fingerprint = None
+        
+        if fingerprint_data:
+            if isinstance(fingerprint_data, dict):
+                if "fingerprint" in fingerprint_data and isinstance(fingerprint_data["fingerprint"], dict):
+                    fingerprint = fingerprint_data["fingerprint"]
+                else:
+                    fingerprint = fingerprint_data
+        
+        if not fingerprint:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No fingerprint data available. Run a pipeline first to generate metrics."
+            )
+        
+        # Evaluate policy and get optimizer recommendations
+        config = get_aird_config()
+        thresholds = {
+            "min_trust_score": config.policy_min_trust_score,
+            "min_secure": config.policy_min_secure,
+            "min_metadata_presence": config.policy_min_metadata_presence,
+            "min_kb_ready": config.policy_min_kb_ready,
+        }
+        
+        policy_result = evaluate_policy(fingerprint, thresholds)
+        optimizer = suggest_next_config(
+            fingerprint=fingerprint,
+            policy=policy_result,
+            current_playbook=product.playbook_id,
+        )
+        
+        applied_changes = {}
+        requires_rerun = True
+        
+        # Apply the requested action
+        if request_body.action == "increase_chunk_overlap":
+            # Increase chunk overlap in manual settings
+            current_config = product.chunking_config or {}
+            manual_settings = current_config.get("manual_settings", {})
+            
+            # Get current overlap or default
+            current_overlap = manual_settings.get("chunk_overlap", 200)
+            chunk_size = manual_settings.get("chunk_size", 1000)
+            
+            # Calculate new overlap (increase by 20-25% or use min from config)
+            increase_percent = request_body.recommendation_config.get("increase_by_percent", 20)
+            min_overlap = request_body.recommendation_config.get("min_overlap", 200)
+            
+            new_overlap = max(
+                min_overlap,
+                int(current_overlap * (1 + increase_percent / 100))
+            )
+            
+            # Ensure overlap doesn't exceed chunk_size - 10%
+            max_overlap = int(chunk_size * 0.9)
+            new_overlap = min(new_overlap, max_overlap)
+            
+            # Ensure mode is manual to apply manual settings
+            if current_config.get("mode") != "manual":
+                current_config["mode"] = "manual"
+                # If switching from auto, preserve some auto settings
+                if "auto_settings" not in current_config or not current_config.get("auto_settings"):
+                    current_config["auto_settings"] = {
+                        "content_type": "general",
+                        "model_optimized": True,
+                        "confidence_threshold": 0.7
+                    }
+            
+            # Update manual settings
+            if "manual_settings" not in current_config:
+                current_config["manual_settings"] = {}
+            
+            current_config["manual_settings"]["chunk_overlap"] = new_overlap
+            # Ensure chunk_size is set if not already
+            if "chunk_size" not in current_config["manual_settings"]:
+                current_config["manual_settings"]["chunk_size"] = chunk_size
+            if "chunking_strategy" not in current_config["manual_settings"]:
+                current_config["manual_settings"]["chunking_strategy"] = manual_settings.get("chunking_strategy", "semantic")
+            
+            product.chunking_config = current_config
+            flag_modified(product, 'chunking_config')
+            
+            applied_changes = {
+                "chunk_overlap": {"old": current_overlap, "new": new_overlap}
+            }
+            
+            message = f"Chunk overlap increased from {current_overlap} to {new_overlap} tokens."
+            
+        elif request_body.action == "switch_playbook":
+            # Switch to recommended playbook
+            new_playbook_id = request_body.recommendation_config.get("playbook_id")
+            if not new_playbook_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="playbook_id is required for switch_playbook action"
+                )
+            
+            old_playbook_id = product.playbook_id
+            product.playbook_id = new_playbook_id
+            
+            applied_changes = {
+                "playbook_id": {"old": old_playbook_id, "new": new_playbook_id}
+            }
+            
+            message = f"Playbook switched from {old_playbook_id} to {new_playbook_id}."
+            
+        elif request_body.action == "enhance_normalization":
+            # This would require changes to the playbook or preprocessing config
+            # For now, we'll add a flag to the chunking config to indicate enhanced normalization is desired
+            current_config = product.chunking_config or {}
+            # Preserve optimization_mode if it exists
+            existing_optimization_mode = current_config.get('optimization_mode', 'pattern')
+            if "preprocessing_flags" not in current_config:
+                current_config["preprocessing_flags"] = {}
+            current_config["preprocessing_flags"]["enhanced_normalization"] = True
+            current_config["preprocessing_flags"]["error_correction"] = request_body.recommendation_config.get("error_correction", True)
+            # Preserve optimization_mode
+            current_config['optimization_mode'] = existing_optimization_mode
+            
+            product.chunking_config = current_config
+            flag_modified(product, 'chunking_config')
+            
+            applied_changes = {
+                "enhanced_normalization": True,
+                "error_correction": current_config["preprocessing_flags"]["error_correction"]
+            }
+            
+            message = "Enhanced text normalization and error correction enabled. This will be applied on the next pipeline run."
+            
+        elif request_body.action == "extract_metadata":
+            # Add metadata extraction flags
+            current_config = product.chunking_config or {}
+            # Preserve optimization_mode if it exists
+            existing_optimization_mode = current_config.get('optimization_mode', 'pattern')
+            if "preprocessing_flags" not in current_config:
+                current_config["preprocessing_flags"] = {}
+            current_config["preprocessing_flags"]["extract_metadata"] = True
+            current_config["preprocessing_flags"]["force_metadata_extraction"] = request_body.recommendation_config.get("force_extraction", True)
+            current_config["preprocessing_flags"]["additional_metadata_fields"] = request_body.recommendation_config.get("additional_fields", True)
+            # Preserve optimization_mode
+            current_config['optimization_mode'] = existing_optimization_mode
+            
+            product.chunking_config = current_config
+            flag_modified(product, 'chunking_config')
+            
+            applied_changes = {
+                "extract_metadata": True,
+                "force_metadata_extraction": current_config["preprocessing_flags"]["force_metadata_extraction"],
+                "additional_metadata_fields": current_config["preprocessing_flags"]["additional_metadata_fields"]
+            }
+            
+            message = "Enhanced metadata extraction enabled. This will be applied on the next pipeline run."
+            requires_rerun = True
+        
+        elif request_body.action == "error_correction":
+            # Enable error correction specifically
+            current_config = product.chunking_config or {}
+            # Preserve optimization_mode if it exists
+            existing_optimization_mode = current_config.get('optimization_mode', 'pattern')
+            if "preprocessing_flags" not in current_config:
+                current_config["preprocessing_flags"] = {}
+            current_config["preprocessing_flags"]["error_correction"] = True
+            # Preserve optimization_mode
+            current_config['optimization_mode'] = existing_optimization_mode
+            
+            product.chunking_config = current_config
+            flag_modified(product, 'chunking_config')
+            
+            applied_changes = {
+                "error_correction": True
+            }
+            
+            message = "Error correction enabled. This will fix OCR mistakes and typos on the next pipeline run."
+            requires_rerun = True
+        
+        elif request_body.action == "apply_all_quality_improvements":
+            # Apply all quality improvements at once for maximum impact
+            current_config = product.chunking_config or {}
+            # Preserve optimization_mode if it exists
+            existing_optimization_mode = current_config.get('optimization_mode', 'pattern')
+            if "preprocessing_flags" not in current_config:
+                current_config["preprocessing_flags"] = {}
+            
+            # Enable all quality improvements
+            current_config["preprocessing_flags"]["enhanced_normalization"] = True
+            current_config["preprocessing_flags"]["error_correction"] = True
+            current_config["preprocessing_flags"]["extract_metadata"] = True
+            # Preserve optimization_mode
+            current_config['optimization_mode'] = existing_optimization_mode
+            
+            # Also increase chunk overlap if recommended
+            if request_body.recommendation_config.get("increase_overlap", False):
+                if "manual_settings" not in current_config:
+                    current_config["manual_settings"] = {}
+                current_overlap = current_config["manual_settings"].get("chunk_overlap", 200)
+                new_overlap = min(int(current_overlap * 1.25), 400)  # Increase by 25%, max 400
+                current_config["manual_settings"]["chunk_overlap"] = new_overlap
+                applied_changes = {
+                    "enhanced_normalization": True,
+                    "error_correction": True,
+                    "extract_metadata": True,
+                    "chunk_overlap": {"old": current_overlap, "new": new_overlap}
+                }
+            else:
+                applied_changes = {
+                    "enhanced_normalization": True,
+                    "error_correction": True,
+                    "extract_metadata": True
+                }
+            
+            product.chunking_config = current_config
+            flag_modified(product, 'chunking_config')
+            
+            message = "All quality improvements enabled (enhanced normalization, error correction, metadata extraction). This will maximize AI readiness scores on the next pipeline run."
+            requires_rerun = True
+        
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unknown action: {request_body.action}. Supported actions: increase_chunk_overlap, switch_playbook, enhance_normalization, error_correction, extract_metadata, apply_all_quality_improvements"
+            )
+        
+        # Commit changes
+        db.commit()
+        db.refresh(product)
+        
+        # Log optimization_mode being used
+        saved_config = product.chunking_config or {}
+        optimization_mode = saved_config.get('optimization_mode', 'pattern')
+        logger.info(
+            f"Successfully applied recommendation {request_body.action} for product {product_id}: {applied_changes}. "
+            f"Optimization mode: {optimization_mode} (this will be used during next pipeline run)"
+        )
+        
+        return ApplyRecommendationResponse(
+            success=True,
+            message=message,
+            applied_changes=applied_changes,
+            requires_pipeline_rerun=requires_rerun
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to apply recommendation for product {product_id}: {e}", exc_info=True)
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to apply recommendation: {str(e)}"
+        )
 
 
 @router.get("/{product_id}/validation-summary")
@@ -589,7 +1072,188 @@ class ChunkMetadataResponse(BaseModel):
     created_at: datetime
 
     class Config:
-        from_attributes = True
+        orm_mode = True  # Pydantic v1 uses orm_mode instead of from_attributes
+
+
+@router.get("/{product_id}/embedding-diagnostics")
+async def get_embedding_diagnostics(
+    product_id: UUID,
+    request: Request = None,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Diagnostic endpoint to check embedding model configuration and status.
+    
+    Returns information about:
+    - Embedding model configured for the product
+    - API key status (configured/not configured)
+    - Model availability and status
+    - Whether hash-based fallback is being used
+    """
+    # Ensure user has access to the product
+    ensure_product_access(db, request, product_id)
+    
+    product = db.query(Product).filter(Product.id == product_id).first()
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Product not found"
+        )
+    
+    # Get embedding configuration
+    embedding_config = product.embedding_config or {}
+    model_name = embedding_config.get("embedder_name", "minilm")
+    dimension = embedding_config.get("embedding_dimension", 384)
+    
+    # Check workspace settings for API key
+    workspace = db.query(Workspace).filter(Workspace.id == product.workspace_id).first()
+    workspace_has_key = False
+    if workspace and workspace.settings:
+        workspace_has_key = bool(workspace.settings.get("openai_api_key"))
+    
+    # Check environment variable
+    from primedata.core.settings import get_settings
+    settings = get_settings()
+    env_has_key = bool(settings.OPENAI_API_KEY)
+    
+    # Try to initialize embedding generator to check status
+    from primedata.indexing.embeddings import EmbeddingGenerator
+    try:
+        embedder = EmbeddingGenerator(
+            model_name=model_name,
+            dimension=dimension,
+            workspace_id=product.workspace_id,
+            db=db
+        )
+        model_info = embedder.get_model_info()
+        actual_dimension = embedder.get_dimension()
+        
+        is_loaded = model_info.get('is_loaded', False)
+        is_openai = model_info.get('is_openai', False)
+        fallback_mode = model_info.get('fallback_mode', False)
+        model_type = model_info.get('model_type', 'unknown')
+        model_loaded = model_info.get('model_loaded', False)
+        
+        # Test embedding generation to verify actual status
+        test_text = "This is a test sentence for embedding generation."
+        try:
+            test_embedding = embedder.embed(test_text)
+            embedding_works = True
+            embedding_error = None
+            
+            # Verify it's actually OpenAI if configured as such
+            # Check if openai_client is set (most reliable indicator)
+            if model_name.startswith('openai'):
+                if hasattr(embedder, 'openai_client') and embedder.openai_client is not None:
+                    is_openai = True
+                    fallback_mode = False
+                    model_type = 'openai'
+                elif len(test_embedding) == dimension and dimension >= 1536:
+                    # High dimension suggests OpenAI (hash-based would be different)
+                    # But verify by checking if it's consistent (OpenAI embeddings are deterministic)
+                    test_embedding2 = embedder.embed(test_text)
+                    if np.allclose(test_embedding, test_embedding2, atol=1e-6):
+                        # Consistent embeddings suggest OpenAI
+                        is_openai = True
+                        fallback_mode = False
+                        model_type = 'openai'
+        except Exception as e:
+            embedding_works = False
+            embedding_error = str(e)
+    except Exception as e:
+        is_loaded = False
+        is_openai = False
+        fallback_mode = True
+        model_type = 'unknown'
+        actual_dimension = dimension
+        embedding_works = False
+        embedding_error = str(e)
+    
+    # Get model configuration details
+    from primedata.core.embedding_config import get_embedding_model_config
+    model_config = get_embedding_model_config(model_name)
+    model_config_details = None
+    if model_config:
+        model_config_details = {
+            "name": model_config.name,
+            "model_type": model_config.model_type.value,
+            "dimension": model_config.dimension,
+            "requires_api_key": model_config.requires_api_key,
+            "is_available": model_config.is_available,
+            "model_path": model_config.model_path if hasattr(model_config, 'model_path') else None,
+        }
+    
+    return {
+        "product_id": str(product_id),
+        "product_name": product.name,
+        "embedding_config": {
+            "model_name": model_name,
+            "configured_dimension": dimension,
+            "actual_dimension": actual_dimension,
+        },
+        "api_key_status": {
+            "workspace_configured": workspace_has_key,
+            "environment_configured": env_has_key,
+            "has_api_key": workspace_has_key or env_has_key,
+            "note": "OpenAI models require API key. Check workspace settings or OPENAI_API_KEY environment variable."
+        },
+        "model_status": {
+            "is_loaded": is_loaded,
+            "is_openai": is_openai,
+            "model_type": model_type,
+            "using_fallback": fallback_mode,
+            "embedding_works": embedding_works,
+            "embedding_error": embedding_error,
+        },
+        "model_config": model_config_details,
+        "recommendations": _get_embedding_recommendations(
+            model_name, fallback_mode, workspace_has_key, env_has_key, embedding_works
+        )
+    }
+
+
+def _get_embedding_recommendations(
+    model_name: str, 
+    fallback_mode: bool, 
+    workspace_has_key: bool, 
+    env_has_key: bool,
+    embedding_works: bool
+) -> List[str]:
+    """Generate recommendations based on diagnostic results."""
+    recommendations = []
+    
+    if fallback_mode:
+        recommendations.append(
+            "⚠️ CRITICAL: Using hash-based fallback embeddings. Semantic search will NOT work correctly. "
+            "Results will be random and irrelevant."
+        )
+    
+    if "openai" in model_name.lower():
+        if not workspace_has_key and not env_has_key:
+            recommendations.append(
+                "❌ OpenAI API key not configured. Configure it in workspace settings or set OPENAI_API_KEY environment variable."
+            )
+        elif not embedding_works:
+            recommendations.append(
+                "❌ OpenAI API key is configured but embedding generation failed. Check API key validity."
+            )
+        else:
+            recommendations.append(
+                "✅ OpenAI API key is configured and working correctly."
+            )
+    
+    if not embedding_works and not fallback_mode:
+        recommendations.append(
+            "❌ Embedding generation failed. Check model installation and configuration."
+        )
+    
+    if not fallback_mode and embedding_works:
+        recommendations.append(
+            "✅ Embedding model is working correctly. Semantic search should function properly."
+        )
+    
+    return recommendations
 
 
 @router.get("/{product_id}/chunk-metadata", response_model=List[ChunkMetadataResponse])
@@ -626,7 +1290,23 @@ async def list_chunk_metadata(
         offset=offset,
     )
     
-    return [ChunkMetadataResponse.model_validate(m) for m in metadata]
+    # Metadata is now returned as dicts from Qdrant, not ORM objects
+    # Map dict keys to ChunkMetadataResponse fields
+    result = []
+    for m in metadata:
+        # Map Qdrant payload fields to response model
+        result.append(ChunkMetadataResponse(
+            id=uuid_uuid4(),  # Generate new UUID for response (not stored in Qdrant)
+            chunk_id=m.get("chunk_id", ""),
+            score=m.get("score"),
+            source_file=m.get("source_file"),
+            page_number=m.get("page_number"),
+            section=m.get("section"),
+            field_name=m.get("field_name"),
+            extra_tags=m.get("extra_tags"),
+            created_at=datetime.fromisoformat(m.get("created_at", datetime.utcnow().isoformat())) if isinstance(m.get("created_at"), str) else m.get("created_at", datetime.utcnow()),
+        ))
+    return result
 
 
 class CostEstimateRequest(BaseModel):
@@ -1052,11 +1732,18 @@ async def promote_version(
     try:
         from primedata.indexing.qdrant_client import qdrant_client
         
-        # Set the production alias in Qdrant
+        if not qdrant_client.is_connected():
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Qdrant client not connected"
+            )
+        
+        # Set the production alias in Qdrant (using product name for better readability)
         success = qdrant_client.set_prod_alias(
             workspace_id=str(product.workspace_id),
             product_id=str(product_id),
-            version=version
+            version=version,
+            product_name=product.name
         )
         
         if not success:
@@ -1070,11 +1757,16 @@ async def promote_version(
         db.commit()
         db.refresh(product)
         
+        # Get the actual collection name (which may use product name)
+        sanitized_name = qdrant_client._sanitize_collection_name(product.name)
+        alias_name = f"prod_ws_{product.workspace_id}__{sanitized_name}"
+        collection_name = f"ws_{product.workspace_id}__{sanitized_name}__v_{version}"
+        
         return {
             "message": f"Version {version} promoted to production successfully",
             "promoted_version": version,
-            "alias_name": f"prod_ws_{product.workspace_id}__prod_{product_id}",
-            "collection_name": f"ws_{product.workspace_id}__prod_{product_id}__v_{version}"
+            "alias_name": alias_name,
+            "collection_name": collection_name
         }
         
     except HTTPException:

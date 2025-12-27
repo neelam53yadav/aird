@@ -5,14 +5,15 @@ import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Save, X, Package, Settings, FileText } from 'lucide-react'
+import { ArrowLeft, Save, X, Package, Settings, FileText, Sparkles, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ResultModal } from '@/components/ui/modal'
 import AppLayout from '@/components/layout/AppLayout'
 import { apiClient } from '@/lib/api-client'
-import { getEmbeddingModelOptions, getEmbeddingDimension, requiresApiKey } from '@/lib/embedding-models'
+import { getEmbeddingModelOptions, getEmbeddingModelOptionsSync, getEmbeddingDimension, getEmbeddingDimensionSync, requiresApiKey, preloadEmbeddingModels } from '@/lib/embedding-models'
+import { PlaybookSelector } from '@/components/PlaybookSelector'
 
 interface Product {
   id: string
@@ -35,25 +36,45 @@ export default function EditProductPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    name: string
+    status: 'draft' | 'running' | 'ready' | 'failed'
+    playbook_id: string | undefined
+    chunking_mode: 'auto' | 'manual'
+    chunk_size: number | string
+    chunk_overlap: number | string
+    min_chunk_size: number | string
+    max_chunk_size: number | string
+    chunking_strategy: 'fixed_size' | 'semantic' | 'recursive'
+    content_type: string
+    model_optimized: boolean
+    confidence_threshold: number
+    embedder_name: string
+    embedding_dimension: number
+    optimization_mode: 'pattern' | 'hybrid' | 'llm'
+  }>({
     name: '',
-    status: 'draft' as 'draft' | 'running' | 'ready' | 'failed',
+    status: 'draft',
+    playbook_id: undefined,
     // Chunking configuration
-    chunking_mode: 'auto' as 'auto' | 'manual',
+    chunking_mode: 'auto',
     chunk_size: 1000,
     chunk_overlap: 200,
     min_chunk_size: 100,
     max_chunk_size: 2000,
-    chunking_strategy: 'fixed_size' as 'fixed_size' | 'semantic' | 'recursive',
+    chunking_strategy: 'fixed_size',
     content_type: 'general',
     model_optimized: true,
     confidence_threshold: 0.7,
     // Embedding configuration
     embedder_name: 'minilm',
-    embedding_dimension: 384
+    embedding_dimension: 384,
+    // Optimization mode
+    optimization_mode: 'pattern'
   })
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [autoConfiguring, setAutoConfiguring] = useState(false)
+  const [embeddingModelOptions, setEmbeddingModelOptions] = useState<Array<{ value: string; label: string }>>([])
 
   // Modal states
   const [showResultModal, setShowResultModal] = useState(false)
@@ -74,6 +95,25 @@ export default function EditProductPage() {
     }
   }, [status, router, productId])
 
+  // Load embedding models on mount
+  useEffect(() => {
+    const loadEmbeddingModels = async () => {
+      try {
+        // Preload models to cache them
+        await preloadEmbeddingModels()
+        // Get options (will use cache)
+        const options = await getEmbeddingModelOptions(true)
+        setEmbeddingModelOptions(options)
+      } catch (error) {
+        console.error('Failed to load embedding models:', error)
+        // Fallback to sync version with fallback models
+        setEmbeddingModelOptions(getEmbeddingModelOptionsSync())
+      }
+    }
+    
+    loadEmbeddingModels()
+  }, [])
+
   const loadProduct = async () => {
     try {
       setLoading(true)
@@ -85,39 +125,163 @@ export default function EditProductPage() {
         const productData = response.data as Product
         setProduct(productData)
 
-        // Derive chunking configuration (prefer resolved_settings, then manual/auto settings, then defaults)
+        // Derive chunking configuration
+        // Priority: Use saved mode and corresponding settings (auto_settings or manual_settings)
+        // resolved_settings is only for display/reference, not for editing
         const cfg = (productData as any).chunking_config || {}
-        const resolved = cfg.resolved_settings || cfg.manual_settings || cfg.auto_settings || cfg
         const chunkingMode = cfg.mode || 'auto'
 
-        const derivedChunkSize = resolved.chunk_size || resolved.max_tokens || 1000
+        // Debug logging - show full config structure
+        console.log('=== Loading Product Configuration ===')
+        console.log('Full chunking_config from API:', JSON.stringify(cfg, null, 2))
+        console.log('Mode:', chunkingMode)
+        console.log('auto_settings:', cfg.auto_settings)
+        console.log('manual_settings:', cfg.manual_settings)
+        console.log('resolved_settings:', cfg.resolved_settings)
+        
+        // Get settings based on mode - prefer saved settings over resolved_settings
+        let settings: any = {}
+        if (chunkingMode === 'auto') {
+          // In auto mode, use auto_settings for content_type and get optimal config based on content_type
+          const autoSettings = cfg.auto_settings || {}
+          const contentType = autoSettings.content_type || 'general'
+          
+          // Get optimal configuration based on content type (same as getOptimalChunkingConfig)
+          const optimalConfigs: Record<string, {
+            chunk_size: number
+            chunk_overlap: number
+            min_chunk_size: number
+            max_chunk_size: number
+            chunking_strategy: string
+          }> = {
+            'legal': {
+              chunk_size: 2000,
+              chunk_overlap: 400,
+              min_chunk_size: 200,
+              max_chunk_size: 3000,
+              chunking_strategy: 'semantic'
+            },
+            'code': {
+              chunk_size: 1500,
+              chunk_overlap: 300,
+              min_chunk_size: 100,
+              max_chunk_size: 2500,
+              chunking_strategy: 'recursive'
+            },
+            'documentation': {
+              chunk_size: 1200,
+              chunk_overlap: 200,
+              min_chunk_size: 100,
+              max_chunk_size: 2000,
+              chunking_strategy: 'semantic'
+            },
+            'conversation': {
+              chunk_size: 800,
+              chunk_overlap: 100,
+              min_chunk_size: 50,
+              max_chunk_size: 1500,
+              chunking_strategy: 'semantic'
+            },
+            'academic': {
+              chunk_size: 1800,
+              chunk_overlap: 350,
+              min_chunk_size: 150,
+              max_chunk_size: 2500,
+              chunking_strategy: 'semantic'
+            },
+            'technical': {
+              chunk_size: 1400,
+              chunk_overlap: 250,
+              min_chunk_size: 100,
+              max_chunk_size: 2200,
+              chunking_strategy: 'semantic'
+            },
+            'general': {
+              chunk_size: 1000,
+              chunk_overlap: 200,
+              min_chunk_size: 100,
+              max_chunk_size: 2000,
+              chunking_strategy: 'fixed_size'
+            }
+          }
+          
+          const optimal = optimalConfigs[contentType] || optimalConfigs['general']
+          
+          // In auto mode, use optimal config based on content_type
+          // Only fallback to manual_settings or resolved_settings if optimal is not available
+          settings = {
+            ...autoSettings,
+            chunk_size: optimal.chunk_size,
+            chunk_overlap: optimal.chunk_overlap,
+            min_chunk_size: optimal.min_chunk_size,
+            max_chunk_size: optimal.max_chunk_size,
+            chunking_strategy: optimal.chunking_strategy,
+          }
+          
+          console.log('Auto mode: Using optimal config for content_type:', contentType, settings)
+        } else {
+          // In manual mode, ALWAYS use manual_settings if it exists
+          // Only fallback to resolved_settings if manual_settings is completely missing
+          const manualSettings = cfg.manual_settings
+          if (manualSettings && typeof manualSettings === 'object' && Object.keys(manualSettings).length > 0) {
+            // manual_settings exists and has values - use it directly (this is the source of truth for manual mode)
+            settings = manualSettings
+            console.log('Using manual_settings for manual mode:', settings)
+          } else {
+            // manual_settings is missing or empty, fallback to resolved_settings or defaults
+            console.warn('manual_settings is empty, falling back to resolved_settings')
+            settings = cfg.resolved_settings || {}
+          }
+        }
+        
+        // Final fallback to defaults if settings are still empty
+        if (!settings.chunk_size && !cfg.resolved_settings) {
+          settings = {
+            chunk_size: 1000,
+            chunk_overlap: 200,
+            min_chunk_size: 100,
+            max_chunk_size: 2000,
+            chunking_strategy: 'fixed_size'
+          }
+        }
+        
+        // Use nullish coalescing (??) instead of || to avoid falling back on falsy values like 0
+        const derivedChunkSize = settings.chunk_size ?? settings.max_tokens ?? 1000
         const derivedChunkOverlap =
-          resolved.chunk_overlap ??
-          (resolved.overlap_sentences ? resolved.overlap_sentences * 20 : 200)
-        const derivedMinChunk = resolved.min_chunk_size || 100
-        const derivedMaxChunk = resolved.max_chunk_size || 2000
-        const derivedStrategy = resolved.chunking_strategy || resolved.strategy || 'fixed_size'
-        const derivedContentType = resolved.content_type || 'general'
-        const derivedModelOptimized = resolved.model_optimized ?? true
-        const derivedConfidence = resolved.confidence || resolved.analysis_confidence || 0.7
-        const derivedEmbedder = resolved.embedder_name || 'minilm'
-        const derivedDim = resolved.embedding_dimension || 384
+          settings.chunk_overlap ??
+          (settings.overlap_sentences ? settings.overlap_sentences * 20 : 200)
+        const derivedMinChunk = settings.min_chunk_size ?? 100
+        const derivedMaxChunk = settings.max_chunk_size ?? 2000
+        const derivedStrategy = settings.chunking_strategy ?? settings.strategy ?? 'fixed_size'
+        const derivedContentType = settings.content_type || cfg.auto_settings?.content_type || 'general'
+        const derivedModelOptimized = settings.model_optimized ?? cfg.auto_settings?.model_optimized ?? true
+        const derivedConfidence = settings.confidence || settings.analysis_confidence || cfg.auto_settings?.confidence_threshold || 0.7
+        
+        // Get embedding configuration from embedding_config field, not chunking_config
+        const embeddingConfig = (productData as any).embedding_config || {}
+        const derivedEmbedder = embeddingConfig.embedder_name || 'minilm'
+        const derivedDim = embeddingConfig.embedding_dimension || 384
+        
+        // Get optimization_mode from chunking_config (defaults to 'pattern')
+        const optimizationMode = cfg.optimization_mode || 'pattern'
 
         setFormData({
           name: productData.name,
           status: productData.status,
+          playbook_id: (productData as any).playbook_id,
           // Load chunking configuration from product (if available)
           chunking_mode: chunkingMode,
           chunk_size: derivedChunkSize,
           chunk_overlap: derivedChunkOverlap,
           min_chunk_size: derivedMinChunk,
           max_chunk_size: derivedMaxChunk,
-          chunking_strategy: derivedStrategy,
+          chunking_strategy: derivedStrategy as 'fixed_size' | 'semantic' | 'recursive',
           content_type: derivedContentType,
           model_optimized: derivedModelOptimized,
           confidence_threshold: derivedConfidence,
           embedder_name: derivedEmbedder,
-          embedding_dimension: derivedDim
+          embedding_dimension: derivedDim,
+          optimization_mode: optimizationMode as 'pattern' | 'hybrid' | 'llm'
         })
       }
     } catch (err) {
@@ -127,7 +291,104 @@ export default function EditProductPage() {
     }
   }
 
-  const handleInputChange = (field: string, value: string | number) => {
+  // Content type to optimal chunking configuration mapping (matches backend ContentAnalyzer)
+  const getOptimalChunkingConfig = (contentType: string) => {
+    const configs: Record<string, {
+      chunk_size: number
+      chunk_overlap: number
+      min_chunk_size: number
+      max_chunk_size: number
+      chunking_strategy: string
+    }> = {
+      'legal': {
+        chunk_size: 2000,
+        chunk_overlap: 400,
+        min_chunk_size: 200,
+        max_chunk_size: 3000,
+        chunking_strategy: 'semantic'
+      },
+      'code': {
+        chunk_size: 1500,
+        chunk_overlap: 300,
+        min_chunk_size: 100,
+        max_chunk_size: 2500,
+        chunking_strategy: 'recursive'
+      },
+      'documentation': {
+        chunk_size: 1200,
+        chunk_overlap: 200,
+        min_chunk_size: 100,
+        max_chunk_size: 2000,
+        chunking_strategy: 'semantic' // Backend uses paragraph_boundary, using semantic as closest match
+      },
+      'conversation': {
+        chunk_size: 800,
+        chunk_overlap: 100,
+        min_chunk_size: 50,
+        max_chunk_size: 1500,
+        chunking_strategy: 'semantic' // Backend uses sentence_boundary, using semantic as closest match
+      },
+      'academic': {
+        chunk_size: 1800,
+        chunk_overlap: 350,
+        min_chunk_size: 150,
+        max_chunk_size: 2500,
+        chunking_strategy: 'semantic'
+      },
+      'technical': {
+        chunk_size: 1400,
+        chunk_overlap: 250,
+        min_chunk_size: 100,
+        max_chunk_size: 2200,
+        chunking_strategy: 'semantic'
+      },
+      'general': {
+        chunk_size: 1000,
+        chunk_overlap: 200,
+        min_chunk_size: 100,
+        max_chunk_size: 2000,
+        chunking_strategy: 'fixed_size'
+      }
+    }
+    return configs[contentType] || configs['general']
+  }
+
+  // Handle number input changes - allow empty string during typing, parse on blur
+  const handleNumberInputChange = (field: string, value: string) => {
+    // Remove any non-numeric characters except empty string
+    const cleaned = value.replace(/[^0-9]/g, '')
+    
+    // Allow empty string during typing
+    if (cleaned === '') {
+      setFormData(prev => ({ ...prev, [field]: '' }))
+      return
+    }
+    
+    // Parse and set the number
+    const numValue = parseInt(cleaned, 10)
+    if (!isNaN(numValue) && numValue >= 0) {
+      setFormData(prev => ({ ...prev, [field]: numValue }))
+    }
+  }
+
+  // Handle number input blur - ensure valid number is set
+  const handleNumberInputBlur = (field: string, currentValue: string | number, defaultValue: number) => {
+    let numValue: number
+    if (typeof currentValue === 'string') {
+      if (currentValue === '' || currentValue.trim() === '') {
+        numValue = defaultValue
+      } else {
+        const parsed = parseInt(currentValue.replace(/[^0-9]/g, ''), 10)
+        numValue = isNaN(parsed) ? defaultValue : parsed
+      }
+    } else {
+      numValue = isNaN(currentValue) || currentValue < 0 ? defaultValue : currentValue
+    }
+    
+    setFormData(prev => ({ ...prev, [field]: numValue }))
+  }
+
+  const handleInputChange = (field: string, value: string | number | undefined) => {
     setFormData(prev => {
       const newData = {
         ...prev,
@@ -136,10 +397,30 @@ export default function EditProductPage() {
       
       // Auto-update embedding dimension based on model selection
       if (field === 'embedder_name') {
-        const dimension = getEmbeddingDimension(value)
-        if (dimension) {
+        // Use sync version for immediate update (uses cache or fallback)
+        const dimension = getEmbeddingDimensionSync(value as string)
+        if (dimension !== undefined) {
           newData.embedding_dimension = dimension
+        } else {
+          // If not found in cache/fallback, try async fetch
+          getEmbeddingDimension(value as string).then(dim => {
+            if (dim !== undefined) {
+              setFormData(prev => ({ ...prev, embedding_dimension: dim }))
+            }
+          }).catch(err => {
+            console.error('Failed to fetch embedding dimension:', err)
+          })
         }
+      }
+      
+      // Auto-update chunking parameters when content type changes (only in auto mode)
+      if (field === 'content_type' && prev.chunking_mode === 'auto') {
+        const optimalConfig = getOptimalChunkingConfig(value as string)
+        newData.chunk_size = optimalConfig.chunk_size
+        newData.chunk_overlap = optimalConfig.chunk_overlap
+        newData.min_chunk_size = optimalConfig.min_chunk_size
+        newData.max_chunk_size = optimalConfig.max_chunk_size
+        newData.chunking_strategy = optimalConfig.chunking_strategy as 'fixed_size' | 'semantic' | 'recursive'
       }
       
       return newData
@@ -163,38 +444,50 @@ export default function EditProductPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
+    console.log('🔄 handleSubmit called - Starting save process')
+    
     // Prevent multiple submissions
-    if (saving) return
+    if (saving) {
+      console.warn('⚠️ Save already in progress, ignoring duplicate submit')
+      return
+    }
     
     setSaving(true)
     setError(null)
     setFieldErrors({})
     
     // Validation
+    console.log('📋 Current formData:', formData)
     const newFieldErrors: Record<string, string> = {}
     
     if (!formData.name.trim()) {
       newFieldErrors.name = 'Product name is required'
     }
     
-    // Validate chunking configuration
-    if (formData.chunk_size < 50 || formData.chunk_size > 5000) {
+    // Validate chunking configuration (ensure values are numbers)
+    const chunkSize = typeof formData.chunk_size === 'number' ? formData.chunk_size : parseInt(String(formData.chunk_size || 0), 10)
+    const chunkOverlap = typeof formData.chunk_overlap === 'number' ? formData.chunk_overlap : parseInt(String(formData.chunk_overlap || 0), 10)
+    const minChunkSize = typeof formData.min_chunk_size === 'number' ? formData.min_chunk_size : parseInt(String(formData.min_chunk_size || 0), 10)
+    const maxChunkSize = typeof formData.max_chunk_size === 'number' ? formData.max_chunk_size : parseInt(String(formData.max_chunk_size || 0), 10)
+    
+    if (isNaN(chunkSize) || chunkSize < 50 || chunkSize > 5000) {
       newFieldErrors.chunk_size = 'Chunk size must be between 50 and 5000 characters'
     }
     
-    if (formData.chunk_overlap < 0 || formData.chunk_overlap >= formData.chunk_size) {
-      newFieldErrors.chunk_overlap = 'Chunk overlap must be between 0 and chunk size'
+    if (isNaN(chunkOverlap) || chunkOverlap < 0 || chunkOverlap >= chunkSize) {
+      newFieldErrors.chunk_overlap = `Chunk overlap must be between 0 and ${chunkSize - 1} (less than chunk size)`
     }
     
-    if (formData.min_chunk_size < 10 || formData.min_chunk_size > formData.chunk_size) {
+    if (isNaN(minChunkSize) || minChunkSize < 10 || minChunkSize > chunkSize) {
       newFieldErrors.min_chunk_size = 'Min chunk size must be between 10 and chunk size'
     }
     
-    if (formData.max_chunk_size < formData.chunk_size || formData.max_chunk_size > 10000) {
+    if (isNaN(maxChunkSize) || maxChunkSize < chunkSize || maxChunkSize > 10000) {
       newFieldErrors.max_chunk_size = 'Max chunk size must be between chunk size and 10000'
     }
     
     if (Object.keys(newFieldErrors).length > 0) {
+      console.error('❌ Validation failed:', newFieldErrors)
       setFieldErrors(newFieldErrors)
       setSaving(false)
       
@@ -209,48 +502,154 @@ export default function EditProductPage() {
       return
     }
 
+    console.log('✅ Validation passed, proceeding to save...')
+
     try {
-      const response = await apiClient.updateProduct(productId, {
-        name: formData.name,
-        status: formData.status,
-        // Include hybrid chunking configuration
-        chunking_config: {
+      // Build chunking config based on mode
+      const chunkingConfig: any = {
           mode: formData.chunking_mode,
-          auto_settings: {
+        optimization_mode: formData.optimization_mode  // Add optimization mode
+      }
+      
+      if (formData.chunking_mode === 'auto') {
+        chunkingConfig.auto_settings = {
             content_type: formData.content_type,
             model_optimized: formData.model_optimized,
             confidence_threshold: formData.confidence_threshold
-          },
-          manual_settings: {
-            chunk_size: formData.chunk_size,
-            chunk_overlap: formData.chunk_overlap,
-            min_chunk_size: formData.min_chunk_size,
-            max_chunk_size: formData.max_chunk_size,
+        }
+        // Don't send manual_settings when in auto mode
+      } else {
+        chunkingConfig.manual_settings = {
+          chunk_size: typeof formData.chunk_size === 'number' ? formData.chunk_size : parseInt(String(formData.chunk_size || 0), 10),
+          chunk_overlap: typeof formData.chunk_overlap === 'number' ? formData.chunk_overlap : parseInt(String(formData.chunk_overlap || 0), 10),
+          min_chunk_size: typeof formData.min_chunk_size === 'number' ? formData.min_chunk_size : parseInt(String(formData.min_chunk_size || 0), 10),
+          max_chunk_size: typeof formData.max_chunk_size === 'number' ? formData.max_chunk_size : parseInt(String(formData.max_chunk_size || 0), 10),
             chunking_strategy: formData.chunking_strategy
           }
-        },
+        // Don't send auto_settings when in manual mode
+      }
+      
+      console.log('📤 Preparing to send save request...')
+      console.log('Saving chunking config:', chunkingConfig)
+      console.log('Full update payload:', {
+        name: formData.name,
+        status: formData.status,
+        playbook_id: formData.playbook_id,
+        chunking_config: chunkingConfig,
+        embedding_config: {
+          embedder_name: formData.embedder_name,
+          embedding_dimension: formData.embedding_dimension
+        }
+      })
+      
+      console.log('🚀 Calling apiClient.updateProduct...')
+      const response = await apiClient.updateProduct(productId, {
+        name: formData.name,
+        status: formData.status,
+        playbook_id: formData.playbook_id,
+        chunking_config: chunkingConfig,
         embedding_config: {
           embedder_name: formData.embedder_name,
           embedding_dimension: formData.embedding_dimension
         }
       })
 
+      console.log('Update response:', response)
+
       if (response.error) {
+        console.error('❌ Update failed with error:', response.error)
+        console.error('Error details:', response.errorData)
         setResultModalData({
           type: 'error',
           title: 'Update Failed',
-          message: response.error
+          message: typeof response.error === 'string' ? response.error : JSON.stringify(response.error, null, 2)
         })
+        setSaving(false)
+        setShowResultModal(true)
+        return
       } else {
+        // Verify the saved configuration matches what we sent
+        const savedConfig = response.data?.chunking_config
+        const savedManual = savedConfig?.manual_settings
+        
+        if (savedManual && formData.chunking_mode === 'manual') {
+          console.log('✅ Configuration saved successfully!')
+          console.log('Sent values:', {
+            chunk_size: chunkSize,
+            chunk_overlap: chunkOverlap,
+            min_chunk_size: minChunkSize,
+            max_chunk_size: maxChunkSize,
+            chunking_strategy: formData.chunking_strategy
+          })
+          console.log('Saved values:', {
+            chunk_size: savedManual.chunk_size,
+            chunk_overlap: savedManual.chunk_overlap,
+            min_chunk_size: savedManual.min_chunk_size,
+            max_chunk_size: savedManual.max_chunk_size,
+            chunking_strategy: savedManual.chunking_strategy
+          })
+          
+          // Check for mismatches
+          const mismatches: string[] = []
+          if (chunkSize !== savedManual.chunk_size) mismatches.push(`chunk_size: ${chunkSize} → ${savedManual.chunk_size}`)
+          if (chunkOverlap !== savedManual.chunk_overlap) mismatches.push(`chunk_overlap: ${chunkOverlap} → ${savedManual.chunk_overlap}`)
+          if (minChunkSize !== savedManual.min_chunk_size) mismatches.push(`min_chunk_size: ${minChunkSize} → ${savedManual.min_chunk_size}`)
+          if (maxChunkSize !== savedManual.max_chunk_size) mismatches.push(`max_chunk_size: ${maxChunkSize} → ${savedManual.max_chunk_size}`)
+          if (formData.chunking_strategy !== savedManual.chunking_strategy) mismatches.push(`strategy: ${formData.chunking_strategy} → ${savedManual.chunking_strategy}`)
+          
+          if (mismatches.length > 0) {
+            console.warn('⚠️ Values changed during save:', mismatches)
+          } else {
+            console.log('✅ All values saved correctly!')
+          }
+        }
+        
+        // Use the response data directly to update the form immediately
+        if (response.data) {
+          const updatedProduct = response.data as Product
+          setProduct(updatedProduct)
+          
+          // Update formData with the saved values from the response
+          const cfg = (updatedProduct as any).chunking_config || {}
+          
+          // Update optimization_mode from saved config
+          if (cfg.optimization_mode) {
+            setFormData(prev => ({
+              ...prev,
+              optimization_mode: cfg.optimization_mode as 'pattern' | 'hybrid' | 'llm'
+            }))
+            console.log('✅ Optimization mode updated from response:', cfg.optimization_mode)
+          }
+          
+          if (cfg.manual_settings && formData.chunking_mode === 'manual') {
+            const saved = cfg.manual_settings
+            setFormData(prev => ({
+              ...prev,
+              chunk_size: saved.chunk_size ?? prev.chunk_size,
+              chunk_overlap: saved.chunk_overlap ?? prev.chunk_overlap,
+              min_chunk_size: saved.min_chunk_size ?? prev.min_chunk_size,
+              max_chunk_size: saved.max_chunk_size ?? prev.max_chunk_size,
+              chunking_strategy: saved.chunking_strategy ?? prev.chunking_strategy
+            }))
+            console.log('✅ Form updated with saved values from response:', saved)
+          }
+        }
+        
         setResultModalData({
           type: 'success',
           title: 'Product Updated',
-          message: 'Product has been successfully updated!'
+          message: 'Product configuration has been saved successfully! Please re-run the pipeline to apply the new settings.'
         })
+        
+        // Reload product data after a delay to ensure database has fully committed
+        setTimeout(async () => {
+          await loadProduct()
+        }, 1000)
+        
         // Redirect back to product detail page after a short delay
         setTimeout(() => {
           router.push(`/app/products/${productId}`)
-        }, 1500)
+        }, 2000)
       }
       setShowResultModal(true)
     } catch (err) {
@@ -406,6 +805,64 @@ export default function EditProductPage() {
               )}
             </div>
 
+            {/* Preprocessing Playbook Selection */}
+            <div className="mb-6">
+              <PlaybookSelector
+                value={formData.playbook_id || undefined}
+                onChange={(playbookId) => handleInputChange('playbook_id', playbookId as string | undefined)}
+                disabled={saving}
+                workspaceId={product?.workspace_id}
+                showCustomizeButton={true}
+              />
+              <p className="mt-1 text-sm text-gray-500">
+                Select a preprocessing playbook to use for this product. If not selected, the system will auto-detect the best playbook based on content during pipeline execution.
+              </p>
+              {product && (product as any).playbook_id && (
+                <p className="mt-1 text-sm text-green-600">
+                  Current saved playbook: <strong>{(product as any).playbook_id}</strong>
+                </p>
+              )}
+            </div>
+
+            {/* Saved Configuration Display (for verification) */}
+            {product && (
+              <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <h4 className="text-sm font-medium text-gray-700 mb-2">Saved Configuration (for verification)</h4>
+                <div className="text-xs text-gray-600 space-y-1 font-mono">
+                  <div><strong>Playbook ID:</strong> {(product as any).playbook_id || 'None (Auto-detect)'}</div>
+                  <div><strong>Chunking Mode:</strong> {(product as any).chunking_config?.mode || 'auto'}</div>
+                  <div><strong>Optimization Mode:</strong> {(product as any).chunking_config?.optimization_mode || formData.optimization_mode || 'pattern'}</div>
+                  {formData.chunking_mode === 'manual' && (product as any).chunking_config?.manual_settings && (
+                    <div className="mt-2">
+                      <strong>Manual Settings:</strong>
+                      <pre className="mt-1 p-2 bg-white rounded text-xs overflow-auto">
+                        {JSON.stringify((product as any).chunking_config.manual_settings, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+                  {formData.chunking_mode === 'auto' && (product as any).chunking_config?.auto_settings && (
+                    <div className="mt-2">
+                      <strong>Auto Settings:</strong>
+                      <pre className="mt-1 p-2 bg-white rounded text-xs overflow-auto">
+                        {JSON.stringify((product as any).chunking_config.auto_settings, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+                  {(product as any).embedding_config && (
+                    <div className="mt-2">
+                      <strong>Embedding Config:</strong>
+                      <pre className="mt-1 p-2 bg-white rounded text-xs overflow-auto">
+                        {JSON.stringify((product as any).embedding_config, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+                <p className="mt-2 text-xs text-gray-500">
+                  This shows the configuration currently saved in the database. After saving, refresh the page to see updated values.
+                </p>
+              </div>
+            )}
+
             <div>
               <Label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-2">
                 Status
@@ -426,6 +883,117 @@ export default function EditProductPage() {
                   {product.status}
                 </span>
               </p>
+            </div>
+
+            {/* Text Optimization Mode Section */}
+            <div className="border-t border-gray-200 pt-6">
+              <div className="flex items-center mb-4">
+                <div className="bg-purple-100 rounded-lg p-2 mr-3">
+                  <Sparkles className="h-5 w-5 text-purple-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900">Text Optimization Mode</h3>
+                  <p className="text-sm text-gray-500">Choose how text is optimized for AI processing</p>
+                </div>
+              </div>
+
+              <div className="space-y-4 mb-6">
+                {/* Standard (Pattern-Based) */}
+                <label className="flex items-start p-4 border-2 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors"
+                  style={{ borderColor: formData.optimization_mode === 'pattern' ? '#3b82f6' : '#e5e7eb' }}>
+                  <input
+                    type="radio"
+                    name="optimization_mode"
+                    value="pattern"
+                    checked={formData.optimization_mode === 'pattern'}
+                    onChange={(e) => handleInputChange('optimization_mode', e.target.value)}
+                    className="mt-1 mr-3"
+                  />
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-gray-900">Standard (Pattern-Based)</span>
+                      <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Free, Fast</span>
+                    </div>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Fast, free optimization using pattern matching. Handles 90% of common issues.
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      ✅ Recommended for most documents • ✅ No API costs • ✅ Instant processing
+                    </p>
+                  </div>
+                </label>
+
+                {/* Hybrid (Auto) */}
+                <label className="flex items-start p-4 border-2 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors"
+                  style={{ borderColor: formData.optimization_mode === 'hybrid' ? '#3b82f6' : '#e5e7eb' }}>
+                  <input
+                    type="radio"
+                    name="optimization_mode"
+                    value="hybrid"
+                    checked={formData.optimization_mode === 'hybrid'}
+                    onChange={(e) => handleInputChange('optimization_mode', e.target.value)}
+                    className="mt-1 mr-3"
+                  />
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-gray-900">Hybrid (Auto)</span>
+                      <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">~$0.01/doc</span>
+                    </div>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Pattern-based first, then AI enhancement when quality &lt; 75%. Best balance of speed, cost, and quality.
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      ✅ Pattern-based for most docs • ✅ AI only when needed • ✅ Cost-optimized
+                    </p>
+                  </div>
+                </label>
+
+                {/* AI Enhancement (LLM) */}
+                <label className="flex items-start p-4 border-2 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors"
+                  style={{ borderColor: formData.optimization_mode === 'llm' ? '#3b82f6' : '#e5e7eb' }}>
+                  <input
+                    type="radio"
+                    name="optimization_mode"
+                    value="llm"
+                    checked={formData.optimization_mode === 'llm'}
+                    onChange={(e) => handleInputChange('optimization_mode', e.target.value)}
+                    className="mt-1 mr-3"
+                  />
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-gray-900">AI Enhancement (LLM)</span>
+                      <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded">~$0.02/doc</span>
+                    </div>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Best quality with semantic understanding. Uses OpenAI to enhance all documents.
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      ⚡ Best quality • 💰 Higher cost • 🎯 For complex documents
+                    </p>
+                  </div>
+                </label>
+              </div>
+
+              {formData.optimization_mode !== 'pattern' && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                  <div className="flex items-start">
+                    <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5 mr-2 flex-shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-blue-900 mb-1">
+                        OpenAI API Key Required
+                      </p>
+                      <p className="text-sm text-blue-700">
+                        {formData.optimization_mode === 'hybrid' 
+                          ? 'Hybrid mode requires an OpenAI API key configured in Workspace Settings. AI enhancement will be used automatically when quality score is below 75%.'
+                          : 'LLM mode requires an OpenAI API key configured in Workspace Settings. All documents will be enhanced using AI.'}
+                      </p>
+                      <p className="text-xs text-blue-600 mt-2">
+                        💡 Go to <Link href="/app/settings" className="underline font-medium">Settings</Link> → Workspace Settings to configure your OpenAI API key.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Chunking Configuration Section */}
@@ -574,14 +1142,14 @@ export default function EditProductPage() {
                   </Label>
                   <Input
                     id="chunk_size"
-                    type="number"
-                    value={formData.chunk_size}
-                    onChange={(e) => handleInputChange('chunk_size', parseInt(e.target.value) || 0)}
+                    type="text"
+                    inputMode="numeric"
+                    value={formData.chunk_size || ''}
+                    onChange={(e) => handleNumberInputChange('chunk_size', e.target.value)}
+                    onBlur={(e) => handleNumberInputBlur('chunk_size', e.target.value, 1000)}
                     disabled={formData.chunking_mode === 'auto'}
                     className={`${fieldErrors.chunk_size ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : ''} disabled:bg-gray-100 disabled:cursor-not-allowed`}
                     placeholder="1000"
-                    min="50"
-                    max="5000"
                   />
                   {fieldErrors.chunk_size && (
                     <p className="mt-1 text-sm text-red-600">{fieldErrors.chunk_size}</p>
@@ -598,14 +1166,14 @@ export default function EditProductPage() {
                   </Label>
                   <Input
                     id="chunk_overlap"
-                    type="number"
-                    value={formData.chunk_overlap}
-                    onChange={(e) => handleInputChange('chunk_overlap', parseInt(e.target.value) || 0)}
+                    type="text"
+                    inputMode="numeric"
+                    value={formData.chunk_overlap || ''}
+                    onChange={(e) => handleNumberInputChange('chunk_overlap', e.target.value)}
+                    onBlur={(e) => handleNumberInputBlur('chunk_overlap', e.target.value, 200)}
                     disabled={formData.chunking_mode === 'auto'}
                     className={`${fieldErrors.chunk_overlap ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : ''} disabled:bg-gray-100 disabled:cursor-not-allowed`}
                     placeholder="200"
-                    min="0"
-                    max={formData.chunk_size - 1}
                   />
                   {fieldErrors.chunk_overlap && (
                     <p className="mt-1 text-sm text-red-600">{fieldErrors.chunk_overlap}</p>
@@ -622,14 +1190,14 @@ export default function EditProductPage() {
                   </Label>
                   <Input
                     id="min_chunk_size"
-                    type="number"
-                    value={formData.min_chunk_size}
-                    onChange={(e) => handleInputChange('min_chunk_size', parseInt(e.target.value) || 0)}
+                    type="text"
+                    inputMode="numeric"
+                    value={formData.min_chunk_size || ''}
+                    onChange={(e) => handleNumberInputChange('min_chunk_size', e.target.value)}
+                    onBlur={(e) => handleNumberInputBlur('min_chunk_size', e.target.value, 100)}
                     disabled={formData.chunking_mode === 'auto'}
                     className={`${fieldErrors.min_chunk_size ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : ''} disabled:bg-gray-100 disabled:cursor-not-allowed`}
                     placeholder="100"
-                    min="10"
-                    max={formData.chunk_size}
                   />
                   {fieldErrors.min_chunk_size && (
                     <p className="mt-1 text-sm text-red-600">{fieldErrors.min_chunk_size}</p>
@@ -646,14 +1214,14 @@ export default function EditProductPage() {
                   </Label>
                   <Input
                     id="max_chunk_size"
-                    type="number"
-                    value={formData.max_chunk_size}
-                    onChange={(e) => handleInputChange('max_chunk_size', parseInt(e.target.value) || 0)}
+                    type="text"
+                    inputMode="numeric"
+                    value={formData.max_chunk_size || ''}
+                    onChange={(e) => handleNumberInputChange('max_chunk_size', e.target.value)}
+                    onBlur={(e) => handleNumberInputBlur('max_chunk_size', e.target.value, 2000)}
                     disabled={formData.chunking_mode === 'auto'}
                     className={`${fieldErrors.max_chunk_size ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : ''} disabled:bg-gray-100 disabled:cursor-not-allowed`}
                     placeholder="2000"
-                    min={formData.chunk_size}
-                    max="10000"
                   />
                   {fieldErrors.max_chunk_size && (
                     <p className="mt-1 text-sm text-red-600">{fieldErrors.max_chunk_size}</p>
@@ -688,11 +1256,20 @@ export default function EditProductPage() {
                     onChange={(e) => handleInputChange('embedder_name', e.target.value)}
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                   >
-                    {getEmbeddingModelOptions().map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
+                    {embeddingModelOptions.length > 0 ? (
+                      embeddingModelOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))
+                    ) : (
+                      // Fallback while loading
+                      getEmbeddingModelOptionsSync().map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))
+                    )}
                   </select>
                   <p className="mt-1 text-sm text-gray-500">
                     Choose the embedding model for vector generation

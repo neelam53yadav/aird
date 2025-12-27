@@ -110,11 +110,23 @@ export default function PlaygroundPage() {
       
       if (response.error) {
         console.error('Failed to load playground status:', response.error)
+        // Set a default status indicating not ready
+        setPlaygroundStatus({
+          ready: false,
+          reason: response.error || 'Failed to check playground status',
+          current_version: 0
+        })
       } else {
         setPlaygroundStatus(response.data as PlaygroundStatus)
       }
     } catch (err) {
       console.error('Failed to load playground status:', err)
+      // Set a default status indicating not ready
+      setPlaygroundStatus({
+        ready: false,
+        reason: 'Failed to check playground status',
+        current_version: 0
+      })
     }
   }
 

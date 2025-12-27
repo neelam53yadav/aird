@@ -32,7 +32,10 @@ export default function SettingsPage() {
     
     // API settings
     apiKey: 'pk_live_1234567890abcdef',
+    openaiApiKey: '',
+    openaiApiKeyConfigured: false,
     webhookUrl: '',
+    workspaceId: '',
     
     // Workspace settings
     workspaceName: 'My Workspace',
@@ -40,8 +43,32 @@ export default function SettingsPage() {
     dateFormat: 'MM/DD/YYYY'
   })
 
-  // Fetch user profile data on component mount
+  // Fetch workspace settings and user profile data on component mount
   useEffect(() => {
+    const loadWorkspaceSettings = async () => {
+      try {
+        // First get workspaces to get the workspace ID
+        const workspacesResponse = await apiClient.getWorkspaces()
+        if (workspacesResponse.data && workspacesResponse.data.length > 0) {
+          const workspaceId = workspacesResponse.data[0].id // Use first workspace
+          setSettings(prev => ({ ...prev, workspaceId, workspaceName: workspacesResponse.data[0].name }))
+          
+          // Load workspace settings
+          const settingsResponse = await apiClient.getWorkspaceSettings(workspaceId)
+          if (settingsResponse.data) {
+            setSettings(prev => ({
+              ...prev,
+              openaiApiKeyConfigured: settingsResponse.data.openai_api_key_configured || false,
+              // Load the masked key to display in the input field
+              openaiApiKey: settingsResponse.data.openai_api_key || '',
+            }))
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load workspace settings:', error)
+      }
+    }
+
     const fetchUserProfile = async () => {
       try {
         setLoading(true)
@@ -81,7 +108,8 @@ export default function SettingsPage() {
     }
 
     if (session) {
-      fetchUserProfile()
+      // Load both workspace settings and user profile
+      Promise.all([loadWorkspaceSettings(), fetchUserProfile()])
     } else {
       setLoading(false)
     }
@@ -103,6 +131,38 @@ export default function SettingsPage() {
         // If we get here, the API call was successful
         setSaveMessage({type: 'success', text: 'Profile updated successfully!'})
         // Clear message after 3 seconds
+        setTimeout(() => setSaveMessage(null), 3000)
+      } else if (section === 'api' && settings.workspaceId) {
+        // Save API settings (OpenAI key) to workspace settings
+        // Only send the key if it's been changed (not the masked value)
+        const apiKeyToSave = settings.openaiApiKey?.trim() || ''
+        const isMaskedKey = apiKeyToSave.startsWith('sk-...') || apiKeyToSave.startsWith('sk-****')
+        
+        // Build request body
+        // If the key is a masked placeholder or empty, don't send it to preserve the existing key
+        // Only send if it's a new/updated key (starts with sk- but not sk-...)
+        let requestBody: { openai_api_key?: string } = {}
+        if (apiKeyToSave && !isMaskedKey) {
+          // New or updated key - send it
+          requestBody.openai_api_key = apiKeyToSave
+        }
+        // Otherwise, don't include openai_api_key in request (preserves existing key)
+        // This prevents accidentally clearing the key when the input shows the masked value
+        
+        const response = await apiClient.updateWorkspaceSettings(settings.workspaceId, requestBody)
+        
+        if (response.error) {
+          setSaveMessage({type: 'error', text: response.error || 'Failed to save API settings'})
+        } else {
+          setSaveMessage({type: 'success', text: 'API settings saved successfully!'})
+          // Update configured status and masked key
+          setSettings(prev => ({ 
+            ...prev, 
+            openaiApiKeyConfigured: response.data?.openai_api_key_configured || false,
+            // Reload the masked key after saving
+            openaiApiKey: response.data?.openai_api_key || ''
+          }))
+        }
         setTimeout(() => setSaveMessage(null), 3000)
       } else {
         // For other sections, use existing mock behavior
@@ -380,29 +440,46 @@ export default function SettingsPage() {
                   <p className="text-sm text-gray-600">Manage your API keys and webhooks</p>
                 </div>
                 <div className="p-6 space-y-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">API Key</label>
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type={showApiKey ? "text" : "password"}
-                        value={settings.apiKey}
-                        readOnly
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md bg-gray-50"
-                      />
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setShowApiKey(!showApiKey)}
+                  {/* OpenAI API Key Section */}
+                  <div className="border-b border-gray-200 pb-6">
+                    <h4 className="text-md font-medium text-gray-900 mb-2">OpenAI API Key</h4>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Configure your OpenAI API key to use OpenAI embedding models (text-embedding-ada-002, text-embedding-3-small, text-embedding-3-large).
+                      Get your API key from{' '}
+                      <a 
+                        href="https://platform.openai.com/api-keys" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:text-blue-800 underline"
                       >
-                        {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </Button>
-                      <Button variant="outline" size="sm">
-                        Regenerate
-                      </Button>
+                        OpenAI Platform
+                      </a>
+                    </p>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">OpenAI API Key</label>
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type={showApiKey ? "text" : "password"}
+                          value={settings.openaiApiKey || ''}
+                          onChange={(e) => setSettings({...settings, openaiApiKey: e.target.value})}
+                          placeholder={settings.openaiApiKeyConfigured ? "sk-...****" : "sk-your-api-key-here"}
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowApiKey(!showApiKey)}
+                        >
+                          {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </Button>
+                      </div>
+                      {settings.openaiApiKeyConfigured && !showApiKey && (
+                        <p className="text-xs text-green-600 mt-1">✓ OpenAI API key is configured</p>
+                      )}
+                      <p className="text-xs text-gray-500 mt-1">Keep your API key secure and never share it publicly</p>
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">Keep your API key secure and never share it publicly</p>
                   </div>
-                  
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Webhook URL</label>
                     <input

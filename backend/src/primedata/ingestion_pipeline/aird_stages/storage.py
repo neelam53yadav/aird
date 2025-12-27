@@ -310,7 +310,11 @@ class AirdStorageAdapter:
                     self.logger.warning(warn_msg)
                     std_logger.warning(warn_msg)
                 else:
-                    success_msg = f"[_extract_pdf_text] Successfully extracted text (first 100 chars: {extracted_text[:100]}...)"
+                    # Show preview of extracted text (skip page markers in preview)
+                    preview_text = extracted_text[:200].replace("=== PAGE", "[PAGE").replace("===\n", "]")
+                    # Count total pages extracted
+                    page_count = extracted_text.count("=== PAGE")
+                    success_msg = f"[_extract_pdf_text] Successfully extracted text ({page_count} pages, {len(extracted_text)} chars). Preview: {preview_text}..."
                     self.logger.info(success_msg)
                     std_logger.info(success_msg)
                 

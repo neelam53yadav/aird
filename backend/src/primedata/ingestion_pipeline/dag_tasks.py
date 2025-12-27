@@ -24,17 +24,10 @@ from primedata.db.models import (
     PipelineArtifact, ArtifactType, ArtifactStatus, RetentionPolicy
 )
 
-# Import AIRD stages
-from primedata.ingestion_pipeline.aird_stages.preprocess import PreprocessStage
-from primedata.ingestion_pipeline.aird_stages.scoring import ScoringStage
-from primedata.ingestion_pipeline.aird_stages.fingerprint import FingerprintStage
-from primedata.ingestion_pipeline.aird_stages.validation import ValidationStage
-from primedata.ingestion_pipeline.aird_stages.policy import PolicyStage
-from primedata.ingestion_pipeline.aird_stages.reporting import ReportingStage
-from primedata.ingestion_pipeline.aird_stages.indexing import IndexingStage
-from primedata.ingestion_pipeline.aird_stages.storage import AirdStorageAdapter
-from primedata.ingestion_pipeline.aird_stages.tracking import StageTracker
-from primedata.ingestion_pipeline.aird_stages.config import get_aird_config
+# NOTE: AIRD stage imports are done lazily inside functions to avoid DAG import timeouts
+# Airflow has a 30s timeout for DAG imports, and importing all stages at module level
+# causes heavy import chains (embedding_config, sentence_transformers, etc.) that exceed this limit.
+# Import only lightweight enums at module level.
 from primedata.ingestion_pipeline.aird_stages.base import StageStatus
 from primedata.ingestion_pipeline.artifact_registry import (
     register_artifact,
@@ -453,6 +446,11 @@ def get_aird_context(**context) -> Dict[str, Any]:
     Returns:
         Dictionary with AIRD context (storage, tracker, config, etc.)
     """
+    # Lazy imports to avoid DAG import timeouts (Airflow has 30s limit)
+    from primedata.ingestion_pipeline.aird_stages.storage import AirdStorageAdapter
+    from primedata.ingestion_pipeline.aird_stages.tracking import StageTracker
+    from primedata.ingestion_pipeline.aird_stages.config import get_aird_config
+    
     params = get_dag_params(**context)
     workspace_id = params['workspace_id']
     product_id = params['product_id']
@@ -710,6 +708,9 @@ def task_preprocess(**context) -> Dict[str, Any]:
         logger.info(f"file_stem_to_minio_key mapping: {file_stem_to_minio_key}")
         
         # Create and execute preprocessing stage
+        # Lazy import to avoid DAG import timeouts
+        from primedata.ingestion_pipeline.aird_stages.preprocess import PreprocessStage
+        
         logger.info(f"Creating PreprocessStage instance: product_id={product_id}, version={version}, workspace_id={workspace_id}, playbook_id={playbook_id}")
         try:
             preprocess_stage = PreprocessStage(
@@ -728,14 +729,30 @@ def task_preprocess(**context) -> Dict[str, Any]:
         # Get chunking config from product or params
         chunking_config = params.get("chunking_config")
         if not chunking_config and product:
+            # Refresh product to get latest chunking_config (including preprocessing_flags from recommendations)
+            db.refresh(product)
             chunking_config = product.chunking_config
+        
+        # Log preprocessing flags if present (from recommendations)
+        if chunking_config and isinstance(chunking_config, dict):
+            preprocessing_flags = chunking_config.get("preprocessing_flags", {})
+            if preprocessing_flags:
+                logger.info(f"✅ Preprocessing flags detected (from recommendations): {preprocessing_flags}")
+                if preprocessing_flags.get("enhanced_normalization"):
+                    logger.info("  → Enhanced normalization will be applied")
+                if preprocessing_flags.get("error_correction"):
+                    logger.info("  → Error correction will be applied")
+                if preprocessing_flags.get("force_metadata_extraction") or preprocessing_flags.get("additional_metadata_fields"):
+                    logger.info("  → Enhanced metadata extraction will be applied")
         
         stage_context = {
             "storage": storage,
             "raw_files": raw_files,
             "playbook_id": playbook_id,
             "file_stem_to_minio_key": file_stem_to_minio_key,  # Pass mapping for accurate file retrieval
-            "chunking_config": chunking_config,  # Pass product chunking config
+            "chunking_config": chunking_config,  # Pass product chunking config (including preprocessing_flags)
+            "workspace_id": workspace_id,  # For loading custom playbooks
+            "db": db,  # For loading custom playbooks
         }
         logger.info(f"Executing PreprocessStage with context keys: {list(stage_context.keys())}")
         logger.info(f"Context storage type: {type(stage_context['storage']).__name__}")
@@ -765,12 +782,19 @@ def task_preprocess(**context) -> Dict[str, Any]:
                     logger.info(f"Updated product {product_id} with playbook_id: {final_playbook_id}")
                 
                 # Persist resolved chunking configuration if available (so UI can display actual used config)
+                # Preserve original auto_settings and manual_settings while adding resolved_settings
                 resolved_chunking = result.metrics.get('chunking_config_used')
                 if resolved_chunking:
-                    product.chunking_config = {
-                        "mode": resolved_chunking.get("mode", "auto"),
+                    # Preserve existing config structure
+                    current_config = product.chunking_config or {}
+                    current_config.update({
+                        "mode": resolved_chunking.get("mode", current_config.get("mode", "auto")),
                         "resolved_settings": resolved_chunking,
-                    }
+                        # Preserve auto_settings and manual_settings if they exist
+                        "auto_settings": current_config.get("auto_settings", {}),
+                        "manual_settings": current_config.get("manual_settings", {}),
+                    })
+                    product.chunking_config = current_config
                     logger.info(f"Updated product {product_id} with chunking_config: {product.chunking_config}")
                 
                 # Store playbook selection metadata for verification
@@ -906,6 +930,9 @@ def task_scoring(**context) -> Dict[str, Any]:
             }
         
         # Create and execute scoring stage
+        # Lazy import to avoid DAG import timeouts
+        from primedata.ingestion_pipeline.aird_stages.scoring import ScoringStage
+        
         scoring_stage = ScoringStage(
             product_id=product_id,
             version=version,
@@ -1001,6 +1028,9 @@ def task_fingerprint(**context) -> Dict[str, Any]:
             scoring_result = context['task_instance'].xcom_pull(task_ids='scoring')
         
         # Create and execute fingerprint stage
+        # Lazy import to avoid DAG import timeouts
+        from primedata.ingestion_pipeline.aird_stages.fingerprint import FingerprintStage
+        
         fingerprint_stage = FingerprintStage(
             product_id=product_id,
             version=version,
@@ -1115,6 +1145,9 @@ def task_validation(**context) -> Dict[str, Any]:
             scoring_result = context['task_instance'].xcom_pull(task_ids='scoring')
         
         # Create and execute validation stage
+        # Lazy import to avoid DAG import timeouts
+        from primedata.ingestion_pipeline.aird_stages.validation import ValidationStage
+        
         validation_stage = ValidationStage(
             product_id=product_id,
             version=version,
@@ -1206,6 +1239,9 @@ def task_policy(**context) -> Dict[str, Any]:
             fingerprint_result = context['task_instance'].xcom_pull(task_ids='fingerprint')
         
         # Create and execute policy stage
+        # Lazy import to avoid DAG import timeouts
+        from primedata.ingestion_pipeline.aird_stages.policy import PolicyStage
+        
         policy_stage = PolicyStage(
             product_id=product_id,
             version=version,
@@ -1339,6 +1375,9 @@ def task_reporting(**context) -> Dict[str, Any]:
             scoring_result = context['task_instance'].xcom_pull(task_ids='scoring')
         
         # Create and execute reporting stage
+        # Lazy import to avoid DAG import timeouts
+        from primedata.ingestion_pipeline.aird_stages.reporting import ReportingStage
+        
         reporting_stage = ReportingStage(
             product_id=product_id,
             version=version,
@@ -1442,6 +1481,9 @@ def task_indexing(**context) -> Dict[str, Any]:
             scoring_result = context['task_instance'].xcom_pull(task_ids='scoring')
         
         # Create and execute indexing stage
+        # Lazy import to avoid DAG import timeouts
+        from primedata.ingestion_pipeline.aird_stages.indexing import IndexingStage
+        
         indexing_stage = IndexingStage(
             product_id=product_id,
             version=version,

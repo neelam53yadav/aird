@@ -232,7 +232,8 @@ async def get_billing_limits(
             }
         }
         
-        current_plan = billing_profile.plan.value
+        # Get plan value (handle both enum and string, case-insensitive)
+        current_plan = billing_profile.plan.value.lower() if hasattr(billing_profile.plan, 'value') else str(billing_profile.plan).lower()
         limits = plan_limits.get(current_plan, plan_limits['free'])
         usage = billing_profile.usage or {}
         
@@ -308,7 +309,7 @@ def check_billing_limits(workspace_id: str, limit_type: str, current_count: int,
     Check if workspace is within billing limits.
     
     Args:
-        workspace_id: Workspace ID
+        workspace_id: Workspace ID (string or UUID)
         limit_type: Type of limit to check
         current_count: Current count of the resource
         db: Database session
@@ -317,8 +318,13 @@ def check_billing_limits(workspace_id: str, limit_type: str, current_count: int,
         True if within limits, False otherwise
     """
     try:
+        from uuid import UUID
+        
+        # Convert string to UUID if needed
+        workspace_uuid = UUID(workspace_id) if isinstance(workspace_id, str) else workspace_id
+        
         billing_profile = db.query(BillingProfile).filter(
-            BillingProfile.workspace_id == workspace_id
+            BillingProfile.workspace_id == workspace_uuid
         ).first()
         
         if not billing_profile:
@@ -343,7 +349,9 @@ def check_billing_limits(workspace_id: str, limit_type: str, current_count: int,
             }
         }
         
-        plan_limits = limits.get(billing_profile.plan.value, limits['free'])
+        # Get plan value (handle both enum and string, case-insensitive)
+        plan_value = billing_profile.plan.value.lower() if hasattr(billing_profile.plan, 'value') else str(billing_profile.plan).lower()
+        plan_limits = limits.get(plan_value, limits['free'])
         limit = plan_limits.get(limit_type)
         
         if limit is None:

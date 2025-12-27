@@ -1,7 +1,8 @@
 """
 Vector metadata service for PrimeData.
 
-Manages document and vector metadata for tracking chunk-level information.
+Manages chunk metadata using Qdrant as the single source of truth.
+All metadata is stored in Qdrant payloads - no PostgreSQL tables needed.
 """
 
 from typing import Dict, Any, List, Optional
@@ -9,7 +10,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 from loguru import logger
 
-from primedata.db.models import DocumentMetadata, VectorMetadata
+from primedata.indexing.qdrant_client import qdrant_client
 
 
 def create_document_metadata(
@@ -23,12 +24,13 @@ def create_document_metadata(
     section: Optional[str],
     field_name: Optional[str],
     extra_tags: Optional[Dict[str, Any]] = None,
-) -> DocumentMetadata:
+) -> Dict[str, Any]:
     """
-    Create a document metadata record.
+    Legacy function - metadata is now stored in Qdrant payloads.
+    This function is kept for backward compatibility but does nothing.
     
     Args:
-        db: Database session
+        db: Database session (unused)
         product_id: Product ID
         version: Version number
         chunk_id: Chunk identifier
@@ -40,21 +42,10 @@ def create_document_metadata(
         extra_tags: Additional tags as JSON
         
     Returns:
-        Created DocumentMetadata instance
+        Empty dict (metadata is in Qdrant)
     """
-    doc_meta = DocumentMetadata(
-        product_id=product_id,
-        version=version,
-        chunk_id=chunk_id,
-        score=score,
-        source_file=source_file,
-        page_number=page_number,
-        section=section,
-        field_name=field_name,
-        extra_tags=extra_tags,
-    )
-    db.add(doc_meta)
-    return doc_meta
+    logger.warning("create_document_metadata is deprecated - metadata is stored in Qdrant payloads")
+    return {}
 
 
 def create_vector_metadata(
@@ -67,12 +58,13 @@ def create_vector_metadata(
     section: Optional[str],
     field_name: Optional[str],
     tags: Optional[Dict[str, Any]] = None,
-) -> VectorMetadata:
+) -> Dict[str, Any]:
     """
-    Create a vector metadata record.
+    Legacy function - metadata is now stored in Qdrant payloads.
+    This function is kept for backward compatibility but does nothing.
     
     Args:
-        db: Database session
+        db: Database session (unused)
         product_id: Product ID
         version: Version number
         collection_id: Qdrant collection name
@@ -83,20 +75,10 @@ def create_vector_metadata(
         tags: Tags as JSON
         
     Returns:
-        Created VectorMetadata instance
+        Empty dict (metadata is in Qdrant)
     """
-    vec_meta = VectorMetadata(
-        product_id=product_id,
-        version=version,
-        collection_id=collection_id,
-        chunk_id=chunk_id,
-        page_number=page_number,
-        section=section,
-        field_name=field_name,
-        tags=tags,
-    )
-    db.add(vec_meta)
-    return vec_meta
+    logger.warning("create_vector_metadata is deprecated - metadata is stored in Qdrant payloads")
+    return {}
 
 
 def get_chunk_metadata(
@@ -107,34 +89,89 @@ def get_chunk_metadata(
     field_name: Optional[str] = None,
     limit: int = 100,
     offset: int = 0,
-) -> List[DocumentMetadata]:
+    collection_name: Optional[str] = None,
+) -> List[Dict[str, Any]]:
     """
-    Get chunk metadata for a product with optional filters.
+    Get chunk metadata for a product from Qdrant with optional filters.
     
     Args:
-        db: Database session
+        db: Database session (unused, kept for API compatibility)
         product_id: Product ID
         version: Optional version filter
         section: Optional section filter
         field_name: Optional field name filter
         limit: Maximum number of results
-        offset: Offset for pagination
+        offset: Offset for pagination (Qdrant uses scroll offset)
+        collection_name: Optional collection name (if not provided, will try to find it)
         
     Returns:
-        List of DocumentMetadata instances
+        List of chunk metadata dictionaries (from Qdrant payloads)
     """
-    query = db.query(DocumentMetadata).filter(DocumentMetadata.product_id == product_id)
+    from primedata.db.models import Product
+    
+    # Get product to find collection name if not provided
+    if not collection_name:
+        product = db.query(Product).filter(Product.id == product_id).first()
+        if not product:
+            logger.error(f"Product {product_id} not found")
+            return []
+        
+        version_to_use = version if version is not None else product.current_version
+        collection_name = qdrant_client.find_collection_name(
+            workspace_id=product.workspace_id,
+            product_id=product_id,
+            version=version_to_use,
+            product_name=product.name,
+        )
+        
+        if not collection_name:
+            logger.warning(f"Collection not found for product {product_id}, version {version_to_use}")
+            return []
+    
+    # Build filter conditions
+    filter_conditions = {
+        "product_id": str(product_id),
+    }
     
     if version is not None:
-        query = query.filter(DocumentMetadata.version == version)
+        filter_conditions["version"] = version
     
     if section:
-        query = query.filter(DocumentMetadata.section == section)
+        filter_conditions["section"] = section
     
     if field_name:
-        query = query.filter(DocumentMetadata.field_name == field_name)
+        filter_conditions["field_name"] = field_name
     
-    return query.order_by(DocumentMetadata.created_at.desc()).limit(limit).offset(offset).all()
+    # Scroll points from Qdrant
+    scroll_result = qdrant_client.scroll_points(
+        collection_name=collection_name,
+        limit=limit,
+        offset=offset if offset > 0 else None,
+        filter_conditions=filter_conditions,
+        with_payload=True,
+        with_vector=False,
+    )
+    
+    points = scroll_result.get("points", [])
+    
+    # Convert to metadata format (compatible with old DocumentMetadata structure)
+    metadata_list = []
+    for point in points:
+        payload = point.get("payload", {})
+        metadata_list.append({
+            "chunk_id": payload.get("chunk_id"),
+            "product_id": product_id,
+            "version": payload.get("version"),
+            "score": payload.get("score"),
+            "source_file": payload.get("source_file") or payload.get("filename"),
+            "page_number": payload.get("page_number") or payload.get("page"),
+            "section": payload.get("section"),
+            "field_name": payload.get("field_name"),
+            "extra_tags": payload.get("extra_tags"),
+            "created_at": payload.get("created_at"),
+        })
+    
+    return metadata_list
 
 
 def get_vector_metadata_by_chunk(
@@ -142,28 +179,66 @@ def get_vector_metadata_by_chunk(
     product_id: UUID,
     chunk_id: str,
     version: Optional[int] = None,
-) -> Optional[VectorMetadata]:
+    collection_name: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
     """
-    Get vector metadata for a specific chunk.
+    Get vector metadata for a specific chunk from Qdrant.
     
     Args:
-        db: Database session
+        db: Database session (unused, kept for API compatibility)
         product_id: Product ID
         chunk_id: Chunk identifier
         version: Optional version filter
+        collection_name: Optional collection name (if not provided, will try to find it)
         
     Returns:
-        VectorMetadata instance or None
+        Chunk metadata dictionary (from Qdrant payload) or None
     """
-    query = db.query(VectorMetadata).filter(
-        VectorMetadata.product_id == product_id,
-        VectorMetadata.chunk_id == chunk_id,
+    from primedata.db.models import Product
+    
+    # Get product to find collection name if not provided
+    if not collection_name:
+        product = db.query(Product).filter(Product.id == product_id).first()
+        if not product:
+            logger.error(f"Product {product_id} not found")
+            return None
+        
+        version_to_use = version if version is not None else product.current_version
+        collection_name = qdrant_client.find_collection_name(
+            workspace_id=product.workspace_id,
+            product_id=product_id,
+            version=version_to_use,
+            product_name=product.name,
+        )
+        
+        if not collection_name:
+            logger.warning(f"Collection not found for product {product_id}, version {version_to_use}")
+            return None
+    
+    # Get point by chunk_id
+    point = qdrant_client.get_point_by_chunk_id(
+        collection_name=collection_name,
+        chunk_id=chunk_id,
+        product_id=str(product_id),
+        version=version,
     )
     
-    if version is not None:
-        query = query.filter(VectorMetadata.version == version)
+    if not point:
+        return None
     
-    return query.first()
+    # Convert to metadata format (compatible with old VectorMetadata structure)
+    payload = point.get("payload", {})
+    return {
+        "chunk_id": payload.get("chunk_id"),
+        "product_id": product_id,
+        "version": payload.get("version"),
+        "collection_id": payload.get("collection_id") or collection_name,
+        "page_number": payload.get("page_number") or payload.get("page"),
+        "section": payload.get("section"),
+        "field_name": payload.get("field_name"),
+        "tags": payload.get("tags"),
+        "created_at": payload.get("created_at"),
+    }
 
 
 

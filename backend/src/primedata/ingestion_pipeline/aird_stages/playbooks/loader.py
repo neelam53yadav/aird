@@ -24,12 +24,15 @@ def get_playbook_dir() -> Optional[Path]:
     return Path(config.playbook_dir)
 
 
-def load_playbook_yaml(playbook_id: Optional[str]) -> Dict:
+def load_playbook_yaml(playbook_id: Optional[str], workspace_id: Optional[str] = None, db_session=None) -> Dict:
     """
     Load and parse a playbook YAML by ID (case-insensitive).
+    Supports both built-in playbooks (from files) and custom playbooks (from database).
     
     Args:
         playbook_id: e.g., 'TECH', 'tech', 'ScAnNeD'; None allowed (uses default)
+        workspace_id: Optional workspace ID for loading custom playbooks
+        db_session: Optional database session for loading custom playbooks
         
     Returns:
         dict from YAML content
@@ -37,6 +40,29 @@ def load_playbook_yaml(playbook_id: Optional[str]) -> Dict:
     Raises:
         FileNotFoundError: if playbook cannot be found
     """
+    # Try to load custom playbook from database if workspace_id and db_session provided
+    if workspace_id and db_session and playbook_id:
+        try:
+            from primedata.db.models import CustomPlaybook
+            from uuid import UUID
+            
+            custom_playbook = db_session.query(CustomPlaybook).filter(
+                CustomPlaybook.playbook_id == playbook_id.upper(),
+                CustomPlaybook.workspace_id == UUID(workspace_id),
+                CustomPlaybook.is_active == True
+            ).first()
+            
+            if custom_playbook:
+                try:
+                    return yaml.safe_load(custom_playbook.yaml_content)
+                except yaml.YAMLError as e:
+                    logger.error(f"Failed to parse custom playbook YAML for {playbook_id}: {e}")
+                    # Fall through to try built-in playbook
+        except Exception as e:
+            logger.warning(f"Failed to load custom playbook {playbook_id}: {e}")
+            # Fall through to try built-in playbook
+    
+    # Try built-in playbooks (from files)
     playbook_file = get_playbook_path(playbook_id)
     if not playbook_file:
         # Fallback: try to use default from config

@@ -304,13 +304,13 @@ export default function NewDataSourcePage() {
     }
 
     try {
-      const response = await apiClient.createDataSource(
-        workspaceId,
-        productId,
-        selectedType!,
-        config,
-        name.trim()
-      )
+      const response = await apiClient.createDataSource({
+        workspace_id: workspaceId,
+        product_id: productId,
+        type: selectedType!,
+        config: config,
+        name: name.trim()
+      })
 
       if (response.error) {
         setResultModalData({

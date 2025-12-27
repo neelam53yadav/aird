@@ -359,6 +359,9 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 
 ## 📚 Documentation
 
+### **Comprehensive Guide**
+- **[COMPREHENSIVE_GUIDE.md](COMPREHENSIVE_GUIDE.md)** - **Complete guide covering everything** - Getting started, features, configuration, AI optimization, troubleshooting, and architecture
+
 ### **Core Documentation**
 - **[Architecture Guide](docs/architecture.md)** - System architecture and component overview
 - **[Setup Guide](docs/setup-guide.md)** - Complete installation and configuration guide
@@ -376,36 +379,17 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 - **[Pipeline Troubleshooting](docs/pipeline-troubleshooting.md)** - Airflow and pipeline issues
 - **[Data Quality Troubleshooting](docs/data-quality-troubleshooting.md)** - Data quality rule problems
 
-### **When to Use Which Documentation**
+### **Quick Start Documentation Path**
 
-#### **Getting Started**
-1. **First Time Setup**: Start with this README → Setup Guide → User Guide
-2. **Understanding the System**: Architecture → Data Quality → AI Readiness
-3. **Setting Up Pipelines**: Pipeline Guide → API Reference
+#### **New Users**
+1. Start with **[COMPREHENSIVE_GUIDE.md](COMPREHENSIVE_GUIDE.md)** for complete overview
+2. Or use specific guides: [Setup Guide](docs/setup-guide.md) → [User Guide](docs/user-guide.md)
 
-#### **Development & Configuration**
-1. **API Development**: API Reference → Architecture
-2. **Data Quality Rules**: Data Quality → API Reference
-3. **Pipeline Customization**: Pipeline Guide → Architecture
-4. **Billing Integration**: API Reference → Architecture
+#### **Developers**
+1. [COMPREHENSIVE_GUIDE.md](COMPREHENSIVE_GUIDE.md) → [Architecture Guide](docs/architecture.md) → [API Reference](docs/api-reference.md)
 
 #### **Troubleshooting**
-1. **General Issues**: Troubleshooting Guide
-2. **MLflow Issues**: MLflow Troubleshooting
-3. **Pipeline Failures**: Pipeline Troubleshooting
-4. **Data Quality Problems**: Data Quality Troubleshooting
-
-#### **Enterprise Features**
-1. **Data Quality Management**: Data Quality → API Reference
-2. **Billing & Subscriptions**: API Reference → Architecture
-3. **Team Management**: User Guide → API Reference
-4. **Compliance & Governance**: Data Quality → Architecture
-
-#### **User Experience**
-1. **New Users**: User Guide → Setup Guide
-2. **Advanced Users**: API Reference → Architecture
-3. **Administrators**: User Guide → Troubleshooting Guide
-4. **Developers**: API Reference → Pipeline Guide
+1. [COMPREHENSIVE_GUIDE.md](COMPREHENSIVE_GUIDE.md) (Troubleshooting section) → [Troubleshooting Guide](docs/troubleshooting.md)
 
 ## 🚀 What's New
 

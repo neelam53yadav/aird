@@ -8,6 +8,7 @@ from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc, and_
 from datetime import datetime, timedelta
+from uuid import UUID
 import logging
 
 from ..core.security import get_current_user
@@ -17,6 +18,15 @@ from ..db.models import Product, DataSource, PipelineRun, DqViolation, Workspace
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+class ProductInsightsResponse(BaseModel):
+    """Product insights response (M2)."""
+    fingerprint: Optional[Dict[str, Any]] = None  # Readiness fingerprint (can contain nested structures)
+    policy: Optional[Dict[str, Any]] = None  # Policy evaluation result
+    optimizer: Optional[Dict[str, Any]] = None  # Optimizer suggestions (M3)
+    status: str = "available"  # "available", "draft", "no_data"
+    message: Optional[str] = None  # Optional message explaining the status
 
 class AnalyticsMetrics(BaseModel):
     """Analytics metrics response model."""
@@ -148,3 +158,100 @@ async def get_analytics_metrics(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get analytics metrics: {str(e)}"
         )
+
+
+@router.get("/products/{product_id}/insights", response_model=ProductInsightsResponse)
+async def get_product_insights(
+    product_id: UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get product insights including fingerprint, policy, and optimizer (M2).
+    This endpoint is available under /api/v1/analytics/products/{product_id}/insights
+    """
+    from ..core.scope import ensure_product_access
+    from ..ingestion_pipeline.aird_stages.storage import AirdStorageAdapter
+    from ..services.policy_engine import evaluate_policy
+    from ..ingestion_pipeline.aird_stages.config import get_aird_config
+    
+    product = ensure_product_access(db, request, product_id)
+    
+    # Get fingerprint
+    fingerprint_data = product.readiness_fingerprint
+    fingerprint = None
+    
+    if fingerprint_data:
+        # Handle both old format (nested in metrics) and new format (direct fingerprint)
+        if isinstance(fingerprint_data, dict):
+            # Check if it's the old format with nested fingerprint
+            if "fingerprint" in fingerprint_data and isinstance(fingerprint_data["fingerprint"], dict):
+                fingerprint = fingerprint_data["fingerprint"]
+            else:
+                # New format: fingerprint is directly the metrics dict
+                fingerprint = fingerprint_data
+    
+    if not fingerprint:
+        # Try to load from storage
+        try:
+            storage = AirdStorageAdapter(
+                workspace_id=product.workspace_id,
+                product_id=product.id,
+                version=product.current_version,
+            )
+            
+            metrics = storage.get_metrics_json()
+            if metrics:
+                from ..services.fingerprint import generate_fingerprint
+                fingerprint = generate_fingerprint(metrics)
+        except Exception as e:
+            logger.warning(f"Failed to load fingerprint from storage: {e}")
+    
+    # If no fingerprint, return a response indicating the product needs a pipeline run
+    if not fingerprint:
+        # Check if product is in draft state or has no pipeline runs
+        from ..db.models import ProductStatus
+        if product.status == ProductStatus.DRAFT or product.current_version <= 0:
+            return ProductInsightsResponse(
+                fingerprint=None,
+                policy=None,
+                optimizer=None,
+                status="draft",
+                message="Product is in draft state. Run a pipeline to generate insights."
+            )
+        else:
+            return ProductInsightsResponse(
+                fingerprint=None,
+                policy=None,
+                optimizer=None,
+                status="no_data",
+                message="No fingerprint data available. Run a pipeline to generate insights."
+            )
+    
+    # Evaluate policy
+    config = get_aird_config()
+    thresholds = {
+        "min_trust_score": config.policy_min_trust_score,
+        "min_secure": config.policy_min_secure,
+        "min_metadata_presence": config.policy_min_metadata_presence,
+        "min_kb_ready": config.policy_min_kb_ready,
+    }
+    
+    policy_result = evaluate_policy(fingerprint, thresholds)
+    
+    # Optimizer suggestions (M5)
+    from ..services.optimizer import suggest_next_config
+    optimizer = suggest_next_config(
+        fingerprint=fingerprint,
+        policy=policy_result,
+        current_playbook=product.playbook_id,
+    )
+    
+    return ProductInsightsResponse(
+        fingerprint=fingerprint,
+        policy=policy_result,
+        optimizer=optimizer,
+        status="available",
+        message=None,
+    )

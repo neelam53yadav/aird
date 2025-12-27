@@ -65,9 +65,80 @@ async def exchange_session(
     Returns:
         Backend JWT token and user information
     """
-    print("xcahne session")
-    print(request.token)
-    # Verify NextAuth token
+    from primedata.core.settings import get_settings
+    settings = get_settings()
+    
+    # In dev mode with DISABLE_AUTH=True, bypass token verification and use dev user
+    if settings.DISABLE_AUTH:
+        # Use dev user ID from settings
+        user_id = uuid.UUID(settings.DEV_USER_ID)
+        user = db.query(User).filter(User.id == user_id).first()
+        
+        if not user:
+            # Create dev user if it doesn't exist
+            user = User(
+                id=user_id,
+                email="dev@primedata.local",
+                name="Development User",
+                auth_provider=AuthProvider.NONE,
+                roles=["owner", "admin"]
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+        
+        # Get or create workspace memberships
+        workspace_memberships = db.query(WorkspaceMember).filter(
+            WorkspaceMember.user_id == user.id
+        ).all()
+        
+        default_workspace_id = None
+        if not workspace_memberships:
+            # Use the default workspace ID from settings
+            default_workspace_id = "550e8400-e29b-41d4-a716-446655440001"
+            workspace = db.query(Workspace).filter(Workspace.id == uuid.UUID(default_workspace_id)).first()
+            if not workspace:
+                workspace = Workspace(id=uuid.UUID(default_workspace_id), name="Default Development Workspace")
+                db.add(workspace)
+                db.commit()
+                db.refresh(workspace)
+            
+            membership = WorkspaceMember(
+                workspace_id=workspace.id,
+                user_id=user.id,
+                role=WorkspaceRole.OWNER
+            )
+            db.add(membership)
+            db.commit()
+            default_workspace_id = str(workspace.id)
+        else:
+            default_workspace_id = str(workspace_memberships[0].workspace_id)
+        
+        workspace_ids = [str(m.workspace_id) for m in workspace_memberships] if workspace_memberships else [default_workspace_id]
+        
+        # Sign backend JWT
+        payload = {
+            "sub": str(user.id),
+            "email": user.email,
+            "roles": user.roles,
+            "workspaces": workspace_ids
+        }
+        
+        access_token = sign_jwt(payload, exp_s=3600)
+        
+        return SessionExchangeResponse(
+            access_token=access_token,
+            user={
+                "id": str(user.id),
+                "email": user.email,
+                "name": user.name,
+                "roles": user.roles,
+                "picture_url": user.picture_url
+            },
+            default_workspace_id=default_workspace_id
+        )
+    
+    # Production mode: Verify NextAuth token
     claims = verify_nextauth_token(request.token)
     if not claims:
         raise HTTPException(
@@ -184,6 +255,21 @@ async def get_current_user_info(
             detail="User not found"
         )
     
+    # Convert roles from JSON format (e.g., {"global": ["admin"]}) to flat list
+    roles_list = []
+    if db_user.roles:
+        if isinstance(db_user.roles, dict):
+            # Extract all roles from nested structure
+            for role_group in db_user.roles.values():
+                if isinstance(role_group, list):
+                    roles_list.extend(role_group)
+                elif isinstance(role_group, str):
+                    roles_list.append(role_group)
+        elif isinstance(db_user.roles, list):
+            roles_list = db_user.roles
+        elif isinstance(db_user.roles, str):
+            roles_list = [db_user.roles]
+    
     return UserResponse(
         id=str(db_user.id),
         email=db_user.email,
@@ -191,7 +277,7 @@ async def get_current_user_info(
         first_name=db_user.first_name,
         last_name=db_user.last_name,
         timezone=db_user.timezone,
-        roles=db_user.roles,
+        roles=roles_list,
         picture_url=db_user.picture_url
     )
 
