@@ -6,21 +6,21 @@ Provides CRUD operations for Access Control Lists.
 
 from typing import List, Optional
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, status, Request
-from pydantic import BaseModel
-from sqlalchemy.orm import Session
-from loguru import logger
 
-from primedata.core.security import get_current_user
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from loguru import logger
 from primedata.core.scope import ensure_product_access
+from primedata.core.security import get_current_user
 from primedata.db.database import get_db
 from primedata.db.models import ACL, ACLAccessType
+from primedata.services.acl import create_acl as create_acl_service
+from primedata.services.acl import delete_acls as delete_acls_service
 from primedata.services.acl import (
-    create_acl as create_acl_service,
-    get_acls_for_user,
     get_acls_for_product,
-    delete_acls as delete_acls_service,
+    get_acls_for_user,
 )
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/api/v1/acl", tags=["access control"])
 

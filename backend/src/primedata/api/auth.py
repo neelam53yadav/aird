@@ -3,16 +3,16 @@ Authentication API router.
 """
 
 import uuid
-from typing import Dict, Any, List, Optional
-from fastapi import APIRouter, HTTPException, status, Depends
-from sqlalchemy.orm import Session
-from primedata.db.database import get_db
-from primedata.db.models import User, Workspace, WorkspaceMember, AuthProvider, WorkspaceRole
-from primedata.core.nextauth_verify import verify_nextauth_token
-from primedata.core.jwt_keys import sign_jwt
-from primedata.core.security import get_current_user
-from pydantic import BaseModel
+from typing import Any, Dict, List, Optional
 
+from fastapi import APIRouter, Depends, HTTPException, status
+from primedata.core.jwt_keys import sign_jwt
+from primedata.core.nextauth_verify import verify_nextauth_token
+from primedata.core.security import get_current_user
+from primedata.db.database import get_db
+from primedata.db.models import AuthProvider, User, Workspace, WorkspaceMember, WorkspaceRole
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 router = APIRouter()
 
@@ -315,8 +315,8 @@ async def create_workspace(
     If user already has workspaces, returns the first one.
     Otherwise, creates a new workspace and adds user as owner.
     """
-    from primedata.db.models import Workspace, WorkspaceMember, WorkspaceRole
     from primedata.core.user_utils import get_user_id
+    from primedata.db.models import Workspace, WorkspaceMember, WorkspaceRole
 
     user_id = get_user_id(user)
 

@@ -5,10 +5,10 @@ This module provides functionality to interact with Qdrant vector database
 for storing and retrieving embeddings.
 """
 
-import os
 import logging
+import os
 import time
-from typing import List, Dict, Any, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 from uuid import UUID
 
 logger = logging.getLogger(__name__)

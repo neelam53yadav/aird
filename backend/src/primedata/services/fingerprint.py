@@ -4,9 +4,9 @@ Fingerprint service for PrimeData.
 Generates readiness fingerprints by aggregating chunk-level metrics.
 """
 
-from typing import Dict, Any, List, Optional
-from loguru import logger
+from typing import Any, Dict, List, Optional
 
+from loguru import logger
 from primedata.services.trust_scoring import aggregate_metrics
 
 

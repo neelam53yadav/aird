@@ -5,11 +5,12 @@ This module provides REST API endpoints to serve embedding model configurations
 to the frontend, ensuring consistency and centralized management.
 """
 
-from typing import List, Dict, Any
+from typing import Any, Dict, List
+
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from ..core.embedding_config import EmbeddingModelRegistry, EmbeddingModelType, EmbeddingModelConfig
+from ..core.embedding_config import EmbeddingModelConfig, EmbeddingModelRegistry, EmbeddingModelType
 
 router = APIRouter(prefix="/api/v1/embedding-models", tags=["embedding-models"])
 

@@ -2,15 +2,16 @@
 Settings API router for managing workspace and user settings.
 """
 
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, status, Request
-from pydantic import BaseModel
-from sqlalchemy.orm import Session
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from primedata.core.scope import ensure_workspace_access
 from primedata.core.security import get_current_user
 from primedata.db.database import get_db
 from primedata.db.models import Workspace
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/api/v1/settings", tags=["Settings"])
 

@@ -4,7 +4,8 @@ Optimizer service for PrimeData.
 Provides suggestions for improving AI readiness based on fingerprint and policy evaluation.
 """
 
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, List, Optional
+
 from loguru import logger
 
 

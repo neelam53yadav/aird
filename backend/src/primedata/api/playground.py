@@ -2,19 +2,20 @@
 RAG Playground API endpoints for querying product-specific vector data.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request
-from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
-import time
 import logging
+import time
+from typing import Any, Dict, List, Optional
 
-from ..core.security import get_current_user
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel, Field
+
 from ..core.scope import ensure_product_access
+from ..core.security import get_current_user
 from ..core.user_utils import get_user_id
-from ..indexing.qdrant_client import QdrantClient
-from ..storage.minio_client import MinIOClient
 from ..db.database import get_db
 from ..db.models import Product
+from ..indexing.qdrant_client import QdrantClient
+from ..storage.minio_client import MinIOClient
 
 logger = logging.getLogger(__name__)
 
@@ -162,7 +163,7 @@ async def query_playground(
         filter_conditions = None
 
         try:
-            from ..services.acl import get_acls_for_user, apply_acl_filter_to_payloads, get_allowed_chunk_ids_from_payloads
+            from ..services.acl import apply_acl_filter_to_payloads, get_acls_for_user, get_allowed_chunk_ids_from_payloads
 
             # Get user's ACLs for this product
             user_id = get_user_id(current_user)

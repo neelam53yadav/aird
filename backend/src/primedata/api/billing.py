@@ -5,19 +5,19 @@ This module provides endpoints for Stripe billing integration,
 including checkout sessions, customer portal, and webhooks.
 """
 
-import os
 import json
-import stripe
-from typing import Dict, Any, Optional
+import os
 from datetime import datetime
+from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, HTTPException, Depends, Request, status
-from sqlalchemy.orm import Session
+import stripe
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
-from ..db.database import get_db
-from ..db.models import Workspace, BillingProfile, BillingPlan
 from ..core.security import get_current_user
+from ..db.database import get_db
+from ..db.models import BillingPlan, BillingProfile, Workspace
 
 # Initialize Stripe
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")

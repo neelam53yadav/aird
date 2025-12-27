@@ -2,14 +2,16 @@
 Web connector for scraping HTML content from URLs.
 """
 
-import time
-import requests
-from urllib.parse import urljoin, urlparse
-from typing import Dict, Any, Tuple, List
 import logging
-from .base import BaseConnector
+import time
+from typing import Any, Dict, List, Tuple
+from urllib.parse import urljoin, urlparse
+
+import requests
+
 from ..storage.minio_client import minio_client
 from ..storage.paths import safe_filename
+from .base import BaseConnector
 
 logger = logging.getLogger(__name__)
 

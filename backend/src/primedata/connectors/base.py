@@ -3,7 +3,7 @@ Base connector class for data source integrations.
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Tuple, Optional
+from typing import Any, Dict, Optional, Tuple
 
 
 class BaseConnector(ABC):

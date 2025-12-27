@@ -11,20 +11,20 @@ Enterprise best practices:
 - Cost optimization
 """
 
-import os
 import logging
+import os
 from datetime import datetime, timedelta
-from typing import List, Dict, Any
-from sqlalchemy.orm import Session
+from typing import Any, Dict, List
 
 from loguru import logger
 from primedata.db.database import get_db
 from primedata.db.models import (
-    PipelineArtifact,
     ArtifactStatus,
+    PipelineArtifact,
     RetentionPolicy,
 )
 from primedata.storage.minio_client import minio_client
+from sqlalchemy.orm import Session
 
 
 def apply_retention_policies(

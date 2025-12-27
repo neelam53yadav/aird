@@ -5,29 +5,30 @@ This module provides enterprise-ready REST API endpoints for managing
 data quality rules with full audit trails, compliance, and governance.
 """
 
-from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, HTTPException, Depends, Query, Request
-from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_, desc, func
-from pydantic import BaseModel, Field
 from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel, Field
+from sqlalchemy import and_, desc, func, or_
+from sqlalchemy.orm import Session
+
+from ..core.scope import ensure_product_access, ensure_workspace_access
+from ..core.security import get_current_user
+from ..core.user_utils import get_user_id
 from ..db.database import get_db
-from ..db.models import Product, Workspace, DqViolation
+from ..db.models import DqViolation, Product, Workspace
 from ..db.models_enterprise import (
+    AuditAction,
+    DataQualityComplianceReport,
     DataQualityRule,
+    DataQualityRuleAssignment,
     DataQualityRuleAudit,
     DataQualityRuleSet,
-    DataQualityRuleAssignment,
-    DataQualityComplianceReport,
     RuleSeverity,
     RuleStatus,
-    AuditAction,
 )
-from ..core.security import get_current_user
-from ..core.scope import ensure_workspace_access, ensure_product_access
-from ..core.user_utils import get_user_id
 
 router = APIRouter(prefix="/api/v1/enterprise/data-quality", tags=["enterprise-data-quality"])
 

@@ -5,34 +5,33 @@ Ports AIRD preprocessing logic with playbook support, adapted for MinIO storage.
 """
 
 import json
-import regex as re
+import logging as std_logging  # For Airflow compatibility
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from uuid import UUID
-import logging as std_logging  # For Airflow compatibility
 
+import regex as re
 from loguru import logger
 
 # Use Python logging for Airflow compatibility (Airflow captures standard logging)
 std_logger = std_logging.getLogger(__name__)
 
 from primedata.ingestion_pipeline.aird_stages.base import AirdStage, StageResult, StageStatus
-from primedata.ingestion_pipeline.aird_stages.playbooks import route_playbook, load_playbook_yaml
-from primedata.ingestion_pipeline.aird_stages.utils.text_processing import (
-    normalize_wrapped_lines,
-    redact_pii,
-    apply_normalizers,
-    split_pages_by_config,
-    detect_sections_configured,
-)
+from primedata.ingestion_pipeline.aird_stages.playbooks import load_playbook_yaml, route_playbook
 from primedata.ingestion_pipeline.aird_stages.utils.chunking import (
     char_chunk,
-    sentence_chunk,
     paragraph_chunk,
+    sentence_chunk,
     tokens_estimate,
 )
-
+from primedata.ingestion_pipeline.aird_stages.utils.text_processing import (
+    apply_normalizers,
+    detect_sections_configured,
+    normalize_wrapped_lines,
+    redact_pii,
+    split_pages_by_config,
+)
 
 # Audience patterns (aligned with AIRD) - ordered by specificity
 AUDIENCE_PATTERNS = {
@@ -549,8 +548,9 @@ class PreprocessStage(AirdStage):
                 # Try to get from workspace settings
                 if workspace_id and db_session:
                     try:
-                        from primedata.db.models import Workspace
                         from uuid import UUID as UUIDType
+
+                        from primedata.db.models import Workspace
 
                         # Convert string UUID to UUID object if needed
                         if isinstance(workspace_id, str):

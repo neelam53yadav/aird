@@ -4,10 +4,11 @@ LLM-based text optimization service.
 This module provides LLM API integration for intelligent text enhancement.
 """
 
-import os
-from typing import Dict, Any, Optional, List
-from loguru import logger
 import logging as std_logging  # For Airflow compatibility
+import os
+from typing import Any, Dict, List, Optional
+
+from loguru import logger
 
 # Use Python logging for Airflow compatibility
 std_logger = std_logging.getLogger(__name__)

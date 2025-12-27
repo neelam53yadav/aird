@@ -6,9 +6,9 @@ their properties, and metadata. This ensures consistency across the application
 and makes it easy to add new models or modify existing ones.
 """
 
-from typing import Dict, List, Optional
 from dataclasses import dataclass
 from enum import Enum
+from typing import Dict, List, Optional
 
 
 class EmbeddingModelType(str, Enum):

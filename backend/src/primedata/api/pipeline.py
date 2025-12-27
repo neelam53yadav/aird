@@ -5,22 +5,21 @@ This module provides REST API endpoints for managing data processing pipelines,
 including triggering pipeline runs and monitoring their status.
 """
 
-import os
 import json
 import logging
-from typing import List, Optional, Dict, Any
-from uuid import UUID
+import os
 from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import func
-from pydantic import BaseModel
-
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from primedata.core.scope import ensure_product_access
 from primedata.core.security import get_current_user
 from primedata.db.database import get_db
-from primedata.db.models import Product, PipelineRun, PipelineRunStatus, RawFile, RawFileStatus
+from primedata.db.models import PipelineRun, PipelineRunStatus, Product, RawFile, RawFileStatus
+from pydantic import BaseModel
+from sqlalchemy import func
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
@@ -326,8 +325,9 @@ async def trigger_pipeline(
 
             # Create new raw file records with the new version (copy the old ones)
             import uuid as uuid_lib
-            from primedata.storage.paths import raw_prefix
+
             from primedata.storage.minio_client import minio_client as minio_client_instance
+            from primedata.storage.paths import raw_prefix
 
             for old_raw_file in processed_files_to_reprocess:
                 # Update minio_key to use the new version number
@@ -980,7 +980,7 @@ def update_pipeline_run_status(
 
         # Update metrics if provided (save to S3 if large)
         if metrics:
-            from primedata.services.s3_json_storage import should_save_to_s3, save_json_to_s3
+            from primedata.services.s3_json_storage import save_json_to_s3, should_save_to_s3
 
             # Merge with existing metrics
             if pipeline_run.metrics is None:

@@ -5,12 +5,12 @@ Manages chunk metadata using Qdrant as the single source of truth.
 All metadata is stored in Qdrant payloads - no PostgreSQL tables needed.
 """
 
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict, List, Optional
 from uuid import UUID
-from sqlalchemy.orm import Session
-from loguru import logger
 
+from loguru import logger
 from primedata.indexing.qdrant_client import qdrant_client
+from sqlalchemy.orm import Session
 
 
 def create_document_metadata(

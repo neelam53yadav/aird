@@ -2,18 +2,20 @@
 NextAuth token verification module.
 """
 
-import jwt
 import base64
 import json
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
+
+import jwt
 from primedata.core.settings import get_settings
 
 try:
+    import hashlib
+
+    from cryptography.hazmat.backends import default_backend
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
     from jose import jwe
     from jose.constants import ALGORITHMS
-    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-    from cryptography.hazmat.backends import default_backend
-    import hashlib
 
     JWE_AVAILABLE = True
 except ImportError:

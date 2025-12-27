@@ -4,13 +4,12 @@ AIRD fingerprint generation stage for PrimeData.
 Generates readiness fingerprints by aggregating chunk-level metrics.
 """
 
+import json
 from datetime import datetime
 from typing import Any, Dict
 from uuid import UUID
 
 from loguru import logger
-
-import json
 from primedata.ingestion_pipeline.aird_stages.base import AirdStage, StageResult, StageStatus
 from primedata.services.fingerprint import generate_fingerprint
 

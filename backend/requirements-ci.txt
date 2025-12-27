@@ -28,6 +28,7 @@ tenacity==8.2.3
 loguru==0.7.2
 pypdf==3.17.4
 regex==2023.12.25
+numpy<2.0
 
 # OpenAI (lightweight, no heavy deps)
 openai>=1.0.0

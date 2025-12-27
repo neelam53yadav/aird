@@ -10,12 +10,11 @@ from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from loguru import logger
-
-from primedata.ingestion_pipeline.aird_stages.base import AirdStage, StageResult, StageStatus
+from primedata.indexing.embeddings import EmbeddingGenerator
 
 # Metadata is now stored in Qdrant payload - no PostgreSQL metadata tables needed
 from primedata.indexing.qdrant_client import qdrant_client
-from primedata.indexing.embeddings import EmbeddingGenerator
+from primedata.ingestion_pipeline.aird_stages.base import AirdStage, StageResult, StageStatus
 from primedata.services.trust_scoring import get_scoring_weights
 
 

@@ -2,13 +2,14 @@
 Security utilities for JWT handling and user authentication.
 """
 
-import jwt
 import time
-from typing import Dict, Any, Optional, List
 from functools import lru_cache
-from fastapi import HTTPException, status, Depends
-from primedata.core.settings import get_settings
+from typing import Any, Dict, List, Optional
+
+import jwt
+from fastapi import Depends, HTTPException, status
 from primedata.core.jwt_keys import get_jwks
+from primedata.core.settings import get_settings
 
 
 @lru_cache(maxsize=1)

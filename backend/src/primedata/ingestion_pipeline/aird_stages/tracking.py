@@ -8,10 +8,10 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 from uuid import UUID
 
-from sqlalchemy.orm import Session
 from loguru import logger
-
 from primedata.db.models import PipelineRun
+from sqlalchemy.orm import Session
+
 from .base import StageResult, StageStatus
 
 
