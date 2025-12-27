@@ -38,7 +38,7 @@ jobs:
 
       - name: Check formatting with black
         working-directory: backend
-        run: black --check src/
+        run: black --check src/ --line-length 127
 
       - name: Check import sorting with isort
         working-directory: backend

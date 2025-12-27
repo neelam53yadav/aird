@@ -14,8 +14,8 @@ from typing import Dict, Any
 from sqlalchemy.orm import Session
 
 from primedata.db.models import Product, PipelineRun, User, Workspace, ACL
-from primedata.services.fingerprint import FingerprintService
-from primedata.services.policy_engine import PolicyEngineService
+from primedata.services.fingerprint import generate_fingerprint
+from primedata.services.policy_engine import evaluate_policy
 from primedata.services.optimizer import suggest_next_config
 from primedata.services.acl import create_acl, get_acls_for_user, apply_acl_filter
 from primedata.ingestion_pipeline.aird_stages.storage import AirdStorageAdapter
