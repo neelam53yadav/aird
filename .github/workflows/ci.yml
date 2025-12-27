@@ -157,6 +157,8 @@ jobs:
 
   build-images:
     runs-on: ubuntu-latest
+    needs: [lint-backend, lint-frontend]  # Only build if linting passes
+    if: always() && (needs.lint-backend.result == 'success' && needs.lint-frontend.result == 'success')
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
