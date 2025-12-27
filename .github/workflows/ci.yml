@@ -42,7 +42,7 @@ jobs:
 
       - name: Check import sorting with isort
         working-directory: backend
-        run: isort --check-only src/
+        run: isort --check-only src/ --profile black --line-length 127
 
   test-backend:
     runs-on: ubuntu-latest
