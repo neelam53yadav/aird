@@ -44,16 +44,7 @@
 #   }
 # }
 
-# Data source to reference existing buckets
-data "google_storage_bucket" "primedata_raw" {
-  name = "primedata-raw"
-}
-
-data "google_storage_bucket" "primedata_processed" {
-  name = "primedata-processed"
-}
-
-data "google_storage_bucket" "primedata_exports" {
-  name = "primedata-exports"
-}
+# Note: Buckets are manually created and referenced by name
+# Data sources are not used to avoid permission issues during Terraform plan
+# Bucket names are hardcoded in outputs.tf
 
