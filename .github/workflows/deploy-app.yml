@@ -49,17 +49,24 @@ jobs:
             --format="value(name)" 2>/dev/null || echo "")
           
           if [ -z "$VM_EXISTS" ]; then
-            echo "⚠️  VM '${{ env.VM_NAME }}' does not exist!"
-            echo "Creating VM using Terraform..."
+            echo "::error::VM '${{ env.VM_NAME }}' does not exist!"
             echo ""
-            echo "Please run the 'Deploy Infrastructure' workflow first:"
-            echo "1. Go to: https://github.com/neelam53yadav/aird/actions/workflows/deploy-infra.yml"
-            echo "2. Click 'Run workflow'"
-            echo "3. Select branch: ${{ github.ref_name }}"
-            echo "4. Choose action: 'apply'"
-            echo "5. Click 'Run workflow'"
+            echo "📋 **Action Required:** Create the VM using Terraform"
             echo ""
-            echo "Alternatively, you can create the VM manually in GCP Console."
+            echo "**Option 1: Use GitHub Actions (Recommended)**"
+            echo "👉 Click this link to create the VM:"
+            echo "   https://github.com/neelam53yadav/aird/actions/workflows/deploy-infra.yml"
+            echo ""
+            echo "   Then:"
+            echo "   1. Click 'Run workflow' button"
+            echo "   2. Select branch: ${{ github.ref_name }}"
+            echo "   3. Choose action: 'apply'"
+            echo "   4. Click 'Run workflow'"
+            echo ""
+            echo "**Option 2: Use GCP Console**"
+            echo "   Create a Compute Engine VM named '${{ env.VM_NAME }}' in zone ${{ env.GCP_ZONE }}"
+            echo ""
+            echo "After the VM is created, re-run this workflow."
             exit 1
           fi
           
