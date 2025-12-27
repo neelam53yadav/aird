@@ -17,7 +17,7 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: 'Terraform action'
+        description: 'Terraform action (plan = preview changes, apply = create/update VM, destroy = delete VM)'
         required: true
         default: 'plan'
         type: choice
@@ -25,6 +25,11 @@ on:
           - plan
           - apply
           - destroy
+      auto_approve:
+        description: 'Auto-approve apply/destroy (skip confirmation)'
+        required: false
+        default: false
+        type: boolean
 
 env:
   GCP_PROJECT_ID: project-f3c8a334-a3f2-4f66-a06
@@ -99,7 +104,12 @@ jobs:
       - name: Terraform Apply
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
         working-directory: infra/terraform
-        run: terraform apply -auto-approve tfplan
+        run: |
+          if [ "${{ github.event.inputs.auto_approve }}" == "true" ]; then
+            terraform apply -auto-approve tfplan
+          else
+            terraform apply tfplan
+          fi
 
       - name: Terraform Apply (Auto on main/db-fixes)
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/db-fixes'
