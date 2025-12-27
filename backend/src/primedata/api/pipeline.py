@@ -489,6 +489,9 @@ async def list_pipeline_runs(
         PipelineRun.created_at.desc()
     ).limit(limit).all()
     
+    # Lazy-load metrics from S3 if archived
+    from primedata.services.lazy_json_loader import load_pipeline_run_metrics
+    
     return [
         PipelineRunResponse(
             id=run.id,
@@ -498,7 +501,7 @@ async def list_pipeline_runs(
             started_at=run.started_at,
             finished_at=run.finished_at,
             dag_run_id=run.dag_run_id,
-            metrics=run.metrics,
+            metrics=load_pipeline_run_metrics(run),
             created_at=run.created_at
         )
         for run in runs
@@ -525,6 +528,10 @@ async def get_pipeline_run(
     # Ensure user has access to the product
     ensure_product_access(db, request_obj, run.product_id)
     
+    # Lazy-load metrics from S3 if archived
+    from primedata.services.lazy_json_loader import load_pipeline_run_metrics
+    metrics = load_pipeline_run_metrics(run)
+    
     return PipelineRunResponse(
         id=run.id,
         product_id=run.product_id,
@@ -533,7 +540,7 @@ async def get_pipeline_run(
         started_at=run.started_at,
         finished_at=run.finished_at,
         dag_run_id=run.dag_run_id,
-        metrics=run.metrics,
+        metrics=metrics,
         created_at=run.created_at
     )
 
@@ -604,6 +611,10 @@ async def update_pipeline_run(
     
     logger.info(f"Updated pipeline run {run_id} to status {run.status.value}")
     
+    # Lazy-load metrics from S3 if archived
+    from primedata.services.lazy_json_loader import load_pipeline_run_metrics
+    metrics = load_pipeline_run_metrics(run)
+    
     return PipelineRunResponse(
         id=run.id,
         product_id=run.product_id,
@@ -612,7 +623,7 @@ async def update_pipeline_run(
         started_at=run.started_at,
         finished_at=run.finished_at,
         dag_run_id=run.dag_run_id,
-        metrics=run.metrics,
+        metrics=metrics,
         created_at=run.created_at
     )
 
@@ -977,9 +988,29 @@ def update_pipeline_run_status(
         elif status in [PipelineRunStatus.SUCCEEDED, PipelineRunStatus.FAILED]:
             pipeline_run.finished_at = datetime.utcnow()
         
-        # Update metrics if provided
+        # Update metrics if provided (save to S3 if large)
         if metrics:
+            from primedata.services.s3_json_storage import should_save_to_s3, save_json_to_s3
+            # Merge with existing metrics
+            if pipeline_run.metrics is None:
+                pipeline_run.metrics = {}
             pipeline_run.metrics.update(metrics)
+            
+            # Check if metrics should be saved to S3 (if >1MB)
+            if should_save_to_s3(pipeline_run.metrics):
+                s3_path = save_json_to_s3(
+                    pipeline_run.workspace_id,
+                    pipeline_run.product_id,
+                    "metrics",
+                    pipeline_run.metrics,
+                    version=pipeline_run.version,
+                    subfolder="pipeline_runs"
+                )
+                if s3_path:
+                    pipeline_run.metrics_path = s3_path
+                    pipeline_run.archived_at = datetime.utcnow()
+                    pipeline_run.metrics = {}  # Clear DB field after archiving
+                    logger.info(f"Archived metrics to S3 for pipeline run {pipeline_run.id}")
         
         db.commit()
         

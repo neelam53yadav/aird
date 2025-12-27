@@ -218,7 +218,36 @@ async def list_products(
         query = query.filter(Product.workspace_id == workspace_id)
     
     products = query.all()
-    return [ProductResponse.from_orm(product) for product in products]
+    # Lazy-load JSON fields from S3 if needed
+    from primedata.services.lazy_json_loader import load_product_json_field
+    result = []
+    for product in products:
+        # Create response with lazy-loaded fields
+        product_dict = {
+            "id": product.id,
+            "workspace_id": product.workspace_id,
+            "owner_user_id": product.owner_user_id,
+            "name": product.name,
+            "status": product.status,
+            "current_version": product.current_version,
+            "promoted_version": product.promoted_version,
+            "aird_enabled": product.aird_enabled,
+            "playbook_id": product.playbook_id,
+            "playbook_selection": product.playbook_selection,
+            "preprocessing_stats": load_product_json_field(product, "preprocessing_stats"),
+            "trust_score": product.trust_score,
+            "policy_status": product.policy_status.value if product.policy_status else None,
+            "policy_violations": product.policy_violations,
+            "chunk_metrics": load_product_json_field(product, "chunk_metrics"),
+            "validation_summary_path": product.validation_summary_path,
+            "trust_report_path": product.trust_report_path,
+            "chunking_config": product.chunking_config,
+            "embedding_config": product.embedding_config,
+            "created_at": product.created_at,
+            "updated_at": product.updated_at,
+        }
+        result.append(ProductResponse(**product_dict))
+    return result
 
 
 @router.get("/{product_id}", response_model=ProductResponse)
@@ -236,7 +265,32 @@ async def get_product(
     product = ensure_product_access(db, request, product_id)
     # Refresh to ensure we get the latest data from database (in case of recent updates)
     db.refresh(product)
-    return ProductResponse.from_orm(product)
+    # Lazy-load JSON fields from S3 if needed
+    from primedata.services.lazy_json_loader import load_product_json_field
+    product_dict = {
+        "id": product.id,
+        "workspace_id": product.workspace_id,
+        "owner_user_id": product.owner_user_id,
+        "name": product.name,
+        "status": product.status,
+        "current_version": product.current_version,
+        "promoted_version": product.promoted_version,
+        "aird_enabled": product.aird_enabled,
+        "playbook_id": product.playbook_id,
+        "playbook_selection": product.playbook_selection,
+        "preprocessing_stats": load_product_json_field(product, "preprocessing_stats"),
+        "trust_score": product.trust_score,
+        "policy_status": product.policy_status.value if product.policy_status else None,
+        "policy_violations": product.policy_violations,
+        "chunk_metrics": load_product_json_field(product, "chunk_metrics"),
+        "validation_summary_path": product.validation_summary_path,
+        "trust_report_path": product.trust_report_path,
+        "chunking_config": product.chunking_config,
+        "embedding_config": product.embedding_config,
+        "created_at": product.created_at,
+        "updated_at": product.updated_at,
+    }
+    return ProductResponse(**product_dict)
 
 
 @router.patch("/{product_id}", response_model=ProductResponse)
@@ -388,7 +442,32 @@ async def update_product(
                 f"strategy={manual.get('chunking_strategy')}"
             )
         
-        return ProductResponse.from_orm(product)
+        # Lazy-load JSON fields from S3 if needed
+        from primedata.services.lazy_json_loader import load_product_json_field
+        product_dict = {
+            "id": product.id,
+            "workspace_id": product.workspace_id,
+            "owner_user_id": product.owner_user_id,
+            "name": product.name,
+            "status": product.status,
+            "current_version": product.current_version,
+            "promoted_version": product.promoted_version,
+            "aird_enabled": product.aird_enabled,
+            "playbook_id": product.playbook_id,
+            "playbook_selection": product.playbook_selection,
+            "preprocessing_stats": load_product_json_field(product, "preprocessing_stats"),
+            "trust_score": product.trust_score,
+            "policy_status": product.policy_status.value if product.policy_status else None,
+            "policy_violations": product.policy_violations,
+            "chunk_metrics": load_product_json_field(product, "chunk_metrics"),
+            "validation_summary_path": product.validation_summary_path,
+            "trust_report_path": product.trust_report_path,
+            "chunking_config": product.chunking_config,
+            "embedding_config": product.embedding_config,
+            "created_at": product.created_at,
+            "updated_at": product.updated_at,
+        }
+        return ProductResponse(**product_dict)
         
     except HTTPException:
         # Re-raise HTTP exceptions (they already have proper error messages)
@@ -488,9 +567,11 @@ async def get_trust_metrics(
     
     product = ensure_product_access(db, request, product_id)
     
-    # Try to get from product model first
-    if product.readiness_fingerprint:
-        fingerprint_data = product.readiness_fingerprint
+    # Try to get from product model first (lazy load from S3 if needed)
+    from primedata.services.lazy_json_loader import load_product_json_field
+    fingerprint_data = load_product_json_field(product, "readiness_fingerprint")
+    
+    if fingerprint_data:
         
         # Handle both old format (nested in metrics) and new format (direct fingerprint)
         if isinstance(fingerprint_data, dict):
@@ -558,8 +639,9 @@ async def get_product_insights(
     
     product = ensure_product_access(db, request, product_id)
     
-    # Get fingerprint
-    fingerprint_data = product.readiness_fingerprint
+    # Get fingerprint (lazy load from S3 if needed)
+    from primedata.services.lazy_json_loader import load_product_json_field
+    fingerprint_data = load_product_json_field(product, "readiness_fingerprint")
     fingerprint = None
     
     if fingerprint_data:

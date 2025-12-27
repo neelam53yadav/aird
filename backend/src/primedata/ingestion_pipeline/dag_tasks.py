@@ -772,9 +772,21 @@ def task_preprocess(**context) -> Dict[str, Any]:
         if tracker:
             tracker.record_stage_result(result)
         
-            # Update product preprocessing stats
+            # Update product preprocessing stats (save to S3 if large)
             if product and result.status == StageStatus.SUCCEEDED:
-                product.preprocessing_stats = result.metrics
+                from primedata.services.s3_json_storage import save_product_json_field
+                s3_path, should_save_to_s3 = save_product_json_field(
+                    product.workspace_id,
+                    product.id,
+                    "preprocessing_stats",
+                    result.metrics
+                )
+                if should_save_to_s3 and s3_path:
+                    product.preprocessing_stats_path = s3_path
+                    product.preprocessing_stats = None  # Clear DB field
+                else:
+                    product.preprocessing_stats = result.metrics
+                    product.preprocessing_stats_path = None  # Clear S3 path if exists
                 # Get playbook_id from result metrics (if auto-routed) or use the one from params
                 final_playbook_id = result.metrics.get('playbook_id') or playbook_id
                 if final_playbook_id:
@@ -1089,13 +1101,25 @@ def task_fingerprint(**context) -> Dict[str, Any]:
         # Raise exception if stage failed (Airflow only fails tasks on exceptions)
         raise_if_stage_failed(result, "Fingerprint")
         
-        # Update product readiness fingerprint and trust score
+        # Update product readiness fingerprint and trust score (save to S3 if large)
         product = db.query(Product).filter(Product.id == product_id).first()
         if product and result.status == StageStatus.SUCCEEDED:
             # Extract fingerprint from result.metrics (fingerprint is nested inside metrics)
             fingerprint = result.metrics.get('fingerprint', {})
             if fingerprint:
-                product.readiness_fingerprint = fingerprint
+                from primedata.services.s3_json_storage import save_product_json_field
+                s3_path, should_save_to_s3 = save_product_json_field(
+                    product.workspace_id,
+                    product.id,
+                    "readiness_fingerprint",
+                    fingerprint
+                )
+                if should_save_to_s3 and s3_path:
+                    product.readiness_fingerprint_path = s3_path
+                    product.readiness_fingerprint = None  # Clear DB field
+                else:
+                    product.readiness_fingerprint = fingerprint
+                    product.readiness_fingerprint_path = None  # Clear S3 path if exists
                 # Extract AI_Trust_Score from fingerprint and set trust_score
                 trust_score = fingerprint.get("AI_Trust_Score")
                 if trust_score is not None:
