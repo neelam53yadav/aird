@@ -18,12 +18,6 @@ output "service_account_email" {
   value       = google_service_account.primedata_sa.email
 }
 
-output "service_account_key" {
-  description = "Service account key (base64 encoded)"
-  value       = google_service_account_key.primedata_sa_key.private_key
-  sensitive   = true
-}
-
 output "database_connection_name" {
   description = "Cloud SQL connection name"
   value       = "${var.project_id}:${var.region}:${var.db_instance_name}"

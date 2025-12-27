@@ -110,23 +110,67 @@ jobs:
       - name: Get VM IP
         id: get-vm-ip
         run: |
-          # Get VM IP
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Retrieving VM IP address..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          
+          VM_IP=""
+          
+          # Method 1: Try getting external IP via accessConfig
+          echo "Method 1: Trying accessConfig method..."
           VM_IP=$(gcloud compute instances describe ${{ env.VM_NAME }} \
             --zone=${{ env.GCP_ZONE }} \
+            --project=${{ env.GCP_PROJECT_ID }} \
             --format="value(networkInterfaces[0].accessConfig[0].natIP)" 2>/dev/null || echo "")
           
-          if [ -z "$VM_IP" ]; then
-            echo "❌ Error: Could not get VM IP address."
+          # Method 2: If that failed, try getting all accessConfigs and find the first external IP
+          if [ -z "$VM_IP" ] || [ "$VM_IP" = "None" ]; then
+            echo "Method 1 failed, trying alternative method..."
+            VM_IP=$(gcloud compute instances describe ${{ env.VM_NAME }} \
+              --zone=${{ env.GCP_ZONE }} \
+              --project=${{ env.GCP_PROJECT_ID }} \
+              --format="json" 2>/dev/null | \
+              grep -o '"natIP":"[^"]*"' | head -1 | cut -d'"' -f4 || echo "")
+          fi
+          
+          # Method 3: Try getting from Terraform output if available
+          if [ -z "$VM_IP" ] || [ "$VM_IP" = "None" ]; then
+            echo "Method 2 failed, trying Terraform output..."
+            if [ -d "infra/terraform" ] && [ -f "infra/terraform/.terraform/terraform.tfstate" ]; then
+              cd infra/terraform
+              VM_IP=$(terraform output -raw vm_external_ip 2>/dev/null | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' || echo "")
+              cd ../..
+            fi
+          fi
+          
+          # If we still don't have an IP, show detailed VM information for debugging
+          if [ -z "$VM_IP" ] || [ "$VM_IP" = "None" ] || [ "$VM_IP" = "N/A (private IP only)" ]; then
+            echo ""
+            echo "❌ Error: Could not retrieve VM external IP address."
+            echo ""
+            echo "VM Details:"
             VM_STATUS=$(gcloud compute instances describe ${{ env.VM_NAME }} \
               --zone=${{ env.GCP_ZONE }} \
-              --format="value(status)" 2>/dev/null || echo "")
-            echo "VM Status: $VM_STATUS"
-            echo "Please check the VM configuration in GCP Console."
+              --project=${{ env.GCP_PROJECT_ID }} \
+              --format="value(status)" 2>/dev/null || echo "Unknown")
+            echo "  Status: $VM_STATUS"
+            echo ""
+            echo "Network Configuration:"
+            gcloud compute instances describe ${{ env.VM_NAME }} \
+              --zone=${{ env.GCP_ZONE }} \
+              --project=${{ env.GCP_PROJECT_ID }} \
+              --format="yaml(networkInterfaces)" 2>/dev/null || echo "  Could not retrieve network configuration"
+            echo ""
+            echo "The VM may not have a public IP address assigned."
+            echo "Please check the VM configuration in GCP Console:"
+            echo "  https://console.cloud.google.com/compute/instancesDetail/zones/${{ env.GCP_ZONE }}/instances/${{ env.VM_NAME }}?project=${{ env.GCP_PROJECT_ID }}"
             exit 1
           fi
           
-          echo "vm_ip=$VM_IP" >> $GITHUB_OUTPUT
+          echo ""
           echo "✅ VM IP: $VM_IP"
+          echo "vm_ip=$VM_IP" >> $GITHUB_OUTPUT
 
       - name: Setup SSH
         run: |
