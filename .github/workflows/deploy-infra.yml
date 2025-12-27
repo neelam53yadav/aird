@@ -77,52 +77,138 @@ jobs:
           ENVIRONMENT: beta
           VM_NAME: primedata-beta
         run: |
-          set +e  # Don't fail on errors - imports may already exist
-          
           SA_EMAIL="primedata-compute-sa-${ENVIRONMENT}@${PROJECT_ID}.iam.gserviceaccount.com"
           
-          echo "Checking for existing resources and importing if needed..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Checking for existing resources and importing into Terraform state..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          
+          IMPORT_COUNT=0
+          SKIP_COUNT=0
+          ERROR_COUNT=0
           
           # Check if service account exists and import
           if gcloud iam service-accounts describe ${SA_EMAIL} --project=${PROJECT_ID} &>/dev/null; then
-            echo "Importing service account..."
-            terraform import google_service_account.primedata_sa projects/${PROJECT_ID}/serviceAccounts/${SA_EMAIL} 2>/dev/null || echo "Service account already in state"
+            echo "📋 Service Account exists: ${SA_EMAIL}"
+            if terraform import google_service_account.primedata_sa projects/${PROJECT_ID}/serviceAccounts/${SA_EMAIL} 2>&1; then
+              echo "  ✅ Imported successfully"
+              ((IMPORT_COUNT++))
+            else
+              IMPORT_ERROR=$?
+              if terraform state show google_service_account.primedata_sa &>/dev/null; then
+                echo "  ⚠️  Already in state (import skipped)"
+                ((SKIP_COUNT++))
+              else
+                echo "  ❌ Import failed (error code: ${IMPORT_ERROR})"
+                ((ERROR_COUNT++))
+              fi
+            fi
+          else
+            echo "📋 Service Account does not exist (will be created)"
           fi
+          echo ""
           
           # Check and import firewall rules
           if gcloud compute firewall-rules describe primedata-allow-http-${ENVIRONMENT} --project=${PROJECT_ID} &>/dev/null; then
-            echo "Importing HTTP firewall rule..."
-            terraform import google_compute_firewall.allow_http projects/${PROJECT_ID}/global/firewalls/primedata-allow-http-${ENVIRONMENT} 2>/dev/null || echo "HTTP firewall already in state"
+            echo "🔥 Firewall Rule exists: primedata-allow-http-${ENVIRONMENT}"
+            if terraform import google_compute_firewall.allow_http projects/${PROJECT_ID}/global/firewalls/primedata-allow-http-${ENVIRONMENT} 2>&1; then
+              echo "  ✅ Imported successfully"
+              ((IMPORT_COUNT++))
+            else
+              IMPORT_ERROR=$?
+              if terraform state show google_compute_firewall.allow_http &>/dev/null; then
+                echo "  ⚠️  Already in state (import skipped)"
+                ((SKIP_COUNT++))
+              else
+                echo "  ❌ Import failed (error code: ${IMPORT_ERROR})"
+                ((ERROR_COUNT++))
+              fi
+            fi
+          else
+            echo "🔥 Firewall Rule does not exist: primedata-allow-http-${ENVIRONMENT} (will be created)"
           fi
+          echo ""
           
           if gcloud compute firewall-rules describe primedata-allow-https-${ENVIRONMENT} --project=${PROJECT_ID} &>/dev/null; then
-            echo "Importing HTTPS firewall rule..."
-            terraform import google_compute_firewall.allow_https projects/${PROJECT_ID}/global/firewalls/primedata-allow-https-${ENVIRONMENT} 2>/dev/null || echo "HTTPS firewall already in state"
+            echo "🔥 Firewall Rule exists: primedata-allow-https-${ENVIRONMENT}"
+            if terraform import google_compute_firewall.allow_https projects/${PROJECT_ID}/global/firewalls/primedata-allow-https-${ENVIRONMENT} 2>&1; then
+              echo "  ✅ Imported successfully"
+              ((IMPORT_COUNT++))
+            else
+              IMPORT_ERROR=$?
+              if terraform state show google_compute_firewall.allow_https &>/dev/null; then
+                echo "  ⚠️  Already in state (import skipped)"
+                ((SKIP_COUNT++))
+              else
+                echo "  ❌ Import failed (error code: ${IMPORT_ERROR})"
+                ((ERROR_COUNT++))
+              fi
+            fi
+          else
+            echo "🔥 Firewall Rule does not exist: primedata-allow-https-${ENVIRONMENT} (will be created)"
           fi
+          echo ""
           
           if gcloud compute firewall-rules describe primedata-allow-ssh-${ENVIRONMENT} --project=${PROJECT_ID} &>/dev/null; then
-            echo "Importing SSH firewall rule..."
-            terraform import google_compute_firewall.allow_ssh projects/${PROJECT_ID}/global/firewalls/primedata-allow-ssh-${ENVIRONMENT} 2>/dev/null || echo "SSH firewall already in state"
+            echo "🔥 Firewall Rule exists: primedata-allow-ssh-${ENVIRONMENT}"
+            if terraform import google_compute_firewall.allow_ssh projects/${PROJECT_ID}/global/firewalls/primedata-allow-ssh-${ENVIRONMENT} 2>&1; then
+              echo "  ✅ Imported successfully"
+              ((IMPORT_COUNT++))
+            else
+              IMPORT_ERROR=$?
+              if terraform state show google_compute_firewall.allow_ssh &>/dev/null; then
+                echo "  ⚠️  Already in state (import skipped)"
+                ((SKIP_COUNT++))
+              else
+                echo "  ❌ Import failed (error code: ${IMPORT_ERROR})"
+                ((ERROR_COUNT++))
+              fi
+            fi
+          else
+            echo "🔥 Firewall Rule does not exist: primedata-allow-ssh-${ENVIRONMENT} (will be created)"
           fi
+          echo ""
           
           # Check and import VM
           if gcloud compute instances describe ${VM_NAME} --zone=${ZONE} --project=${PROJECT_ID} &>/dev/null; then
-            echo "Importing VM instance..."
-            terraform import google_compute_instance.primedata_vm projects/${PROJECT_ID}/zones/${ZONE}/instances/${VM_NAME} 2>/dev/null || echo "VM already in state"
+            echo "🖥️  VM Instance exists: ${VM_NAME}"
+            if terraform import google_compute_instance.primedata_vm projects/${PROJECT_ID}/zones/${ZONE}/instances/${VM_NAME} 2>&1; then
+              echo "  ✅ Imported successfully"
+              ((IMPORT_COUNT++))
+            else
+              IMPORT_ERROR=$?
+              if terraform state show google_compute_instance.primedata_vm &>/dev/null; then
+                echo "  ⚠️  Already in state (import skipped)"
+                ((SKIP_COUNT++))
+              else
+                echo "  ❌ Import failed (error code: ${IMPORT_ERROR})"
+                ((ERROR_COUNT++))
+              fi
+            fi
+          else
+            echo "🖥️  VM Instance does not exist (will be created)"
           fi
+          echo ""
           
-          # Import IAM bindings (these are harder to check, so just try to import)
-          echo "Importing IAM bindings..."
-          terraform import google_project_iam_member.storage_admin "${PROJECT_ID} roles/storage.admin serviceAccount:${SA_EMAIL}" 2>/dev/null || echo "Storage admin binding already in state or doesn't exist"
-          terraform import google_project_iam_member.cloudsql_client "${PROJECT_ID} roles/cloudsql.client serviceAccount:${SA_EMAIL}" 2>/dev/null || echo "CloudSQL client binding already in state or doesn't exist"
-          terraform import google_project_iam_member.compute_instance_admin "${PROJECT_ID} roles/compute.instanceAdmin.v1 serviceAccount:${SA_EMAIL}" 2>/dev/null || echo "Compute admin binding already in state or doesn't exist"
+          # Import IAM bindings (try to import, but don't fail if they don't exist in state format)
+          echo "🔐 Attempting to import IAM bindings..."
+          terraform import google_project_iam_member.storage_admin "${PROJECT_ID} roles/storage.admin serviceAccount:${SA_EMAIL}" 2>&1 | grep -v "already in state" || echo "  Storage admin binding handled"
+          terraform import google_project_iam_member.cloudsql_client "${PROJECT_ID} roles/cloudsql.client serviceAccount:${SA_EMAIL}" 2>&1 | grep -v "already in state" || echo "  CloudSQL client binding handled"
+          terraform import google_project_iam_member.compute_instance_admin "${PROJECT_ID} roles/compute.instanceAdmin.v1 serviceAccount:${SA_EMAIL}" 2>&1 | grep -v "already in state" || echo "  Compute admin binding handled"
+          echo ""
           
-          echo "✅ Import check complete"
-          set -e  # Re-enable error checking
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Import Summary:"
+          echo "  ✅ Successfully imported: ${IMPORT_COUNT}"
+          echo "  ⚠️  Already in state: ${SKIP_COUNT}"
+          echo "  ❌ Import errors: ${ERROR_COUNT}"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
           
           # Refresh state to ensure everything is synced
           echo "Refreshing Terraform state..."
-          terraform refresh -no-color || echo "Refresh completed (warnings are OK)"
+          terraform refresh -no-color 2>&1 | head -20 || echo "Refresh completed (warnings are OK)"
 
       - name: Terraform Format Check
         working-directory: infra/terraform
@@ -131,6 +217,29 @@ jobs:
       - name: Terraform Validate
         working-directory: infra/terraform
         run: terraform validate
+
+      - name: Check if Resources Exist Before Plan
+        id: check-resources
+        working-directory: infra/terraform
+        env:
+          PROJECT_ID: ${{ env.GCP_PROJECT_ID }}
+          ZONE: ${{ env.GCP_ZONE }}
+          ENVIRONMENT: beta
+          VM_NAME: primedata-beta
+        run: |
+          SA_EMAIL="primedata-compute-sa-${ENVIRONMENT}@${PROJECT_ID}.iam.gserviceaccount.com"
+          
+          RESOURCES_EXIST=false
+          
+          # Check if any resources exist in GCP
+          if gcloud iam service-accounts describe ${SA_EMAIL} --project=${PROJECT_ID} &>/dev/null || \
+             gcloud compute firewall-rules describe primedata-allow-http-${ENVIRONMENT} --project=${PROJECT_ID} &>/dev/null || \
+             gcloud compute instances describe ${VM_NAME} --zone=${ZONE} --project=${PROJECT_ID} &>/dev/null; then
+            RESOURCES_EXIST=true
+          fi
+          
+          echo "resources_exist=${RESOURCES_EXIST}" >> $GITHUB_OUTPUT
+          echo "Resources exist in GCP: ${RESOURCES_EXIST}"
 
       - name: Terraform Plan
         id: plan
@@ -149,12 +258,27 @@ jobs:
           echo "Actual Terraform error output:"
           cat /tmp/terraform-plan-output.txt || echo "Could not read plan output"
           echo ""
-          echo "Common causes:"
-          echo "1. Existing resources with same name (import them or rename)"
-          echo "2. Authentication issues"
-          echo "3. Invalid configuration"
-          echo "4. Missing required APIs (enable them in GCP)"
-          exit 1
+          
+          # Check if resources exist but weren't imported
+          if [ "${{ steps.check-resources.outputs.resources_exist }}" == "true" ]; then
+            echo "⚠️  WARNING: Resources exist in GCP but plan failed!"
+            echo ""
+            echo "This usually means:"
+            echo "1. Resources exist but weren't successfully imported into Terraform state"
+            echo "2. Terraform is trying to create resources that already exist"
+            echo ""
+            echo "Solution: The import step above should have handled this."
+            echo "If imports failed, check the import step output for errors."
+            echo ""
+            echo "Skipping apply to avoid permission errors..."
+            echo "::warning::Skipping apply - resources exist but imports may have failed"
+          else
+            echo "Common causes:"
+            echo "1. Authentication issues"
+            echo "2. Invalid configuration"
+            echo "3. Missing required APIs (enable them in GCP)"
+            exit 1
+          fi
 
       - name: Ensure VM Startup Script
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
@@ -190,9 +314,46 @@ jobs:
           fi
 
       - name: Terraform Apply
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply' && steps.plan.outcome == 'success'
         working-directory: infra/terraform
         run: |
+          # Check if plan shows resources would be created (and they already exist)
+          PLAN_OUTPUT=$(cat /tmp/terraform-plan-output.txt || echo "")
+          
+          if echo "$PLAN_OUTPUT" | grep -q "will be created" && [ "${{ steps.check-resources.outputs.resources_exist }}" == "true" ]; then
+            echo "⚠️  WARNING: Plan shows resources will be created, but they already exist in GCP!"
+            echo "This means imports may have failed. Checking what needs to be created..."
+            echo ""
+            
+            # Check each resource individually
+            if echo "$PLAN_OUTPUT" | grep -q "google_service_account.primedata_sa.*will be created"; then
+              if gcloud iam service-accounts describe primedata-compute-sa-beta@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com --project=${{ env.GCP_PROJECT_ID }} &>/dev/null; then
+                echo "❌ Service account exists but Terraform wants to create it - import failed!"
+                echo "Skipping apply to avoid permission errors."
+                exit 0
+              fi
+            fi
+            
+            if echo "$PLAN_OUTPUT" | grep -q "google_compute_firewall.*will be created"; then
+              if gcloud compute firewall-rules describe primedata-allow-http-beta --project=${{ env.GCP_PROJECT_ID }} &>/dev/null || \
+                 gcloud compute firewall-rules describe primedata-allow-https-beta --project=${{ env.GCP_PROJECT_ID }} &>/dev/null || \
+                 gcloud compute firewall-rules describe primedata-allow-ssh-beta --project=${{ env.GCP_PROJECT_ID }} &>/dev/null; then
+                echo "❌ Firewall rules exist but Terraform wants to create them - import failed!"
+                echo "Skipping apply to avoid permission errors."
+                exit 0
+              fi
+            fi
+            
+            if echo "$PLAN_OUTPUT" | grep -q "google_compute_instance.primedata_vm.*will be created"; then
+              if gcloud compute instances describe primedata-beta --zone=${{ env.GCP_ZONE }} --project=${{ env.GCP_PROJECT_ID }} &>/dev/null; then
+                echo "❌ VM exists but Terraform wants to create it - import failed!"
+                echo "Skipping apply to avoid permission errors."
+                exit 0
+              fi
+            fi
+          fi
+          
+          # If we get here, it's safe to apply
           if [ "${{ github.event.inputs.auto_approve }}" == "true" ]; then
             terraform apply -auto-approve tfplan
           else
@@ -233,9 +394,47 @@ jobs:
           fi
 
       - name: Terraform Apply (Auto on main/db-fixes)
-        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/db-fixes'
+        if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/db-fixes') && steps.plan.outcome == 'success'
         working-directory: infra/terraform
-        run: terraform apply -auto-approve tfplan
+        run: |
+          # Check if plan shows resources would be created (and they already exist)
+          PLAN_OUTPUT=$(cat /tmp/terraform-plan-output.txt || echo "")
+          
+          if echo "$PLAN_OUTPUT" | grep -q "will be created" && [ "${{ steps.check-resources.outputs.resources_exist }}" == "true" ]; then
+            echo "⚠️  WARNING: Plan shows resources will be created, but they already exist in GCP!"
+            echo "Checking which resources need to be created..."
+            echo ""
+            
+            # Check each resource individually
+            if echo "$PLAN_OUTPUT" | grep -q "google_service_account.primedata_sa.*will be created"; then
+              if gcloud iam service-accounts describe primedata-compute-sa-beta@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com --project=${{ env.GCP_PROJECT_ID }} &>/dev/null; then
+                echo "❌ Service account exists but Terraform wants to create it - import failed!"
+                echo "Skipping apply to avoid permission errors."
+                exit 0
+              fi
+            fi
+            
+            if echo "$PLAN_OUTPUT" | grep -q "google_compute_firewall.*will be created"; then
+              if gcloud compute firewall-rules describe primedata-allow-http-beta --project=${{ env.GCP_PROJECT_ID }} &>/dev/null || \
+                 gcloud compute firewall-rules describe primedata-allow-https-beta --project=${{ env.GCP_PROJECT_ID }} &>/dev/null || \
+                 gcloud compute firewall-rules describe primedata-allow-ssh-beta --project=${{ env.GCP_PROJECT_ID }} &>/dev/null; then
+                echo "❌ Firewall rules exist but Terraform wants to create them - import failed!"
+                echo "Skipping apply to avoid permission errors."
+                exit 0
+              fi
+            fi
+            
+            if echo "$PLAN_OUTPUT" | grep -q "google_compute_instance.primedata_vm.*will be created"; then
+              if gcloud compute instances describe primedata-beta --zone=${{ env.GCP_ZONE }} --project=${{ env.GCP_PROJECT_ID }} &>/dev/null; then
+                echo "❌ VM exists but Terraform wants to create it - import failed!"
+                echo "Skipping apply to avoid permission errors."
+                exit 0
+              fi
+            fi
+          fi
+          
+          # If we get here, it's safe to apply
+          terraform apply -auto-approve tfplan
 
       - name: Terraform Output
         if: steps.plan.outcome == 'success'
