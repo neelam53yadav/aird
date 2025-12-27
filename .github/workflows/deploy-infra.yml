@@ -167,6 +167,66 @@ jobs:
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
+      - name: Verify Credentials and Permissions
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Verifying GCP credentials and permissions for Terraform..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          
+          GITHUB_SA="github-actions@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com"
+          
+          # Check credentials
+          if [ -n "$GOOGLE_APPLICATION_CREDENTIALS" ]; then
+            echo "✅ GOOGLE_APPLICATION_CREDENTIALS is set: $GOOGLE_APPLICATION_CREDENTIALS"
+            if [ -f "$GOOGLE_APPLICATION_CREDENTIALS" ]; then
+              echo "✅ Credentials file exists"
+            else
+              echo "❌ Credentials file does not exist!"
+            fi
+          else
+            echo "⚠️  GOOGLE_APPLICATION_CREDENTIALS is not set"
+          fi
+          
+          echo ""
+          echo "Testing authentication..."
+          gcloud auth list
+          
+          echo ""
+          echo "Testing service account IAM policy (self-impersonation)..."
+          SA_POLICY=$(gcloud iam service-accounts get-iam-policy ${GITHUB_SA} \
+            --project=${{ env.GCP_PROJECT_ID }} \
+            --flatten="bindings[].members" \
+            --filter="bindings.role:roles/iam.serviceAccountTokenCreator" \
+            --format="value(bindings.members)" 2>/dev/null || echo "")
+          
+          if echo "$SA_POLICY" | grep -q "serviceAccount:${GITHUB_SA}"; then
+            echo "✅ Service account can impersonate itself"
+          else
+            echo "❌ Service account CANNOT impersonate itself!"
+            echo "   This is required for Workload Identity Federation."
+            echo "   Run: gcloud iam service-accounts add-iam-policy-binding ${GITHUB_SA} \\"
+            echo "     --role=roles/iam.serviceAccountTokenCreator \\"
+            echo "     --member=serviceAccount:${GITHUB_SA}"
+          fi
+          
+          echo ""
+          echo "Testing Workload Identity binding..."
+          if echo "$SA_POLICY" | grep -q "principalSet.*workloadIdentityPools"; then
+            echo "✅ Workload Identity principal can impersonate service account"
+          else
+            echo "⚠️  Workload Identity principal binding not found (may be OK if using different auth)"
+          fi
+          
+          echo ""
+          echo "Testing basic GCP access..."
+          if gcloud projects describe ${{ env.GCP_PROJECT_ID }} &>/dev/null; then
+            echo "✅ Can access project"
+          else
+            echo "❌ Cannot access project"
+          fi
+          echo ""
+
       - name: Terraform Init
         working-directory: infra/terraform
         run: terraform init
