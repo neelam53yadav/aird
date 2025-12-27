@@ -40,18 +40,79 @@ jobs:
         # Note: Project is already set via CLOUDSDK_CORE_PROJECT environment variable
         # Skipping explicit project setting to avoid token refresh issues
 
+      - name: Check/Create VM
+        id: vm-check
+        run: |
+          # Check if VM exists
+          VM_EXISTS=$(gcloud compute instances describe ${{ env.VM_NAME }} \
+            --zone=${{ env.GCP_ZONE }} \
+            --format="value(name)" 2>/dev/null || echo "")
+          
+          if [ -z "$VM_EXISTS" ]; then
+            echo "⚠️  VM '${{ env.VM_NAME }}' does not exist!"
+            echo "Creating VM using Terraform..."
+            echo ""
+            echo "Please run the 'Deploy Infrastructure' workflow first:"
+            echo "1. Go to: https://github.com/neelam53yadav/aird/actions/workflows/deploy-infra.yml"
+            echo "2. Click 'Run workflow'"
+            echo "3. Select branch: ${{ github.ref_name }}"
+            echo "4. Choose action: 'apply'"
+            echo "5. Click 'Run workflow'"
+            echo ""
+            echo "Alternatively, you can create the VM manually in GCP Console."
+            exit 1
+          fi
+          
+          # Check VM status
+          VM_STATUS=$(gcloud compute instances describe ${{ env.VM_NAME }} \
+            --zone=${{ env.GCP_ZONE }} \
+            --format="value(status)" 2>/dev/null || echo "")
+          
+          if [ "$VM_STATUS" != "RUNNING" ]; then
+            echo "⚠️  VM exists but is not running (status: $VM_STATUS)"
+            echo "Starting VM..."
+            gcloud compute instances start ${{ env.VM_NAME }} \
+              --zone=${{ env.GCP_ZONE }}
+            
+            echo "Waiting for VM to start (this may take 30-60 seconds)..."
+            sleep 30
+            
+            # Wait for VM to be fully running
+            for i in {1..10}; do
+              CURRENT_STATUS=$(gcloud compute instances describe ${{ env.VM_NAME }} \
+                --zone=${{ env.GCP_ZONE }} \
+                --format="value(status)" 2>/dev/null || echo "")
+              if [ "$CURRENT_STATUS" == "RUNNING" ]; then
+                echo "✅ VM is now running"
+                break
+              fi
+              echo "Waiting for VM to start... (attempt $i/10)"
+              sleep 10
+            done
+          else
+            echo "✅ VM is running"
+          fi
+
       - name: Get VM IP
         id: get-vm-ip
         run: |
+          # Get VM IP
           VM_IP=$(gcloud compute instances describe ${{ env.VM_NAME }} \
             --zone=${{ env.GCP_ZONE }} \
             --format="value(networkInterfaces[0].accessConfig[0].natIP)" 2>/dev/null || echo "")
+          
           if [ -z "$VM_IP" ]; then
-            echo "Error: Could not get VM IP. Is the VM running?"
+            echo "❌ Error: Could not get VM IP address."
+            VM_STATUS=$(gcloud compute instances describe ${{ env.VM_NAME }} \
+              --zone=${{ env.GCP_ZONE }} \
+              --format="value(status)" 2>/dev/null || echo "")
+            echo "VM Status: $VM_STATUS"
+            echo "Please check the VM configuration in GCP Console."
             exit 1
           fi
+          
           echo "vm_ip=$VM_IP" >> $GITHUB_OUTPUT
-          echo "VM IP: $VM_IP"
+          echo "✅ VM IP: $VM_IP"
 
       - name: Setup SSH
         run: |

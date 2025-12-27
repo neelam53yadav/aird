@@ -420,9 +420,9 @@ class PipelineRun(Base):
     product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False, index=True)
     version = Column(Integer, nullable=False)
     status = Column(SQLEnum(PipelineRunStatus), nullable=False, default=PipelineRunStatus.QUEUED)
-    started_at = Column(DateTime(timezone=True), nullable=False)  # Always has start time
+    started_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())  # Always has start time
     finished_at = Column(DateTime(timezone=True), nullable=True)
-    dag_run_id = Column(String(255), nullable=False, index=True)  # Required for Airflow tracking
+    dag_run_id = Column(String(255), nullable=False, default="", index=True)  # Required for Airflow tracking
     metrics = Column(JSON, nullable=False, default=dict)  # Recent runs only (<90 days)
     metrics_path = Column(String(1000), nullable=True, default=None)  # S3 path for archived metrics
     archived_at = Column(DateTime(timezone=True), nullable=True)  # When metrics were moved to S3
