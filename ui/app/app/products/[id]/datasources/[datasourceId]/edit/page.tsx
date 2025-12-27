@@ -491,8 +491,8 @@ export default function EditDataSourcePage() {
                 {fieldErrors[field.name] && (
                   <p className="text-sm text-red-600 mt-1">{fieldErrors[field.name]}</p>
                 )}
-                {field.description && (
-                  <p className="mt-2 text-sm text-gray-500">{field.description}</p>
+                {(field as any).description && (
+                  <p className="mt-2 text-sm text-gray-500">{(field as any).description}</p>
                 )}
               </div>
             ))}
