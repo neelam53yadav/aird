@@ -78,16 +78,22 @@ jobs:
         run: |
           # Terraform is idempotent - it will skip resources that already exist
           # If resources exist, plan will show "no changes" or only show differences
-          terraform plan -out=tfplan -no-color
+          terraform plan -out=tfplan -no-color 2>&1 | tee /tmp/terraform-plan-output.txt
         continue-on-error: true
 
       - name: Terraform Plan Status
         if: steps.plan.outcome == 'failure'
         run: |
-          echo "Terraform plan failed. This might be due to:"
+          echo "=== Terraform Plan Failed ==="
+          echo ""
+          echo "Actual Terraform error output:"
+          cat /tmp/terraform-plan-output.txt || echo "Could not read plan output"
+          echo ""
+          echo "Common causes:"
           echo "1. Existing resources with same name (import them or rename)"
           echo "2. Authentication issues"
           echo "3. Invalid configuration"
+          echo "4. Missing required APIs (enable them in GCP)"
           exit 1
 
       - name: Terraform Apply
