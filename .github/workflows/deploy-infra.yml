@@ -8,6 +8,12 @@ on:
     paths:
       - 'infra/terraform/**'
       - '.github/workflows/deploy-infra.yml'
+  pull_request:
+    branches:
+      - main
+      - db-fixes
+    paths:
+      - 'infra/terraform/**'
   workflow_dispatch:
     inputs:
       action:
