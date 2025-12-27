@@ -58,44 +58,37 @@ def generate_validation_summary(
     # Categorize: AI Ready if score >= threshold
     df["Category"] = df["AI_Trust_Score"].apply(lambda x: "AI Ready" if x >= threshold else "Non-AI Ready")
 
+    # Define expected columns with their display names
+    expected_columns = {
+        "AI_Trust_Score": "Avg Trust Score",
+        "GPT_Confidence": "Avg GPT Confidence",
+        "Completeness": "Avg Completeness",
+        "Accuracy": "Avg Accuracy",
+        "Quality": "Avg Quality",
+        "Secure": "Avg Secure",
+        "Timeliness": "Avg Timeliness",
+        "Metadata_Presence": "Avg Metadata %",
+        "Audience_Intentionality": "Avg Audience Intent",
+        "Diversity": "Avg Diversity",
+        "Context_Quality": "Avg Context Quality",
+        "Audience_Accessibility": "Avg Audience Access",
+        "KnowledgeBase_Ready": "Avg KB Readiness",
+    }
+
+    # Only aggregate columns that actually exist in the DataFrame
+    agg_dict = {}
+    rename_dict = {}
+    for col_name, display_name in expected_columns.items():
+        if col_name in df.columns:
+            agg_dict[col_name] = "mean"
+            rename_dict[col_name] = display_name
+
+    if not agg_dict:
+        logger.warning("No valid metric columns found for aggregation")
+        return ""
+
     # Compute summary stats
-    summary = (
-        df.groupby("Category")
-        .agg(
-            {
-                "AI_Trust_Score": "mean",
-                "GPT_Confidence": "mean",
-                "Completeness": "mean",
-                "Accuracy": "mean",
-                "Quality": "mean",
-                "Secure": "mean",
-                "Timeliness": "mean",
-                "Metadata_Presence": "mean",
-                "Audience_Intentionality": "mean",
-                "Diversity": "mean",
-                "Context_Quality": "mean",
-                "Audience_Accessibility": "mean",
-                "KnowledgeBase_Ready": "mean",
-            }
-        )
-        .rename(
-            columns={
-                "AI_Trust_Score": "Avg Trust Score",
-                "GPT_Confidence": "Avg GPT Confidence",
-                "Completeness": "Avg Completeness",
-                "Accuracy": "Avg Accuracy",
-                "Quality": "Avg Quality",
-                "Secure": "Avg Secure",
-                "Timeliness": "Avg Timeliness",
-                "Metadata_Presence": "Avg Metadata %",
-                "Audience_Intentionality": "Avg Audience Intent",
-                "Diversity": "Avg Diversity",
-                "Context_Quality": "Avg Context Quality",
-                "Audience_Accessibility": "Avg Audience Access",
-                "KnowledgeBase_Ready": "Avg KB Readiness",
-            }
-        )
-    )
+    summary = df.groupby("Category").agg(agg_dict).rename(columns=rename_dict)
 
     # Convert to CSV string
     csv_buffer = io.StringIO()
