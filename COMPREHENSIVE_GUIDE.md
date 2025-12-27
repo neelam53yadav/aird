@@ -2,7 +2,7 @@
 
 **AI-ready data from any source. Ingest, clean, chunk, embed & index. Test and export with confidence.**
 
-This comprehensive guide covers everything you need to know about PrimeData - from getting started to advanced configuration and optimization for maximum AI efficiency.
+This comprehensive guide covers everything you need to know about PrimeData - from getting started to advanced configuration, optimization, troubleshooting, and enterprise deployment.
 
 ---
 
@@ -10,13 +10,16 @@ This comprehensive guide covers everything you need to know about PrimeData - fr
 
 1. [Overview](#overview)
 2. [Getting Started](#getting-started)
-3. [Core Features](#core-features)
+3. [Core Features & Capabilities](#core-features--capabilities)
 4. [Configuration Guide](#configuration-guide)
 5. [AI Readiness & Optimization](#ai-readiness--optimization)
 6. [Policy Evaluation](#policy-evaluation)
 7. [User Guide](#user-guide)
-8. [Troubleshooting](#troubleshooting)
+8. [API Reference](#api-reference)
 9. [Architecture & Development](#architecture--development)
+10. [Troubleshooting](#troubleshooting)
+11. [Enterprise Features](#enterprise-features)
+12. [Deployment & Operations](#deployment--operations)
 
 ---
 
@@ -28,17 +31,20 @@ PrimeData is a comprehensive enterprise data platform designed for AI workflows.
 
 - **Data Ingestion**: Connect web sources, folders, databases, and APIs
 - **Intelligent Chunking**: Auto and manual modes with AI-powered optimization
-- **Vector Embeddings**: Support for OpenAI, MiniLM, and other embedding models
+- **Vector Embeddings**: Support for OpenAI, MiniLM, BGE, GTE, Instructor, and other embedding models
 - **Quality Management**: 7 rule types for comprehensive data validation
 - **AI Readiness Assessment**: Quality scoring and actionable recommendations
 - **Team Collaboration**: Role-based access control and workspace management
 - **Billing & Usage**: Stripe integration with subscription plans and usage tracking
 - **Export & Provenance**: Secure data export with complete lineage tracking
+- **MLflow Integration**: Complete experiment tracking and performance monitoring
+- **Enterprise Architecture**: Microservices design with scalable components
 
 ### Service URLs (Default)
 
 - **PrimeData UI**: http://localhost:3000
 - **PrimeData API**: http://localhost:8000
+- **API Documentation**: http://localhost:8000/docs
 - **MLflow UI**: http://localhost:5000
 - **Airflow UI**: http://localhost:8080
 - **MinIO Console**: http://localhost:9001
@@ -60,21 +66,40 @@ PrimeData is a comprehensive enterprise data platform designed for AI workflows.
 - **Node.js 18+**
 - **Docker & Docker Compose**
 - **Git**
+- **RAM**: Minimum 8GB, Recommended 16GB+
+- **Storage**: Minimum 10GB free space
 
 ### Quick Setup
 
-#### **Option 1: Automated Setup (Windows)**
+#### **Option 1: Quick Setup**
 
-```cmd
+```bash
+# Clone repository
 git clone <repository-url>
 cd PrimeData
-setup_mlflow.bat
+
+# Create virtual environment
+python -m venv venv
+
+# Activate virtual environment
+# Windows:
+venv\Scripts\activate
+# macOS/Linux:
+source venv/bin/activate
+
+# Install dependencies
+cd backend
+pip install -r requirements.txt
+pip install mlflow
+
+# Run database migrations
+alembic upgrade head
 ```
 
 This will:
 - Create and activate virtual environment
-- Install all dependencies
-- Test MLflow integration
+- Install all dependencies including MLflow
+- Set up the database
 
 #### **Option 2: Manual Setup**
 
@@ -104,9 +129,11 @@ cd backend
 alembic upgrade head
 
 # 7. Start services
-# Terminal 1: Backend
-cd backend
-python -m uvicorn primedata.main:app --reload --port 8000
+# Terminal 1: Backend (Platform-agnostic)
+python start_backend.py
+# Or manually:
+# cd backend
+# python -m uvicorn primedata.api.app:app --reload --port 8000
 
 # Terminal 2: Frontend
 cd ui
@@ -115,6 +142,18 @@ npm run dev
 # Terminal 3: MLflow (optional)
 mlflow server --host 0.0.0.0 --port 5000
 ```
+
+### Database Setup
+
+1. **Run database migrations:**
+   ```bash
+   # Platform-agnostic (works on Windows, macOS, Linux)
+   cd backend
+   # Activate virtual environment (if using one)
+   # Windows: venv\Scripts\activate
+   # macOS/Linux: source venv/bin/activate
+   alembic upgrade head
+   ```
 
 ### First Steps
 
@@ -128,7 +167,7 @@ mlflow server --host 0.0.0.0 --port 5000
 
 ---
 
-## Core Features
+## Core Features & Capabilities
 
 ### Enterprise Data Quality Management
 
@@ -154,6 +193,7 @@ mlflow server --host 0.0.0.0 --port 5000
 - Complete history of rule changes
 - User attribution and timestamps
 - Compliance reporting capabilities
+- Database-first architecture with ACID compliance
 
 ### Billing & Gating with Stripe
 
@@ -207,6 +247,9 @@ mlflow server --host 0.0.0.0 --port 5000
 - Artifact management
 - Pipeline metrics dashboard
 - Historical analysis and A/B testing
+- Task-level metrics aggregation
+- Version-based run filtering
+- Structured parameter & metric storage
 
 ### Export & Data Management
 
@@ -215,6 +258,13 @@ mlflow server --host 0.0.0.0 --port 5000
 - Version control for processed data
 - Secure downloads with presigned URLs
 - Metadata inclusion
+
+### Data Connectors
+
+- **Web**: Scrape websites and online content
+- **Folder**: Process files from local or remote directories
+- **Database**: Connect to database systems
+- **API**: RESTful API data ingestion
 
 ---
 
@@ -286,21 +336,36 @@ mlflow server --host 0.0.0.0 --port 5000
 
 #### **Available Models**
 
-- **OpenAI Models**: `openai-3-small` (1536 dim), `openai-3-large` (3072 dim)
-- **Sentence Transformers**: `minilm` (384 dim), `minilm-l12` (384 dim), `mpnet` (768 dim)
+**OpenAI Models**:
+- `openai-3-small` (1536 dim)
+- `openai-3-large` (3072 dim)
+
+**Open-Source Models** (Sentence Transformers):
+- **MiniLM**: `minilm` (384 dim), `minilm-l12` (384 dim)
+- **MPNet**: `mpnet` (768 dim)
+- **BGE Models**: `bge-small-en` (384 dim), `bge-base-en` (768 dim), `bge-large-en` (1024 dim)
+- **E5 Models**: `e5-small` (384 dim), `e5-base` (768 dim), `e5-large` (1024 dim)
+- **GTE Models**: `gte-small` (384 dim), `gte-base` (768 dim), `gte-large` (1024 dim)
+- **Instructor Models**: `instructor-base` (768 dim), `instructor-large` (768 dim)
+- **Multilingual Models**: Various multilingual variants with 768 and 1024 dimensions
 
 #### **Configuration**
 
 ```json
 {
   "embedding_config": {
-    "embedder_name": "openai-3-large",
-    "embedding_dimension": 3072
+    "embedder_name": "bge-large-en",
+    "embedding_dimension": 1024
   }
 }
 ```
 
 **Note**: OpenAI models require an API key configured in workspace settings or environment variables.
+
+**Adaptive Batching**: The system automatically adjusts batch sizes based on model dimensions:
+- **1024+ dimensions**: Batch size 3 (e.g., BGE Large)
+- **768+ dimensions**: Batch size 10
+- **Smaller models**: Batch size 32
 
 ### Playbook Selection
 
@@ -311,6 +376,73 @@ Playbooks define preprocessing strategies:
 - **SCANNED**: OCR-heavy content cleanup
 
 You can also create custom playbooks using the UI.
+
+### Environment Variables
+
+#### **Backend (.env)**
+
+```env
+# Database
+DATABASE_URL=postgresql://primedata:primedata123@localhost:5432/primedata
+
+# MLflow
+MLFLOW_TRACKING_URI=http://localhost:5000
+MLFLOW_BACKEND_STORE_URI=postgresql://primedata:primedata123@localhost:5432/primedata
+MLFLOW_DEFAULT_ARTIFACT_ROOT=s3://mlflow-artifacts
+
+# MinIO
+MINIO_ENDPOINT=localhost:9000
+MINIO_ACCESS_KEY=minioadmin
+MINIO_SECRET_KEY=minioadmin123
+MINIO_SECURE=false
+
+# Qdrant
+QDRANT_URL=http://localhost:6333
+# For Qdrant Cloud:
+# QDRANT_HOST=your-cluster-id.qdrant.tech
+# QDRANT_API_KEY=your-api-key-here
+# QDRANT_USE_SSL=true
+
+# Stripe (for billing features)
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_PRO_PRICE_ID=price_...
+STRIPE_ENTERPRISE_PRICE_ID=price_...
+
+# Frontend URL
+FRONTEND_URL=http://localhost:3000
+
+# Security
+JWT_SECRET_KEY=your-jwt-secret-key-here
+JWT_ALGORITHM=HS256
+JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
+
+# CORS Configuration
+CORS_ORIGINS=["http://localhost:3000", "http://127.0.0.1:3000"]
+
+# Development Settings
+DEBUG=true
+TESTING_MODE=false
+DISABLE_AUTH=false
+```
+
+#### **Frontend (.env.local)**
+
+```env
+# NextAuth Configuration
+NEXTAUTH_SECRET=your-secret-key
+NEXTAUTH_URL=http://localhost:3000
+
+# Google OAuth Configuration
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+
+# Stripe Configuration
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_...
+
+# API Configuration
+NEXT_PUBLIC_API_URL=http://localhost:8000
+```
 
 ---
 
@@ -332,6 +464,23 @@ The PrimeData optimizer actively improves data quality and pushes scores from "g
 
 **Result**: Companies using excellent-quality data (>85%) see **4x efficiency gains** in AI initiatives compared to "good" quality data (70-85%).
 
+### How Optimizations Work
+
+**Important**: You must re-run the pipeline after applying optimizations. When you click "Apply" on recommendations, it only saves the configuration flags. The actual optimizations are applied during the preprocessing stage of the next pipeline run.
+
+**Does it use LLMs? NO!**
+
+The optimizations are **pattern-based text processing functions**, NOT LLM-based. They use:
+- **Regular expressions (regex)** for pattern matching and replacement
+- **Text analysis algorithms** for correction
+- **Rule-based processing** (not AI/ML models)
+
+This makes them:
+- ✅ **Fast**: No API calls, no latency
+- ✅ **Predictable**: Consistent results
+- ✅ **Cost-effective**: No API costs
+- ✅ **Reliable**: Works offline
+
 ### Recommendation Types
 
 #### 1. Quality Normalization
@@ -340,17 +489,35 @@ The PrimeData optimizer actively improves data quality and pushes scores from "g
 - **Expected Impact**: +15-25% Quality score improvement
 - **When to use**: Quality score < 85%
 
+**Specific Fixes**:
+- Removes control characters (except newlines/tabs)
+- Normalizes whitespace (multiple spaces → single space)
+- Fixes punctuation spacing
+- Normalizes quotes and dashes
+- Fixes ellipsis
+- Removes excessive line breaks
+
 #### 2. Error Correction
 - **Action**: `error_correction`
 - **What it does**: Fixes common OCR mistakes and typos
 - **Expected Impact**: +5-10% Quality score improvement
 - **When to use**: Quality score < 85%
 
+**Specific Fixes**:
+- Common OCR word errors (teh → the, adn → and)
+- Fixes excessive repeated letters
+- Adds missing space after sentences
+
 #### 3. Metadata Extraction
 - **Action**: `extract_metadata`
 - **What it does**: Extracts additional metadata (dates, authors, versions)
 - **Expected Impact**: +5-15% Metadata Presence improvement
 - **When to use**: Metadata Presence < 90%
+
+**Specific Extractions**:
+- Date extraction (various formats)
+- Author extraction (By:, Author:, Written by:)
+- Version extraction (v1.0, Version 1.0, ver 2.3.4)
 
 #### 4. Increase Chunk Overlap
 - **Action**: `increase_chunk_overlap`
@@ -535,6 +702,8 @@ Then re-run the pipeline to re-evaluate.
 4. Test connection
 5. Save and sync
 
+**Important**: For folder data sources, use Docker container paths (`/opt/airflow/data`) not Windows paths (`D:\projects\data`).
+
 ### Pipeline Execution
 
 #### Running a Pipeline
@@ -552,6 +721,13 @@ Then re-run the pipeline to re-evaluate.
 4. **Policy Evaluation**: Compliance checking
 5. **Indexing**: Embedding generation and vector storage
 
+#### Version Management
+
+The system uses smart version resolution:
+- **Auto-Detection**: When no version is specified, automatically uses the latest ingested version
+- **Explicit Version**: You can specify a version to process
+- **Validation**: System validates that raw files exist for the specified version
+
 ### Analytics & Monitoring
 
 #### Metrics Dashboard
@@ -567,6 +743,252 @@ Then re-run the pipeline to re-evaluate.
 - Embedding generation speed
 - Vector indexing efficiency
 - Overall pipeline health
+
+### Team Management
+
+#### Team Roles
+
+- **Owner**: Full access, can manage team and billing
+- **Admin**: Full access, can manage team (no billing)
+- **Editor**: Can create and manage products
+- **Viewer**: Read-only access
+
+#### Managing Team Members
+
+1. Go to **Team** → **Invite Member**
+2. Enter email address
+3. Select role
+4. Send invitation
+
+### Billing & Subscriptions
+
+#### Subscription Plans
+
+- **Free**: 3 products, 5 data sources/product, 10 runs/month
+- **Pro ($99/month)**: 25 products, 50 data sources/product, 1,000 runs/month
+- **Enterprise ($999/month)**: Unlimited everything
+
+#### Managing Billing
+
+- Monitor usage against plan limits
+- Upgrade/downgrade subscription plans
+- Manage payment methods
+- Track usage analytics
+
+---
+
+## API Reference
+
+### Base URL
+
+```
+http://localhost:8000
+```
+
+### Authentication
+
+All API endpoints require authentication via JWT tokens obtained through the authentication flow.
+
+```http
+Authorization: Bearer <jwt_token>
+```
+
+### Key Endpoints
+
+#### **Authentication & User Management**
+
+- `POST /api/v1/auth/session/exchange` - Exchange NextAuth token for backend JWT
+- `GET /api/v1/users/me` - Get current user information
+- `PUT /api/v1/user/profile` - Update user profile
+- `GET /api/v1/workspaces` - Get user's workspaces
+
+#### **Product Management**
+
+- `POST /api/v1/products` - Create a new product
+- `GET /api/v1/products` - List products
+- `GET /api/v1/products/{product_id}` - Get product details
+- `PUT /api/v1/products/{product_id}` - Update product
+- `DELETE /api/v1/products/{product_id}` - Delete product
+
+#### **Data Source Management**
+
+- `POST /api/v1/datasources` - Create a new data source
+- `GET /api/v1/datasources` - List data sources
+- `GET /api/v1/datasources/{datasource_id}` - Get data source details
+- `PUT /api/v1/datasources/{datasource_id}` - Update data source
+- `DELETE /api/v1/datasources/{datasource_id}` - Delete data source
+
+#### **Pipeline Management**
+
+- `POST /api/v1/pipeline/run` - Trigger a pipeline run
+- `GET /api/v1/pipeline/runs` - List pipeline runs
+- `GET /api/v1/pipeline/runs/{run_id}` - Get pipeline run details
+
+#### **Data Quality Management**
+
+- `GET /api/v1/data-quality/rules/{product_id}` - Get data quality rules
+- `PUT /api/v1/data-quality/rules/{product_id}` - Update data quality rules
+- `GET /api/v1/data-quality/violations/{product_id}` - Get data quality violations
+
+#### **Analytics & Metrics**
+
+- `GET /api/v1/analytics/metrics` - Get analytics metrics
+- `GET /api/v1/products/{product_id}/mlflow-metrics` - Get MLflow metrics
+
+#### **Embedding Models**
+
+- `GET /api/v1/embedding-models` - Get available embedding models
+- `GET /api/v1/embedding-models/{model_id}` - Get specific model details
+
+#### **AI Readiness Assessment**
+
+- `GET /api/v1/ai-readiness/{product_id}` - Get AI readiness score
+
+#### **Playground & Testing**
+
+- `POST /api/v1/playground/query` - Test queries against processed data
+
+### API Documentation
+
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
+
+---
+
+## Architecture & Development
+
+### System Architecture
+
+#### **Microservices Design**
+
+- **Backend API**: FastAPI (Python) - http://localhost:8000
+- **Frontend UI**: Next.js (React/TypeScript) - http://localhost:3000
+- **Vector Database**: Qdrant - http://localhost:6333
+- **Object Storage**: MinIO - http://localhost:9000
+- **Orchestration**: Airflow - http://localhost:8080
+- **Database**: PostgreSQL - localhost:5432
+- **ML Tracking**: MLflow - http://localhost:5000
+
+#### **Data Flow**
+
+1. **Ingestion**: Data sources → MinIO (raw bucket)
+2. **Preprocessing**: Raw files → Normalized/Chunked → MinIO (clean bucket)
+3. **Embedding**: Chunks → OpenAI/MiniLM/BGE/etc. → Vectors
+4. **Indexing**: Vectors → Qdrant (vector database)
+5. **Query**: User query → Embedding → Qdrant search → Results
+
+### Project Structure
+
+```
+PrimeData/
+├── backend/                    # FastAPI backend
+│   ├── src/primedata/         # Python package
+│   │   ├── api/               # API endpoints
+│   │   ├── core/              # Core functionality
+│   │   ├── db/                # Database models
+│   │   ├── indexing/          # Embedding and vector operations
+│   │   ├── connectors/        # Data source connectors
+│   │   ├── ingestion_pipeline/ # Pipeline stages
+│   │   │   ├── dag_tasks.py  # Task functions
+│   │   │   └── aird_stages/  # AIRD pipeline stages
+│   │   └── services/          # Business logic services
+│   ├── alembic/               # Database migrations
+│   └── requirements.txt
+├── ui/                        # Next.js frontend
+│   ├── app/                   # App Router pages
+│   ├── components/            # React components
+│   └── lib/                   # Utilities
+├── infra/                     # Infrastructure
+│   ├── docker-compose.yml
+│   └── airflow/               # Airflow configuration
+│       └── dags/              # DAG files
+└── docs/                      # Documentation
+```
+
+### Airflow Modular Architecture
+
+The system uses a modular architecture for Airflow DAGs:
+
+- **DAG Files**: Minimal orchestration logic only (~100 lines)
+- **Task Functions**: Business logic in `dag_tasks.py` module
+- **AIRD Stages**: Reusable pipeline components
+
+**Benefits**:
+- ✅ Maintainability: Business logic changes don't require DAG file changes
+- ✅ Testability: Task functions can be unit tested independently
+- ✅ Reusability: Task functions can be used in multiple DAGs
+- ✅ Version Control: Clear separation in git history
+
+### Database Migrations
+
+```bash
+cd backend
+source venv/bin/activate
+alembic upgrade head
+```
+
+### MLflow Integration
+
+MLflow provides specialized ML experiment tracking that Airflow cannot provide:
+
+**Key Features**:
+- Experiment search & historical run querying
+- Version-based run filtering
+- Structured metrics aggregation across multiple runs
+- Parameter & metric storage with prefixes
+- Experiment organization by product
+- MLflow UI integration & visualization
+- Task-level metrics tracking
+- Specialized ML metrics logging
+- Artifact versioning & storage
+- Run status aggregation across tasks
+- Historical performance trend analysis
+- Parameter extraction from historical runs
+
+**Why Both Tools?**
+- **Airflow**: Orchestrates WHEN and HOW tasks run
+- **MLflow**: Tracks WHAT happened and HOW WELL it performed
+
+### Qdrant as Single Source of Truth
+
+The system uses Qdrant as the single source of truth for all chunk metadata:
+
+- **Metadata Storage**: All chunk metadata stored in Qdrant payload
+- **ACL Filtering**: Uses Qdrant scroll API for access control
+- **Analytics Queries**: Uses Qdrant for analytics instead of PostgreSQL
+- **No Duplication**: Eliminates data duplication between PostgreSQL and Qdrant
+
+**Qdrant Payload Fields**:
+- `created_at`, `collection_id`, `version`
+- `source_file`, `page_number`, `document_id`
+- `field_name`, `tags`, `score`
+- `text`, `text_length`, `source`, `audience`
+- `timestamp`, `product_id`, `index_scope`
+- `doc_scope`, `field_scope`, `token_est`
+
+### Database Optimization
+
+The system implements enterprise best practices for database optimization:
+
+**Hybrid Storage Pattern**:
+- Small JSON fields stored inline in PostgreSQL
+- Large JSON fields (>1MB) stored in S3
+- Lazy loading: Fields loaded from S3 when needed
+
+**Archiving**:
+- Old pipeline run metrics archived to S3 after 90 days
+- DQ violations can be archived to S3
+- Reduces database storage costs
+
+**Indexing**:
+- Indexes on frequently queried columns
+- Composite indexes for common query patterns
+- Performance optimization for large datasets
+
+**NOT NULL Constraints**:
+- Required fields marked as NOT NULL
+- Default values for existing data
+- Data integrity enforcement
 
 ---
 
@@ -625,10 +1047,33 @@ lsof -i :8000  # Linux/Mac
 
 #### Pipeline Issues
 
-- Check Airflow UI at http://localhost:8080
-- Verify MLflow server is running
-- Check data quality rules configuration
-- Review pipeline logs in Airflow
+**"No raw data found for preprocessing"**
+- Check data source configuration (use Docker container paths)
+- Verify file paths (use `/opt/airflow/data` not Windows paths)
+- Check file permissions
+- Review ingest task logs in Airflow UI
+
+**Database Connection Errors**
+- Verify PostgreSQL is running: `docker-compose ps postgres`
+- Check database credentials
+- Verify network connectivity
+- Review database logs
+
+**Import Errors in Airflow**
+- Check PYTHONPATH environment variable
+- Verify module imports in DAG
+- Check file permissions
+- Review Airflow logs
+
+**DAG Import Timeout**
+- Move heavy imports inside task functions (lazy imports)
+- Reduce module-level code execution
+- Check for circular imports
+
+**Indexing Task Timeout**
+- Use adaptive batch sizing for large models
+- Increase execution timeout in DAG
+- Use smaller embedding models for testing
 
 #### Configuration Not Saving
 
@@ -663,6 +1108,30 @@ lsof -i :8000  # Linux/Mac
 - Check presigned URL generation
 - Ensure file paths are correct (v/{version}/clean/)
 
+#### MLflow Issues
+
+**MLflow tracking failed**
+- Check MLflow server: `curl http://localhost:5000/health`
+- Verify environment variables
+- Check PostgreSQL connection for MLflow backend
+
+**Experiment not found**
+- Verify experiment is created before logging
+- Check experiment name and ID
+- Review MLflow logs
+
+#### Data Quality Issues
+
+**Rules not saving**
+- Check database connection
+- Validate rule configuration format
+- Review API response for errors
+
+**Violations not detected**
+- Verify rule evaluation is running
+- Check rule configuration
+- Test rules with sample data
+
 ### Getting Help
 
 1. **Check Documentation**: Review relevant sections
@@ -672,98 +1141,182 @@ lsof -i :8000  # Linux/Mac
 
 ---
 
-## Architecture & Development
+## Enterprise Features
 
-### System Architecture
+### Enterprise Data Quality Management
 
-#### **Microservices Design**
+#### **Database-First Architecture**
 
-- **Backend API**: FastAPI (Python) - http://localhost:8000
-- **Frontend UI**: Next.js (React/TypeScript) - http://localhost:3000
-- **Vector Database**: Qdrant - http://localhost:6333
-- **Object Storage**: MinIO - http://localhost:9000
-- **Orchestration**: Airflow - http://localhost:8080
-- **Database**: PostgreSQL - localhost:5432
-- **ML Tracking**: MLflow - http://localhost:5000
+- **ACID Compliance**: Transactional rule updates
+- **Audit Trail**: Complete change history with user attribution
+- **Concurrent Access**: Multi-user rule management with conflict resolution
+- **Security**: Role-based access control and data encryption
 
-#### **Data Flow**
+#### **Rule Lifecycle Management**
 
-1. **Ingestion**: Data sources → MinIO (raw bucket)
-2. **Preprocessing**: Raw files → Normalized/Chunked → MinIO (clean bucket)
-3. **Embedding**: Chunks → OpenAI/MiniLM → Vectors
-4. **Indexing**: Vectors → Qdrant (vector database)
-5. **Query**: User query → Embedding → Qdrant search → Results
+- **Rule Creation**: Template selection, configuration, testing, review, activation
+- **Rule Updates**: Change request, impact analysis, testing, approval, deployment
+- **Rule Retirement**: Deprecation notice, impact assessment, migration planning, deactivation, archive
 
-### Project Structure
+#### **Quality Monitoring**
 
+- **Real-time Monitoring**: Continuous rule evaluation with violation alerts
+- **Performance Metrics**: Rule execution performance and system resource usage
+- **Quality Dashboards**: Real-time quality scores and violation trend analysis
+- **Compliance Reports**: Regulatory compliance status and audit trail summaries
+
+### Version Management
+
+#### **Smart Version Resolution**
+
+The system implements Option C (Hybrid Approach) for version management:
+
+- **Auto-Detection**: When no version is specified, automatically uses latest ingested version
+- **Explicit Control**: You can specify a version to process
+- **Validation**: System validates that raw files exist for the specified version
+- **Helpful Errors**: Guides users to correct action when version not found
+
+**Benefits**:
+- ✅ User-friendly: No manual version coordination needed
+- ✅ Automatic: Always processes latest available data
+- ✅ Flexible: Still allows explicit version control
+- ✅ Enterprise-grade: Follows industry best practices
+
+### Raw File Tracking
+
+#### **Metadata Catalog Pattern**
+
+- **Database**: Fast queries for file metadata
+- **MinIO**: Scalable object storage for files
+- **Separation**: Clear boundaries between systems
+
+#### **Enterprise Enhancements**
+
+- **Status Tracking**: Track file lifecycle (ingesting, ingested, processing, processed, failed, deleted)
+- **File Validation**: Validate files exist in MinIO before processing
+- **Checksum/Integrity**: Store file checksum/ETag for integrity checking
+- **Reconciliation**: Periodic job to reconcile DB and MinIO
+- **Soft Delete**: Audit trail of deletions with retention policies
+- **Audit Logging**: Complete change history for compliance
+
+### Database Optimization
+
+#### **Hybrid Storage Pattern**
+
+- **Small JSON**: Stored inline in PostgreSQL
+- **Large JSON**: Stored in S3 (MinIO) when >1MB
+- **Lazy Loading**: Fields loaded from S3 when accessed
+- **Transparent**: API responses maintain compatibility
+
+#### **Archiving**
+
+- **Pipeline Runs**: Metrics archived to S3 after 90 days
+- **DQ Violations**: Can be archived to S3 for long-term storage
+- **Cost Optimization**: Reduces database storage costs
+
+#### **Performance Optimization**
+
+- **Indexes**: Added on frequently queried columns
+- **Composite Indexes**: For common query patterns
+- **NOT NULL Constraints**: Data integrity enforcement
+
+---
+
+## Deployment & Operations
+
+### Local Development
+
+#### **Platform-Agnostic Scripts**
+
+PrimeData uses Python scripts that work on Windows, macOS, and Linux:
+
+**Start Backend Server:**
+```bash
+# Works on all platforms (Windows, macOS, Linux)
+python start_backend.py
 ```
-PrimeData/
-├── backend/              # FastAPI backend
-│   ├── src/primedata/   # Python package
-│   │   ├── api/         # API endpoints
-│   │   ├── core/        # Core functionality
-│   │   ├── db/          # Database models
-│   │   ├── indexing/    # Embedding and vector operations
-│   │   ├── connectors/  # Data source connectors
-│   │   └── analysis/    # Content analysis
-│   ├── alembic/         # Database migrations
-│   └── requirements.txt
-├── ui/                   # Next.js frontend
-│   ├── app/             # App Router pages
-│   ├── components/      # React components
-│   └── lib/             # Utilities
-├── infra/               # Infrastructure
-│   ├── docker-compose.yml
-│   └── airflow/         # Airflow configuration
-└── docs/                # Documentation
-```
 
-### API Documentation
+The script automatically:
+- Detects your operating system
+- Finds and activates virtual environment (`.venv` or `venv`)
+- Sets PYTHONPATH correctly
+- Starts the FastAPI server with hot reload
 
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
+**Benefits:**
+- ✅ Single script for all platforms
+- ✅ No need for separate `.bat` and `.sh` files
+- ✅ Automatic virtual environment detection
+- ✅ Cross-platform compatibility
 
-### Database Migrations
+#### **Docker Compose Setup**
 
 ```bash
-cd backend
-source venv/bin/activate
-alembic upgrade head
+# Start all services
+docker-compose -f infra/docker-compose.yml up -d
+
+# Check service status
+docker-compose -f infra/docker-compose.yml ps
+
+# View logs
+docker-compose -f infra/docker-compose.yml logs [service_name]
+
+# Restart services
+docker-compose -f infra/docker-compose.yml restart [service_name]
 ```
 
-### Environment Variables
+### Cloud Deployment
 
-#### Backend (.env)
+#### **Qdrant Cloud Setup**
 
-```env
-# Database
-DATABASE_URL=postgresql://primedata:primedata123@localhost:5432/primedata
+1. Create Qdrant Cloud account at https://cloud.qdrant.io/
+2. Create a new cluster (free tier: 1GB storage, 1M vectors)
+3. Update environment variables:
+   ```env
+   QDRANT_HOST=your-cluster-id.qdrant.tech
+   QDRANT_API_KEY=your-api-key-here
+   QDRANT_USE_SSL=true
+   ```
 
-# MLflow
-MLFLOW_TRACKING_URI=http://localhost:5000
+#### **Digital Ocean Deployment**
 
-# MinIO
-MINIO_HOST=localhost:9000
-MINIO_ACCESS_KEY=minioadmin
-MINIO_SECRET_KEY=minioadmin123
+Recommended options:
+- **Droplet**: For self-managed infrastructure
+- **App Platform**: For managed deployment (focus on code, not servers)
+- **Managed Database**: For PostgreSQL hosting
+- **Spaces**: For S3-compatible object storage
 
-# Qdrant
-QDRANT_HOST=localhost
-QDRANT_PORT=6333
+### Production Considerations
 
-# OpenAI
-OPENAI_API_KEY=your-api-key-here
-```
+#### **Security**
 
-#### Frontend (.env.local)
+- Use strong JWT secrets
+- Enable HTTPS/TLS
+- Configure proper CORS settings
+- Implement rate limiting
+- Use environment-specific secrets
 
-```env
-NEXTAUTH_SECRET=your-secret-key
-NEXTAUTH_URL=http://localhost:3000
-GOOGLE_CLIENT_ID=your-google-client-id
-GOOGLE_CLIENT_SECRET=your-google-client-secret
-NEXT_PUBLIC_API_URL=http://localhost:8000
-```
+#### **Performance**
+
+- Configure connection pooling
+- Use CDN for static assets
+- Implement caching strategies
+- Monitor resource usage
+- Scale services horizontally
+
+#### **Monitoring**
+
+- Set up health checks
+- Configure logging aggregation
+- Implement alerting
+- Monitor performance metrics
+- Track error rates
+
+#### **Backup & Recovery**
+
+- Regular database backups
+- S3/MinIO backup strategy
+- Disaster recovery plan
+- Test recovery procedures
 
 ---
 
@@ -776,12 +1329,10 @@ PrimeData provides a comprehensive platform for preparing data for AI applicatio
 - Understand and use all core features
 - Troubleshoot common issues
 - Achieve excellent data quality (>85%) for 4x efficiency gains
+- Deploy to production environments
 
 For additional support, check the API documentation at http://localhost:8000/docs or review the troubleshooting section.
 
 ---
 
 **PrimeData** - Transforming data into AI-ready insights with enterprise-grade quality and governance.
-
-
-
