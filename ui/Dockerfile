@@ -13,6 +13,9 @@ RUN npm ci
 FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
+
+# Copy all source files needed for build
+# Using COPY . . ensures all files are included (lib, app, components, etc.)
 COPY . .
 
 # Build Next.js

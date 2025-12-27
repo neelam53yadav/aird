@@ -59,6 +59,101 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ steps.get-vm-ip.outputs.vm_ip }} >> ~/.ssh/known_hosts
 
+      - name: Detect changed files and determine which services to rebuild
+        id: detect-changes
+        run: |
+          # Get the base commit (for push events, use the previous commit)
+          if [ "${{ github.event_name }}" == "push" ]; then
+            BASE_SHA="${{ github.event.before }}"
+            HEAD_SHA="${{ github.sha }}"
+          else
+            # For workflow_dispatch or PR, compare with main branch
+            BASE_SHA="origin/main"
+            HEAD_SHA="HEAD"
+          fi
+          
+          # Fetch base commit if needed
+          git fetch --depth=1 origin main 2>/dev/null || true
+          
+          # Get list of changed files
+          CHANGED_FILES=$(git diff --name-only ${BASE_SHA}..${HEAD_SHA} 2>/dev/null || git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "")
+          
+          if [ -z "$CHANGED_FILES" ]; then
+            echo "No changed files detected, will rebuild all services"
+            echo "rebuild_backend=true" >> $GITHUB_OUTPUT
+            echo "rebuild_frontend=true" >> $GITHUB_OUTPUT
+            echo "rebuild_airflow=true" >> $GITHUB_OUTPUT
+            echo "skip_build=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+          
+          # Check for backend changes
+          BACKEND_CHANGED=false
+          if echo "$CHANGED_FILES" | grep -qE "^backend/(src|Dockerfile|requirements|alembic)"; then
+            BACKEND_CHANGED=true
+            echo "Backend source files changed"
+          fi
+          
+          # Check for frontend changes
+          FRONTEND_CHANGED=false
+          if echo "$CHANGED_FILES" | grep -qE "^ui/(app|lib|components|Dockerfile|package\.json|next\.config|tsconfig)"; then
+            FRONTEND_CHANGED=true
+            echo "Frontend source files changed"
+          fi
+          
+          # Check for Airflow changes
+          AIRFLOW_CHANGED=false
+          if echo "$CHANGED_FILES" | grep -qE "^infra/airflow"; then
+            AIRFLOW_CHANGED=true
+            echo "Airflow files changed"
+          fi
+          
+          # Check for docker-compose changes (affects all services)
+          COMPOSE_CHANGED=false
+          if echo "$CHANGED_FILES" | grep -qE "^infra/docker-compose\.prod\.yml"; then
+            COMPOSE_CHANGED=true
+            echo "Docker Compose config changed - will rebuild all services"
+          fi
+          
+          # Determine which services to rebuild
+          if [ "$COMPOSE_CHANGED" = true ]; then
+            # If compose file changed, rebuild all
+            REBUILD_BACKEND=true
+            REBUILD_FRONTEND=true
+            REBUILD_AIRFLOW=true
+          else
+            REBUILD_BACKEND=$BACKEND_CHANGED
+            REBUILD_FRONTEND=$FRONTEND_CHANGED
+            REBUILD_AIRFLOW=$AIRFLOW_CHANGED
+          fi
+          
+          # Check if we should skip build entirely (only docs/unrelated files changed)
+          SKIP_BUILD=false
+          if [ "$REBUILD_BACKEND" = false ] && [ "$REBUILD_FRONTEND" = false ] && [ "$REBUILD_AIRFLOW" = false ]; then
+            # Check if only unrelated files changed
+            UNRELATED_ONLY=$(echo "$CHANGED_FILES" | grep -vE "^(backend|ui|infra)" || echo "")
+            if [ -n "$UNRELATED_ONLY" ] && [ -z "$(echo "$CHANGED_FILES" | grep -E "^(backend|ui|infra)")" ]; then
+              SKIP_BUILD=true
+              echo "Only unrelated files changed - skipping build"
+            fi
+          fi
+          
+          # Set outputs
+          echo "rebuild_backend=$REBUILD_BACKEND" >> $GITHUB_OUTPUT
+          echo "rebuild_frontend=$REBUILD_FRONTEND" >> $GITHUB_OUTPUT
+          echo "rebuild_airflow=$REBUILD_AIRFLOW" >> $GITHUB_OUTPUT
+          echo "skip_build=$SKIP_BUILD" >> $GITHUB_OUTPUT
+          
+          echo ""
+          echo "Build plan:"
+          echo "  Backend: $REBUILD_BACKEND"
+          echo "  Frontend: $REBUILD_FRONTEND"
+          echo "  Airflow: $REBUILD_AIRFLOW"
+          echo "  Skip build: $SKIP_BUILD"
+
       - name: Copy files to VM
         run: |
           rsync -avz --exclude='.git' --exclude='node_modules' --exclude='venv' \
@@ -67,36 +162,73 @@ jobs:
 
       - name: Deploy on VM
         run: |
-          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
-            ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} << 'EOF'
-            set -e
-            cd /opt/primedata
-            
-            # Load environment variables
-            if [ -f .env.production ]; then
-              export $(cat .env.production | grep -v '^#' | xargs)
+          cat > /tmp/deploy_script.sh << 'SCRIPT_EOF'
+          set -e
+          cd /opt/primedata
+          
+          # Load environment variables
+          if [ -f .env.production ]; then
+            export $(cat .env.production | grep -v '^#' | xargs)
+          fi
+          
+          # Ensure Docker network exists (idempotent)
+          docker network create primedata-network 2>/dev/null || echo "Network already exists"
+          
+          # Build strategy variables (passed as arguments)
+          REBUILD_BACKEND="$1"
+          REBUILD_FRONTEND="$2"
+          REBUILD_AIRFLOW="$3"
+          SKIP_BUILD="$4"
+          
+          echo "Build plan:"
+          echo "  Backend: $REBUILD_BACKEND"
+          echo "  Frontend: $REBUILD_FRONTEND"
+          echo "  Airflow: $REBUILD_AIRFLOW"
+          echo "  Skip build: $SKIP_BUILD"
+          
+          if [ "$SKIP_BUILD" = "true" ]; then
+            echo "Skipping build - no relevant changes detected"
+            docker-compose -f infra/docker-compose.prod.yml up -d --remove-orphans
+          else
+            # Build only services that changed
+            if [ "$REBUILD_BACKEND" = "true" ]; then
+              echo "Building backend..."
+              docker-compose -f infra/docker-compose.prod.yml build backend || true
             fi
             
-            # Ensure Docker network exists (idempotent)
-            docker network create primedata-network 2>/dev/null || echo "Network already exists"
+            if [ "$REBUILD_FRONTEND" = "true" ]; then
+              echo "Building frontend..."
+              docker-compose -f infra/docker-compose.prod.yml build frontend || true
+            fi
             
-            # Pull latest images (idempotent - only updates if changed)
-            docker-compose -f infra/docker-compose.prod.yml pull || true
+            if [ "$REBUILD_AIRFLOW" = "true" ]; then
+              echo "Building Airflow services..."
+              docker-compose -f infra/docker-compose.prod.yml build airflow-webserver airflow-scheduler || true
+            fi
             
-            # Build and start services (idempotent - up -d handles existing containers)
-            # --build ensures images are updated, but won't recreate if unchanged
-            docker-compose -f infra/docker-compose.prod.yml up -d --build --remove-orphans
-            
-            # Wait for services to be ready
-            sleep 10
-            
-            # Run database migrations (idempotent - Alembic handles this)
-            docker-compose -f infra/docker-compose.prod.yml exec -T backend \
-              alembic upgrade head || echo "Migration failed or already up to date"
-            
-            # Show service status
-            docker-compose -f infra/docker-compose.prod.yml ps
-          EOF
+            echo "Starting all services..."
+            docker-compose -f infra/docker-compose.prod.yml up -d --remove-orphans
+          fi
+          
+          sleep 10
+          
+          docker-compose -f infra/docker-compose.prod.yml exec -T backend \
+            alembic upgrade head || echo "Migration failed or already up to date"
+          
+          docker-compose -f infra/docker-compose.prod.yml ps
+          SCRIPT_EOF
+          
+          scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+            /tmp/deploy_script.sh \
+            ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }}:/tmp/deploy_script.sh
+          
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+            ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+            "bash /tmp/deploy_script.sh \
+            '${{ steps.detect-changes.outputs.rebuild_backend }}' \
+            '${{ steps.detect-changes.outputs.rebuild_frontend }}' \
+            '${{ steps.detect-changes.outputs.rebuild_airflow }}' \
+            '${{ steps.detect-changes.outputs.skip_build }}'"
 
       - name: Health Check
         run: |
