@@ -2,15 +2,16 @@
 Folder connector for reading files from local filesystem.
 """
 
+import fnmatch
+import logging
 import os
 import time
-import fnmatch
 from pathlib import Path
-from typing import Dict, Any, Tuple, List
-import logging
-from .base import BaseConnector
+from typing import Any, Dict, List, Tuple
+
 from ..storage.minio_client import minio_client
 from ..storage.paths import safe_filename
+from .base import BaseConnector
 
 logger = logging.getLogger(__name__)
 

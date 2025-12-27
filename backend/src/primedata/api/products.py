@@ -2,25 +2,27 @@
 Products API router.
 """
 
-from typing import List, Optional, Dict, Any
-from uuid import UUID, uuid4 as uuid_uuid4
-from datetime import datetime
 import logging
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, status, Request, Query, Response, File, UploadFile, Form
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+from uuid import UUID
+from uuid import uuid4 as uuid_uuid4
+
+import numpy as np
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile, status
 from fastapi.responses import StreamingResponse
+from primedata.analysis.content_analyzer import ChunkingConfig, content_analyzer
+from primedata.api.billing import check_billing_limits
+from primedata.core.scope import allowed_workspaces, ensure_product_access, ensure_workspace_access
+from primedata.core.security import get_current_user
+from primedata.core.settings import get_settings
+from primedata.core.user_utils import get_user_id
+from primedata.db.database import get_db
+from primedata.db.models import PipelineRun, PipelineRunStatus, Product, ProductStatus, Workspace
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
-from primedata.core.scope import ensure_workspace_access, allowed_workspaces, ensure_product_access
-from primedata.core.security import get_current_user
-from primedata.core.user_utils import get_user_id
-from primedata.db.database import get_db
-from primedata.db.models import Product, ProductStatus, PipelineRun, PipelineRunStatus, Workspace
-from primedata.api.billing import check_billing_limits
-from primedata.analysis.content_analyzer import content_analyzer, ChunkingConfig
-from primedata.core.settings import get_settings
-import numpy as np
 
 router = APIRouter(prefix="/api/v1/products", tags=["Products"])
 logger = logging.getLogger(__name__)
@@ -475,7 +477,7 @@ async def delete_product(
     """
     Delete a product and all related data.
     """
-    from primedata.db.models import DataSource, RawFile, PipelineRun, ACL, PipelineArtifact, DqViolation
+    from primedata.db.models import ACL, DataSource, DqViolation, PipelineArtifact, PipelineRun, RawFile
 
     # Try to import enterprise models if available
     try:
@@ -606,9 +608,9 @@ async def get_product_insights(
     Get product insights including fingerprint, policy, and optimizer (M2).
     """
     from primedata.core.scope import ensure_product_access
+    from primedata.ingestion_pipeline.aird_stages.config import get_aird_config
     from primedata.ingestion_pipeline.aird_stages.storage import AirdStorageAdapter
     from primedata.services.policy_engine import evaluate_policy
-    from primedata.ingestion_pipeline.aird_stages.config import get_aird_config
 
     product = ensure_product_access(db, request, product_id)
 
@@ -712,10 +714,10 @@ async def apply_recommendation(
     text normalization.
     """
     from primedata.core.scope import ensure_product_access
-    from sqlalchemy.orm.attributes import flag_modified
+    from primedata.ingestion_pipeline.aird_stages.config import get_aird_config
     from primedata.services.optimizer import suggest_next_config
     from primedata.services.policy_engine import evaluate_policy
-    from primedata.ingestion_pipeline.aird_stages.config import get_aird_config
+    from sqlalchemy.orm.attributes import flag_modified
 
     logger.info(f"POST /api/v1/products/{product_id}/apply-recommendation - Action: {request_body.action}")
 
@@ -1014,8 +1016,8 @@ async def download_validation_summary(
 
         metrics = storage.get_metrics_json()
         if metrics:
-            from primedata.services.reporting import generate_validation_summary
             from primedata.ingestion_pipeline.aird_stages.config import get_aird_config
+            from primedata.services.reporting import generate_validation_summary
 
             config = get_aird_config()
             csv_content = generate_validation_summary(metrics, config.default_scoring_threshold)
@@ -1076,8 +1078,8 @@ async def download_trust_report(
 
         metrics = storage.get_metrics_json()
         if metrics:
-            from primedata.services.reporting import generate_trust_report
             from primedata.ingestion_pipeline.aird_stages.config import get_aird_config
+            from primedata.services.reporting import generate_trust_report
 
             config = get_aird_config()
             pdf_bytes = generate_trust_report(metrics, config.default_scoring_threshold)
@@ -1365,12 +1367,13 @@ async def estimate_cost(
       • Computes estimated chunks and cost
     Does NOT create a Product or run the full pipeline.
     """
-    import tempfile
-    import shutil
     import math
+    import shutil
+    import tempfile
     from pathlib import Path
-    from primedata.ingestion_pipeline.aird_stages.playbooks.router import route_playbook, resolve_playbook_file
+
     from primedata.ingestion_pipeline.aird_stages.playbooks.loader import load_playbook_yaml
+    from primedata.ingestion_pipeline.aird_stages.playbooks.router import resolve_playbook_file, route_playbook
     from primedata.ingestion_pipeline.aird_stages.utils.text_processing import tokens_estimate
 
     # Create temp file

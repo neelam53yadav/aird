@@ -2,8 +2,8 @@
 Path helper functions for organizing data in MinIO storage.
 """
 
-from typing import Union
 import uuid
+from typing import Union
 
 
 def raw_prefix(workspace_id: Union[str, uuid.UUID], product_id: Union[str, uuid.UUID], version: int) -> str:

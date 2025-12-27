@@ -2,17 +2,17 @@
 JWT key management for PrimeData API.
 """
 
-import os
+import base64
 import json
-import jwt
+import os
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, Any
-from cryptography.hazmat.primitives import serialization
+from typing import Any, Dict
+
+import jwt
+from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-import base64
 from primedata.core.settings import get_settings
 
 

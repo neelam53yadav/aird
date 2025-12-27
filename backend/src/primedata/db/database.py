@@ -2,10 +2,10 @@
 Database configuration and session management.
 """
 
+from primedata.core.settings import get_settings
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-from primedata.core.settings import get_settings
 
 # Get settings
 settings = get_settings()

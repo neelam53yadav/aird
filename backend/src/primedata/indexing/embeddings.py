@@ -5,13 +5,15 @@ This module provides functionality to generate embeddings for text chunks
 using various embedding models, with MiniLM as the default.
 """
 
-import logging
 import hashlib
-import numpy as np
-from typing import List, Optional, Union
+import logging
 from pathlib import Path
+from typing import List, Optional, Union
 from uuid import UUID
+
+import numpy as np
 from sqlalchemy.orm import Session
+
 from ..core.embedding_config import EmbeddingModelRegistry, get_embedding_model_config
 from ..core.settings import get_settings
 

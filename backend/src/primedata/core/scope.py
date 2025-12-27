@@ -4,9 +4,10 @@ Workspace access control and scoping utilities.
 
 from typing import List, Optional
 from uuid import UUID
-from fastapi import HTTPException, status, Request
+
+from fastapi import HTTPException, Request, status
+from primedata.db.models import Product, Workspace, WorkspaceMember, WorkspaceRole
 from sqlalchemy.orm import Session
-from primedata.db.models import Workspace, Product, WorkspaceMember, WorkspaceRole
 
 
 def allowed_workspaces(request: Request, db: Optional[Session] = None) -> List[UUID]:

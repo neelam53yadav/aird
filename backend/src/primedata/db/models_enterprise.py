@@ -5,13 +5,15 @@ This module defines enterprise-ready database models with proper
 audit trails, security, and compliance features.
 """
 
-from sqlalchemy import Column, String, Integer, DateTime, Text, Boolean, ForeignKey, JSON, Enum
+import uuid
+from datetime import datetime
+from enum import Enum as PyEnum
+
+from sqlalchemy import JSON, Boolean, Column, DateTime, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from enum import Enum as PyEnum
-import uuid
-from datetime import datetime
+
 from .database import Base
 
 

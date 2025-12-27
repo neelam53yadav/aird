@@ -4,8 +4,9 @@ Text processing utilities for AIRD preprocessing.
 Ports text normalization, PII redaction, and section detection from AIRD.
 """
 
+from typing import Any, Dict, List, Optional, Tuple
+
 import regex as re
-from typing import List, Dict, Any, Tuple, Optional
 from loguru import logger
 
 # Regex patterns for PII detection

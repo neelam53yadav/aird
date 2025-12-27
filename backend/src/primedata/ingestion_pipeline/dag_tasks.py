@@ -8,26 +8,23 @@ Following enterprise best practices:
 - Maintainability: Business logic in one place, DAG files stay minimal
 """
 
-import os
 import logging
+import os
 from datetime import datetime
-from typing import Dict, Any, List, Optional
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 from uuid import UUID
-from sqlalchemy.orm import Session
 
-from primedata.storage.minio_client import minio_client
-from primedata.storage.paths import raw_prefix
 from primedata.db.database import get_db
 from primedata.db.models import (
-    Product,
+    ArtifactStatus,
+    ArtifactType,
+    PipelineArtifact,
     PipelineRun,
     PolicyStatus,
+    Product,
     RawFile,
     RawFileStatus,
-    PipelineArtifact,
-    ArtifactType,
-    ArtifactStatus,
     RetentionPolicy,
 )
 
@@ -37,11 +34,14 @@ from primedata.db.models import (
 # Import only lightweight enums at module level.
 from primedata.ingestion_pipeline.aird_stages.base import StageStatus
 from primedata.ingestion_pipeline.artifact_registry import (
-    register_artifact,
-    get_artifacts_by_stage,
-    get_artifact_summary_for_run,
     calculate_checksum,
+    get_artifact_summary_for_run,
+    get_artifacts_by_stage,
+    register_artifact,
 )
+from primedata.storage.minio_client import minio_client
+from primedata.storage.paths import raw_prefix
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 std_logger = logging.getLogger(__name__)  # For Airflow compatibility
@@ -462,9 +462,9 @@ def get_aird_context(**context) -> Dict[str, Any]:
         Dictionary with AIRD context (storage, tracker, config, etc.)
     """
     # Lazy imports to avoid DAG import timeouts (Airflow has 30s limit)
+    from primedata.ingestion_pipeline.aird_stages.config import get_aird_config
     from primedata.ingestion_pipeline.aird_stages.storage import AirdStorageAdapter
     from primedata.ingestion_pipeline.aird_stages.tracking import StageTracker
-    from primedata.ingestion_pipeline.aird_stages.config import get_aird_config
 
     params = get_dag_params(**context)
     workspace_id = params["workspace_id"]
@@ -1654,8 +1654,8 @@ def task_validate_data_quality(**context) -> Dict[str, Any]:
 
     try:
         # Import here to avoid circular imports
-        from primedata.db.models_enterprise import DataQualityRule
         from primedata.db.models import DqViolation
+        from primedata.db.models_enterprise import DataQualityRule
 
         # Get current data quality rules for the product
         rules = (
@@ -1779,7 +1779,7 @@ def task_finalize(**context) -> Dict[str, Any]:
                         logger.warning(
                             f"No artifacts found for pipeline_run_id={pipeline_run_uuid}, trying fallback query by product_id and version"
                         )
-                        from primedata.db.models import PipelineArtifact, ArtifactStatus
+                        from primedata.db.models import ArtifactStatus, PipelineArtifact
 
                         fallback_artifacts = (
                             db.query(PipelineArtifact)

@@ -10,9 +10,8 @@ from typing import Any, Dict, List
 from uuid import UUID
 
 from loguru import logger
-
 from primedata.ingestion_pipeline.aird_stages.base import AirdStage, StageResult, StageStatus
-from primedata.services.trust_scoring import score_record, get_scoring_weights
+from primedata.services.trust_scoring import get_scoring_weights, score_record
 
 
 class ScoringStage(AirdStage):

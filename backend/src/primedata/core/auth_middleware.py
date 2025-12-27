@@ -4,12 +4,13 @@ Authentication middleware for FastAPI.
 
 import re
 from typing import Optional
-from fastapi import Request, HTTPException, status
+
+from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.types import ASGIApp
 from primedata.core.security import verify_rs256_token
 from primedata.core.settings import get_settings
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.types import ASGIApp
 
 
 class AuthMiddleware(BaseHTTPMiddleware):

@@ -4,8 +4,9 @@ Chunking utilities for AIRD preprocessing.
 Ports sentence and character-based chunking from AIRD.
 """
 
-import regex as re
 from typing import List
+
+import regex as re
 
 # Sentence splitting regex
 SENT_SPLIT_RE = re.compile(r"(?<!\b[A-Z])[.!?。۔؟]+(?=\s+[A-Z0-9\"'])")

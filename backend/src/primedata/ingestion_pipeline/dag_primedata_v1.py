@@ -10,37 +10,37 @@ This DAG orchestrates the complete data processing pipeline:
 6. Validate and finalize
 """
 
-import os
 import json
 import logging
-from datetime import datetime, timedelta
-from typing import Dict, Any, List
-from pathlib import Path
-
-from airflow import DAG
-from airflow.operators.python import PythonOperator
-from airflow.models import Variable
-from airflow.utils.dates import days_ago
+import os
 
 # Import PrimeData modules
 import sys
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Any, Dict, List
+
+from airflow import DAG
+from airflow.models import Variable
+from airflow.operators.python import PythonOperator
+from airflow.utils.dates import days_ago
 
 sys.path.append("/opt/airflow/dags/primedata")
 
-from primedata.storage.minio_client import minio_client
-from primedata.storage.paths import raw_prefix, clean_prefix, chunk_prefix, embed_prefix
-from primedata.connectors.web import WebConnector
 from primedata.connectors.folder import FolderConnector
-from primedata.db.database import get_db, SessionLocal
-from primedata.db.models import Product, ProductStatus, DataSource, PipelineRun, DqViolation
+from primedata.connectors.web import WebConnector
+from primedata.db.database import SessionLocal, get_db
+from primedata.db.models import DataSource, DqViolation, PipelineRun, Product, ProductStatus
+from primedata.dq.validator import DataQualityValidator
 from primedata.indexing.embeddings import EmbeddingGenerator
 from primedata.indexing.qdrant_client import QdrantClient
-from primedata.dq.validator import DataQualityValidator
+from primedata.ingestion_pipeline.aird_stages.config import get_aird_config
+from primedata.ingestion_pipeline.aird_stages.storage import AirdStorageAdapter
 
 # AIRD stages integration (M0)
-from primedata.ingestion_pipeline.aird_stages.tracking import track_stage_execution, StageTracker
-from primedata.ingestion_pipeline.aird_stages.storage import AirdStorageAdapter
-from primedata.ingestion_pipeline.aird_stages.config import get_aird_config
+from primedata.ingestion_pipeline.aird_stages.tracking import StageTracker, track_stage_execution
+from primedata.storage.minio_client import minio_client
+from primedata.storage.paths import chunk_prefix, clean_prefix, embed_prefix, raw_prefix
 
 logger = logging.getLogger(__name__)
 
@@ -413,8 +413,9 @@ def preprocess(**context) -> Dict[str, Any]:
             elif content_type == "application/pdf":
                 # Basic PDF text extraction (requires PyPDF2 or similar)
                 try:
-                    import PyPDF2
                     from io import BytesIO
+
+                    import PyPDF2
 
                     pdf_reader = PyPDF2.PdfReader(BytesIO(raw_content))
                     clean_text = ""

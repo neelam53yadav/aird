@@ -3,30 +3,31 @@ FastAPI application for PrimeData API.
 """
 
 import asyncio
-from typing import Dict, Any
-from fastapi import FastAPI, HTTPException, Request, Depends
+from typing import Any, Dict
+
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from primedata.api.acl import router as acl_router  # M5
+from primedata.api.ai_readiness import router as ai_readiness_router
+from primedata.api.analytics import router as analytics_router
+from primedata.api.artifacts import router as artifacts_router
+from primedata.api.auth import router as auth_router
+from primedata.api.billing import router as billing_router
+from primedata.api.data_quality import router as data_quality_router
+from primedata.api.datasources import router as datasources_router
+from primedata.api.embedding_models import router as embedding_models_router
+from primedata.api.exports import router as exports_router
+from primedata.api.pipeline import router as pipeline_router
+from primedata.api.playbooks import router as playbooks_router  # M1
+from primedata.api.playground import router as playground_router
+from primedata.api.products import router as products_router
+from primedata.api.settings import router as settings_router
+from primedata.core.auth_middleware import AuthMiddleware
+from primedata.core.jwt_keys import get_public_jwks
+from primedata.core.settings import get_settings
+from primedata.db.database import engine, get_db
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-from primedata.core.settings import get_settings
-from primedata.core.jwt_keys import get_public_jwks
-from primedata.core.auth_middleware import AuthMiddleware
-from primedata.db.database import engine, get_db
-from primedata.api.auth import router as auth_router
-from primedata.api.products import router as products_router
-from primedata.api.datasources import router as datasources_router
-from primedata.api.artifacts import router as artifacts_router
-from primedata.api.pipeline import router as pipeline_router
-from primedata.api.playground import router as playground_router
-from primedata.api.ai_readiness import router as ai_readiness_router
-from primedata.api.embedding_models import router as embedding_models_router
-from primedata.api.data_quality import router as data_quality_router
-from primedata.api.exports import router as exports_router
-from primedata.api.billing import router as billing_router
-from primedata.api.analytics import router as analytics_router
-from primedata.api.playbooks import router as playbooks_router  # M1
-from primedata.api.acl import router as acl_router  # M5
-from primedata.api.settings import router as settings_router
 
 # Get settings
 settings = get_settings()

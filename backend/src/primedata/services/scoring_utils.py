@@ -8,8 +8,8 @@ If these libraries are not available, the fallback scorer in trust_scoring.py wi
 import json
 import re
 from datetime import datetime
-from typing import Dict, Any
 from pathlib import Path
+from typing import Any, Dict
 
 try:
     import textstat

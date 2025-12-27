@@ -5,10 +5,10 @@ This module contains functions for fast, deterministic text optimization
 without requiring LLM APIs.
 """
 
-import regex as re
-from typing import Dict, Any, Optional
-from loguru import logger
+from typing import Any, Dict, Optional
 
+import regex as re
+from loguru import logger
 from primedata.ingestion_pipeline.aird_stages.utils.text_processing import (
     apply_enhanced_normalization,
     apply_error_correction,

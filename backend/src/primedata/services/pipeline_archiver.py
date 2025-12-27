@@ -7,12 +7,12 @@ Archives old pipeline run metrics to S3 to reduce PostgreSQL storage costs.
 from datetime import datetime, timedelta
 from typing import List, Optional
 from uuid import UUID
-from sqlalchemy.orm import Session
-from sqlalchemy import and_
-from loguru import logger
 
+from loguru import logger
 from primedata.db.models import PipelineRun, PipelineRunStatus
 from primedata.services.s3_json_storage import save_json_to_s3
+from sqlalchemy import and_
+from sqlalchemy.orm import Session
 
 
 def archive_old_pipeline_runs(db: Session, days: int = 90, batch_size: int = 100, minio_client=None) -> dict:

@@ -2,18 +2,19 @@
 Analytics API endpoints for dashboard metrics and insights.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
-from pydantic import BaseModel
-from typing import List, Optional, Dict, Any
-from sqlalchemy.orm import Session
-from sqlalchemy import func, desc, and_
-from datetime import datetime, timedelta
-from uuid import UUID
 import logging
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from pydantic import BaseModel
+from sqlalchemy import and_, desc, func
+from sqlalchemy.orm import Session
 
 from ..core.security import get_current_user
 from ..db.database import get_db
-from ..db.models import Product, DataSource, PipelineRun, DqViolation, Workspace, PipelineRunStatus
+from ..db.models import DataSource, DqViolation, PipelineRun, PipelineRunStatus, Product, Workspace
 
 logger = logging.getLogger(__name__)
 
@@ -179,9 +180,9 @@ async def get_product_insights(
     This endpoint is available under /api/v1/analytics/products/{product_id}/insights
     """
     from ..core.scope import ensure_product_access
+    from ..ingestion_pipeline.aird_stages.config import get_aird_config
     from ..ingestion_pipeline.aird_stages.storage import AirdStorageAdapter
     from ..services.policy_engine import evaluate_policy
-    from ..ingestion_pipeline.aird_stages.config import get_aird_config
 
     product = ensure_product_access(db, request, product_id)
 

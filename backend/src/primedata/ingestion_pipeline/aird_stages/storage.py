@@ -6,11 +6,11 @@ to PrimeData's MinIO object storage.
 """
 
 import json
+import logging as std_logging  # For Airflow compatibility
+from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 from uuid import UUID
-from io import BytesIO
-import logging as std_logging  # For Airflow compatibility
 
 from loguru import logger
 
@@ -19,9 +19,9 @@ std_logger = std_logging.getLogger(__name__)
 
 from primedata.storage.minio_client import MinIOClient
 from primedata.storage.paths import (
-    raw_prefix,
-    clean_prefix,
     chunk_prefix,
+    clean_prefix,
+    raw_prefix,
     safe_filename,
 )
 

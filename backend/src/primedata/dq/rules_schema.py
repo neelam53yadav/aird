@@ -5,9 +5,10 @@ This module defines the schema for declarative data quality rules that can be
 applied to products to ensure data quality standards are met.
 """
 
-from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field, validator
 from enum import Enum
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, Field, validator
 
 
 class RuleSeverity(str, Enum):

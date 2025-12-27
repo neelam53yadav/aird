@@ -4,17 +4,17 @@ Violation archiver service for PrimeData.
 Archives old data quality violations to S3 to reduce PostgreSQL storage costs.
 """
 
-from datetime import datetime, timedelta
-from typing import List, Optional, Dict, Any
-from uuid import UUID
-from sqlalchemy.orm import Session
-from sqlalchemy import and_
-from loguru import logger
 import json
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
+from uuid import UUID
 
+from loguru import logger
 from primedata.db.models import DqViolation
-from primedata.services.s3_json_storage import save_json_to_s3, METADATA_BUCKET
+from primedata.services.s3_json_storage import METADATA_BUCKET, save_json_to_s3
 from primedata.storage.minio_client import MinIOClient
+from sqlalchemy import and_
+from sqlalchemy.orm import Session
 
 
 def archive_old_violations(
@@ -142,8 +142,8 @@ def load_archived_violations(product_id: UUID, version: int, minio_client=None) 
         List of violation dictionaries
     """
     try:
-        from primedata.db.models import Product
         from primedata.db.database import get_db
+        from primedata.db.models import Product
 
         db = next(get_db())
         product = db.query(Product).filter(Product.id == product_id).first()

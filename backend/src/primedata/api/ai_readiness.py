@@ -5,22 +5,23 @@ This module provides comprehensive assessment of data quality and AI-readiness,
 along with controls to improve data quality for AI applications.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request
-from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
-import time
+import json
 import logging
 import re
-import json
+import time
 from collections import Counter
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
-from ..core.security import get_current_user
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel, Field
+
 from ..core.scope import ensure_product_access
-from ..indexing.qdrant_client import QdrantClient
-from ..storage.minio_client import MinIOClient
+from ..core.security import get_current_user
 from ..db.database import get_db
 from ..db.models import Product
+from ..indexing.qdrant_client import QdrantClient
+from ..storage.minio_client import MinIOClient
 
 logger = logging.getLogger(__name__)
 

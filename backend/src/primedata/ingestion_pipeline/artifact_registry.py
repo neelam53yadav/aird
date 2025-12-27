@@ -13,20 +13,19 @@ Phases:
 
 import hashlib
 from datetime import datetime
-from typing import Dict, Any, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 from uuid import UUID
 
-from sqlalchemy.orm import Session
 from loguru import logger
-
 from primedata.db.models import (
-    PipelineArtifact,
-    ArtifactType,
     ArtifactStatus,
-    RetentionPolicy,
+    ArtifactType,
+    PipelineArtifact,
     PipelineRun,
     PipelineRunStatus,
+    RetentionPolicy,
 )
+from sqlalchemy.orm import Session
 
 
 def calculate_checksum(data: bytes, algorithm: str = "sha256") -> str:

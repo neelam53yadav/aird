@@ -3,6 +3,7 @@ Logging configuration for PrimeData.
 """
 
 import sys
+
 from loguru import logger
 
 

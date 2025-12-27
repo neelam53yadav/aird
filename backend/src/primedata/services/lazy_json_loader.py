@@ -5,10 +5,10 @@ Provides transparent loading of JSON fields from either PostgreSQL or S3,
 maintaining backward compatibility during the migration.
 """
 
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 from uuid import UUID
-from loguru import logger
 
+from loguru import logger
 from primedata.services.s3_json_storage import load_json_from_s3
 from primedata.storage.minio_client import MinIOClient
 
@@ -108,7 +108,7 @@ def save_product_json_field_with_auto_storage(
         True if successful, False otherwise
     """
     try:
-        from primedata.services.s3_json_storage import should_save_to_s3, save_json_to_s3
+        from primedata.services.s3_json_storage import save_json_to_s3, should_save_to_s3
 
         # Determine if should save to S3
         if should_save_to_s3(data, threshold):

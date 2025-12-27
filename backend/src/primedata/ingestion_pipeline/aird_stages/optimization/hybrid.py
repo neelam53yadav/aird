@@ -4,9 +4,10 @@ Hybrid optimization orchestrator.
 Combines pattern-based and LLM-based optimization intelligently.
 """
 
-from typing import Dict, Any, Optional
-from loguru import logger
 import logging as std_logging  # For Airflow compatibility
+from typing import Any, Dict, Optional
+
+from loguru import logger
 
 # Use Python logging for Airflow compatibility
 std_logger = std_logging.getLogger(__name__)

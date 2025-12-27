@@ -6,14 +6,15 @@ Ports AIRD scoring logic with support for primary scorer (scoring_utils) and fal
 
 import json
 import math
-import regex as re
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict, List, Optional
+
+import regex as re
 from loguru import logger
 
 # Try to import primary scorer
 try:
-    from primedata.services.scoring_utils import score_file_data, load_weights
+    from primedata.services.scoring_utils import load_weights, score_file_data
 
     _PRIMARY_SCORER = True
     logger.info("Primary scorer (scoring_utils) available")

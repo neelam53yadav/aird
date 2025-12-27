@@ -6,9 +6,9 @@ Loads and parses playbook YAML files from configured directory.
 
 from pathlib import Path
 from typing import Dict, Optional
+
 import yaml
 from loguru import logger
-
 from primedata.ingestion_pipeline.aird_stages.config import get_aird_config, get_playbook_path
 
 
@@ -43,8 +43,9 @@ def load_playbook_yaml(playbook_id: Optional[str], workspace_id: Optional[str] =
     # Try to load custom playbook from database if workspace_id and db_session provided
     if workspace_id and db_session and playbook_id:
         try:
-            from primedata.db.models import CustomPlaybook
             from uuid import UUID
+
+            from primedata.db.models import CustomPlaybook
 
             custom_playbook = (
                 db_session.query(CustomPlaybook)

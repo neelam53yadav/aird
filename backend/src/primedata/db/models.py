@@ -6,36 +6,39 @@ This file contains placeholder models that will be expanded as the application g
 
 import uuid
 from enum import Enum
+
+from primedata.db.database import Base
 from sqlalchemy import (
+    JSON,
+    BigInteger,
+    Boolean,
     Column,
+    DateTime,
+)
+from sqlalchemy import Enum as SQLEnum
+from sqlalchemy import (
+    Float,
+    ForeignKey,
+    Index,
     Integer,
     String,
-    DateTime,
-    Boolean,
     Text,
-    JSON,
-    ForeignKey,
-    Enum as SQLEnum,
     UniqueConstraint,
-    Index,
-    Float,
-    BigInteger,
 )
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
-from primedata.db.database import Base
+from sqlalchemy.sql import func
 
 # Import enterprise models
 from .models_enterprise import (
+    AuditAction,
+    DataQualityComplianceReport,
     DataQualityRule,
+    DataQualityRuleAssignment,
     DataQualityRuleAudit,
     DataQualityRuleSet,
-    DataQualityRuleAssignment,
-    DataQualityComplianceReport,
     RuleSeverity,
     RuleStatus,
-    AuditAction,
 )
 
 

@@ -5,12 +5,12 @@ This module analyzes content to automatically determine optimal chunking strateg
 based on content type, structure, and complexity.
 """
 
-import re
 import logging
-from typing import Dict, List, Optional, Tuple, Any
-from enum import Enum
+import re
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 

@@ -4,10 +4,11 @@ Reporting service for PrimeData.
 Generates validation summaries (CSV) and trust reports (PDF) from metrics.
 """
 
-import json
 import io
-from typing import Dict, Any, List, Optional
+import json
 from pathlib import Path
+from typing import Any, Dict, List, Optional
+
 from loguru import logger
 
 try:

@@ -2,8 +2,9 @@
 User utility functions for handling user ID extraction in dev/prod modes.
 """
 
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 from uuid import UUID
+
 from .settings import get_settings
 
 

@@ -6,10 +6,10 @@ Uses hybrid storage pattern: small JSON stays in DB, large JSON moves to S3.
 """
 
 import json
-from typing import Dict, Any, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 from uuid import UUID
-from loguru import logger
 
+from loguru import logger
 from primedata.storage.minio_client import MinIOClient
 
 # Size threshold for moving JSON to S3 (1MB)

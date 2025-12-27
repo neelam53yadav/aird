@@ -4,20 +4,20 @@ Playbooks API router.
 Provides endpoints for listing and retrieving playbook configurations.
 """
 
-from typing import List, Dict, Any, Optional
-from uuid import UUID
 from datetime import datetime
-from fastapi import APIRouter, HTTPException, status, Depends, Request, Query
-from pydantic import BaseModel
-from loguru import logger
-from sqlalchemy.orm import Session
-import yaml
+from typing import Any, Dict, List, Optional
+from uuid import UUID
 
-from primedata.ingestion_pipeline.aird_stages.playbooks import list_playbooks, load_playbook_yaml, refresh_index
+import yaml
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from loguru import logger
+from primedata.core.scope import ensure_workspace_access
+from primedata.core.security import get_current_user
 from primedata.db.database import get_db
 from primedata.db.models import CustomPlaybook
-from primedata.core.security import get_current_user
-from primedata.core.scope import ensure_workspace_access
+from primedata.ingestion_pipeline.aird_stages.playbooks import list_playbooks, load_playbook_yaml, refresh_index
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/api/v1/playbooks", tags=["Playbooks"])
 
@@ -270,8 +270,8 @@ async def create_custom_playbook(
     """
     Create a custom playbook based on an existing playbook or from scratch.
     """
-    from primedata.core.user_utils import get_user_id
     from primedata.core.scope import ensure_workspace_access
+    from primedata.core.user_utils import get_user_id
 
     ensure_workspace_access(db, request, workspace_id)
 

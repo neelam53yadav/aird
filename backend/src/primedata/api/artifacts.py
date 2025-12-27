@@ -2,18 +2,19 @@
 Artifacts API router for listing and accessing stored data.
 """
 
-from typing import List, Optional, Dict, Any
-from uuid import UUID
 import logging
-from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
-from pydantic import BaseModel
-from sqlalchemy.orm import Session
-from primedata.core.scope import ensure_workspace_access, ensure_product_access
+from typing import Any, Dict, List, Optional
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from primedata.core.scope import ensure_product_access, ensure_workspace_access
 from primedata.core.security import get_current_user
 from primedata.db.database import get_db
 from primedata.db.models import Product
-from primedata.storage.paths import raw_prefix
 from primedata.storage.minio_client import minio_client
+from primedata.storage.paths import raw_prefix
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/api/v1/artifacts", tags=["Artifacts"])
 logger = logging.getLogger(__name__)

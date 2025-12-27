@@ -9,10 +9,9 @@ from typing import Any, Dict
 from uuid import UUID
 
 from loguru import logger
-
 from primedata.ingestion_pipeline.aird_stages.base import AirdStage, StageResult, StageStatus
-from primedata.services.reporting import generate_validation_summary
 from primedata.ingestion_pipeline.aird_stages.config import get_aird_config
+from primedata.services.reporting import generate_validation_summary
 
 
 class ValidationStage(AirdStage):

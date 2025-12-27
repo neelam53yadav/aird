@@ -7,6 +7,7 @@ Routes documents to appropriate playbooks based on content heuristics.
 import re
 from pathlib import Path
 from typing import Dict, Optional
+
 from loguru import logger
 
 from .loader import get_playbook_dir, load_playbook_yaml

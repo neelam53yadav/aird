@@ -10,14 +10,13 @@ Advanced features for artifact management:
 
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from uuid import UUID
 
-from sqlalchemy.orm import Session
 from loguru import logger
-
-from primedata.db.models import PipelineArtifact, ArtifactType, ArtifactStatus
-from primedata.ingestion_pipeline.artifact_registry import get_artifact_lineage, RetentionPolicy
+from primedata.db.models import ArtifactStatus, ArtifactType, PipelineArtifact
+from primedata.ingestion_pipeline.artifact_registry import RetentionPolicy, get_artifact_lineage
+from sqlalchemy.orm import Session
 
 
 def compare_artifacts(
