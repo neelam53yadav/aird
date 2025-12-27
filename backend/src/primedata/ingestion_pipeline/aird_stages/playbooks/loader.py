@@ -14,7 +14,7 @@ from primedata.ingestion_pipeline.aird_stages.config import get_aird_config, get
 
 def get_playbook_dir() -> Optional[Path]:
     """Get the playbook directory path.
-    
+
     Returns:
         Path to playbook directory, or None if not configured
     """
@@ -28,15 +28,15 @@ def load_playbook_yaml(playbook_id: Optional[str], workspace_id: Optional[str] =
     """
     Load and parse a playbook YAML by ID (case-insensitive).
     Supports both built-in playbooks (from files) and custom playbooks (from database).
-    
+
     Args:
         playbook_id: e.g., 'TECH', 'tech', 'ScAnNeD'; None allowed (uses default)
         workspace_id: Optional workspace ID for loading custom playbooks
         db_session: Optional database session for loading custom playbooks
-        
+
     Returns:
         dict from YAML content
-        
+
     Raises:
         FileNotFoundError: if playbook cannot be found
     """
@@ -45,13 +45,17 @@ def load_playbook_yaml(playbook_id: Optional[str], workspace_id: Optional[str] =
         try:
             from primedata.db.models import CustomPlaybook
             from uuid import UUID
-            
-            custom_playbook = db_session.query(CustomPlaybook).filter(
-                CustomPlaybook.playbook_id == playbook_id.upper(),
-                CustomPlaybook.workspace_id == UUID(workspace_id),
-                CustomPlaybook.is_active == True
-            ).first()
-            
+
+            custom_playbook = (
+                db_session.query(CustomPlaybook)
+                .filter(
+                    CustomPlaybook.playbook_id == playbook_id.upper(),
+                    CustomPlaybook.workspace_id == UUID(workspace_id),
+                    CustomPlaybook.is_active == True,
+                )
+                .first()
+            )
+
             if custom_playbook:
                 try:
                     return yaml.safe_load(custom_playbook.yaml_content)
@@ -61,7 +65,7 @@ def load_playbook_yaml(playbook_id: Optional[str], workspace_id: Optional[str] =
         except Exception as e:
             logger.warning(f"Failed to load custom playbook {playbook_id}: {e}")
             # Fall through to try built-in playbook
-    
+
     # Try built-in playbooks (from files)
     playbook_file = get_playbook_path(playbook_id)
     if not playbook_file:
@@ -69,17 +73,13 @@ def load_playbook_yaml(playbook_id: Optional[str], workspace_id: Optional[str] =
         config = get_aird_config()
         if config.default_playbook:
             playbook_file = get_playbook_path(config.default_playbook)
-        
+
         if not playbook_file:
             raise FileNotFoundError(f"Playbook '{playbook_id}' not found and no default available")
-    
+
     try:
-        with open(playbook_file, 'r', encoding='utf-8') as f:
+        with open(playbook_file, "r", encoding="utf-8") as f:
             return yaml.safe_load(f)
     except Exception as e:
         logger.error(f"Failed to load playbook from {playbook_file}: {e}")
         raise
-
-
-
-

@@ -16,9 +16,14 @@ from uuid import UUID
 from ..db.database import get_db
 from ..db.models import Product, Workspace, DqViolation
 from ..db.models_enterprise import (
-    DataQualityRule, DataQualityRuleAudit, DataQualityRuleSet,
-    DataQualityRuleAssignment, DataQualityComplianceReport,
-    RuleSeverity, RuleStatus, AuditAction
+    DataQualityRule,
+    DataQualityRuleAudit,
+    DataQualityRuleSet,
+    DataQualityRuleAssignment,
+    DataQualityComplianceReport,
+    RuleSeverity,
+    RuleStatus,
+    AuditAction,
 )
 from ..core.security import get_current_user
 from ..core.scope import ensure_workspace_access, ensure_product_access
@@ -30,6 +35,7 @@ router = APIRouter(prefix="/api/v1/enterprise/data-quality", tags=["enterprise-d
 # Request/Response Models
 class DataQualityRuleCreateRequest(BaseModel):
     """Request model for creating data quality rules."""
+
     name: str = Field(..., min_length=1, max_length=255)
     description: str = Field(..., min_length=1)
     rule_type: str = Field(..., min_length=1, max_length=50)
@@ -42,6 +48,7 @@ class DataQualityRuleCreateRequest(BaseModel):
 
 class DataQualityRuleUpdateRequest(BaseModel):
     """Request model for updating data quality rules."""
+
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     description: Optional[str] = Field(None, min_length=1)
     severity: Optional[RuleSeverity] = None
@@ -54,6 +61,7 @@ class DataQualityRuleUpdateRequest(BaseModel):
 
 class DataQualityRuleResponse(BaseModel):
     """Response model for data quality rules."""
+
     id: UUID
     product_id: UUID
     workspace_id: UUID
@@ -83,6 +91,7 @@ class DataQualityRuleResponse(BaseModel):
 
 class DataQualityRuleAuditResponse(BaseModel):
     """Response model for audit trail."""
+
     id: UUID
     rule_id: UUID
     action: AuditAction
@@ -100,6 +109,7 @@ class DataQualityRuleAuditResponse(BaseModel):
 
 class ComplianceReportRequest(BaseModel):
     """Request model for generating compliance reports."""
+
     report_name: str = Field(..., min_length=1, max_length=255)
     report_type: str = Field(..., description="compliance, audit, executive")
     compliance_framework: Optional[str] = Field(None, description="GDPR, SOX, HIPAA, etc.")
@@ -117,13 +127,13 @@ async def create_data_quality_rule(
     product_id: UUID,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
-    http_request: Request = None
+    http_request: Request = None,
 ):
     """Create a new data quality rule with full audit trail."""
     try:
         # Verify product exists and user has access
         product = ensure_product_access(db, http_request, product_id)
-        
+
         # Create new rule
         rule = DataQualityRule(
             product_id=product_id,
@@ -137,12 +147,12 @@ async def create_data_quality_rule(
             business_owner=request.business_owner,
             technical_owner=request.technical_owner,
             created_by=get_user_id(current_user),
-            updated_by=get_user_id(current_user)
+            updated_by=get_user_id(current_user),
         )
-        
+
         db.add(rule)
         db.flush()  # Get the ID
-        
+
         # Create audit log
         audit_log = DataQualityRuleAudit(
             rule_id=rule.id,
@@ -150,14 +160,14 @@ async def create_data_quality_rule(
             changed_by=get_user_id(current_user),
             new_values=rule.__dict__.copy(),
             ip_address=http_request.client.host if http_request.client else None,
-            user_agent=http_request.headers.get('user-agent')
+            user_agent=http_request.headers.get("user-agent"),
         )
-        
+
         db.add(audit_log)
         db.commit()
-        
+
         return DataQualityRuleResponse.from_orm(rule)
-        
+
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to create rule: {str(e)}")
@@ -176,13 +186,13 @@ async def list_data_quality_rules(
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
-    http_request: Request = None
+    http_request: Request = None,
 ):
     """List data quality rules with enterprise filtering and pagination."""
     try:
         # Build query with access control
         query = db.query(DataQualityRule)
-        
+
         # Apply workspace access control
         if workspace_id:
             ensure_workspace_access(db, http_request, workspace_id)
@@ -193,9 +203,10 @@ async def list_data_quality_rules(
         else:
             # Get accessible workspaces
             from ..core.scope import allowed_workspaces
+
             allowed_workspace_ids = allowed_workspaces(http_request, db)
             query = query.filter(DataQualityRule.workspace_id.in_(allowed_workspace_ids))
-        
+
         # Apply filters
         if rule_type:
             query = query.filter(DataQualityRule.rule_type == rule_type)
@@ -205,16 +216,16 @@ async def list_data_quality_rules(
             query = query.filter(DataQualityRule.status == status)
         if compliance_framework:
             query = query.filter(DataQualityRule.compliance_tags.contains([compliance_framework]))
-        
+
         # Handle deprecated rules
         if not include_deprecated:
             query = query.filter(DataQualityRule.status != RuleStatus.DEPRECATED)
-        
+
         # Apply pagination and ordering
         rules = query.order_by(desc(DataQualityRule.created_at)).offset(offset).limit(limit).all()
-        
+
         return [DataQualityRuleResponse.from_orm(rule) for rule in rules]
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to list rules: {str(e)}")
 
@@ -225,7 +236,7 @@ async def update_data_quality_rule(
     request: DataQualityRuleUpdateRequest,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
-    http_request: Request = None
+    http_request: Request = None,
 ):
     """Update a data quality rule with audit trail."""
     try:
@@ -233,32 +244,32 @@ async def update_data_quality_rule(
         rule = db.query(DataQualityRule).filter(DataQualityRule.id == rule_id).first()
         if not rule:
             raise HTTPException(status_code=404, detail="Rule not found")
-        
+
         # Verify access
         ensure_product_access(db, http_request, rule.product_id)
-        
+
         # Store old values for audit
         old_values = {
-            'name': rule.name,
-            'description': rule.description,
-            'severity': rule.severity,
-            'configuration': rule.configuration,
-            'compliance_tags': rule.compliance_tags,
-            'business_owner': rule.business_owner,
-            'technical_owner': rule.technical_owner
+            "name": rule.name,
+            "description": rule.description,
+            "severity": rule.severity,
+            "configuration": rule.configuration,
+            "compliance_tags": rule.compliance_tags,
+            "business_owner": rule.business_owner,
+            "technical_owner": rule.technical_owner,
         }
-        
+
         # Update fields
         update_data = request.dict(exclude_unset=True)
         for field, value in update_data.items():
-            if field != 'change_reason' and hasattr(rule, field):
+            if field != "change_reason" and hasattr(rule, field):
                 setattr(rule, field, value)
-        
+
         rule.updated_by = get_user_id(current_user)
         rule.updated_at = datetime.utcnow()
-        
+
         # Create new version if significant changes
-        if any(field in update_data for field in ['configuration', 'severity', 'rule_type']):
+        if any(field in update_data for field in ["configuration", "severity", "rule_type"]):
             # Create new version
             new_rule = DataQualityRule(
                 product_id=rule.product_id,
@@ -273,16 +284,16 @@ async def update_data_quality_rule(
                 technical_owner=rule.technical_owner,
                 version=rule.version + 1,
                 parent_rule_id=rule.id,
-                created_by=current_user.get('sub'),
-                updated_by=current_user.get('sub')
+                created_by=current_user.get("sub"),
+                updated_by=current_user.get("sub"),
             )
-            
+
             # Mark old rule as not current
             rule.is_current = False
-            
+
             db.add(new_rule)
             db.flush()
-            
+
             # Create audit log for new version
             audit_log = DataQualityRuleAudit(
                 rule_id=new_rule.id,
@@ -292,9 +303,9 @@ async def update_data_quality_rule(
                 new_values=new_rule.__dict__.copy(),
                 change_reason=request.change_reason,
                 ip_address=http_request.client.host if http_request.client else None,
-                user_agent=http_request.headers.get('user-agent')
+                user_agent=http_request.headers.get("user-agent"),
             )
-            
+
             db.add(audit_log)
             rule = new_rule
         else:
@@ -307,15 +318,15 @@ async def update_data_quality_rule(
                 new_values=rule.__dict__.copy(),
                 change_reason=request.change_reason,
                 ip_address=http_request.client.host if http_request.client else None,
-                user_agent=http_request.headers.get('user-agent')
+                user_agent=http_request.headers.get("user-agent"),
             )
-            
+
             db.add(audit_log)
-        
+
         db.commit()
-        
+
         return DataQualityRuleResponse.from_orm(rule)
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -330,7 +341,7 @@ async def get_rule_audit_trail(
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
-    http_request: Request = None
+    http_request: Request = None,
 ):
     """Get complete audit trail for a data quality rule."""
     try:
@@ -338,19 +349,21 @@ async def get_rule_audit_trail(
         rule = db.query(DataQualityRule).filter(DataQualityRule.id == rule_id).first()
         if not rule:
             raise HTTPException(status_code=404, detail="Rule not found")
-        
+
         ensure_product_access(db, http_request, rule.product_id)
-        
+
         # Get audit logs
-        audit_logs = db.query(DataQualityRuleAudit)\
-            .filter(DataQualityRuleAudit.rule_id == rule_id)\
-            .order_by(desc(DataQualityRuleAudit.changed_at))\
-            .offset(offset)\
-            .limit(limit)\
+        audit_logs = (
+            db.query(DataQualityRuleAudit)
+            .filter(DataQualityRuleAudit.rule_id == rule_id)
+            .order_by(desc(DataQualityRuleAudit.changed_at))
+            .offset(offset)
+            .limit(limit)
             .all()
-        
+        )
+
         return [DataQualityRuleAuditResponse.from_orm(log) for log in audit_logs]
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -363,78 +376,73 @@ async def generate_compliance_report(
     workspace_id: UUID,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
-    http_request: Request = None
+    http_request: Request = None,
 ):
     """Generate enterprise compliance reports."""
     try:
         # Verify workspace access
         ensure_workspace_access(db, http_request, workspace_id)
-        
+
         # Build report data
         report_data = {
-            'report_metadata': {
-                'name': request.report_name,
-                'type': request.report_type,
-                'framework': request.compliance_framework,
-                'period': {
-                    'start': request.period_start.isoformat(),
-                    'end': request.period_end.isoformat()
-                },
-                'generated_by': str(get_user_id(current_user)),
-                'generated_at': datetime.utcnow().isoformat()
+            "report_metadata": {
+                "name": request.report_name,
+                "type": request.report_type,
+                "framework": request.compliance_framework,
+                "period": {"start": request.period_start.isoformat(), "end": request.period_end.isoformat()},
+                "generated_by": str(get_user_id(current_user)),
+                "generated_at": datetime.utcnow().isoformat(),
             }
         }
-        
+
         # Get rules in scope
-        rules_query = db.query(DataQualityRule)\
-            .filter(DataQualityRule.workspace_id == workspace_id)\
-            .filter(DataQualityRule.created_at >= request.period_start)\
+        rules_query = (
+            db.query(DataQualityRule)
+            .filter(DataQualityRule.workspace_id == workspace_id)
+            .filter(DataQualityRule.created_at >= request.period_start)
             .filter(DataQualityRule.created_at <= request.period_end)
-        
+        )
+
         if request.compliance_framework:
-            rules_query = rules_query.filter(
-                DataQualityRule.compliance_tags.contains([request.compliance_framework])
-            )
-        
+            rules_query = rules_query.filter(DataQualityRule.compliance_tags.contains([request.compliance_framework]))
+
         rules = rules_query.all()
-        
+
         # Generate report sections
         if request.include_audit_trail:
-            report_data['audit_trail'] = {
-                'total_changes': len(rules),
-                'changes_by_type': {},
-                'changes_by_user': {}
-            }
-        
+            report_data["audit_trail"] = {"total_changes": len(rules), "changes_by_type": {}, "changes_by_user": {}}
+
         if request.include_violations:
             # Get violations for the period
-            violations_query = db.query(DqViolation)\
-                .join(DataQualityRule)\
-                .filter(DataQualityRule.workspace_id == workspace_id)\
-                .filter(DqViolation.created_at >= request.period_start)\
+            violations_query = (
+                db.query(DqViolation)
+                .join(DataQualityRule)
+                .filter(DataQualityRule.workspace_id == workspace_id)
+                .filter(DqViolation.created_at >= request.period_start)
                 .filter(DqViolation.created_at <= request.period_end)
-            
+            )
+
             violations = violations_query.all()
-            report_data['violations'] = {
-                'total_violations': len(violations),
-                'violations_by_severity': {},
-                'violations_by_rule_type': {}
+            report_data["violations"] = {
+                "total_violations": len(violations),
+                "violations_by_severity": {},
+                "violations_by_rule_type": {},
             }
-        
+
         if request.include_metrics:
             # Calculate compliance metrics
             total_rules = len(rules)
             active_rules = len([r for r in rules if r.status == RuleStatus.ACTIVE])
             compliance_score = (active_rules / total_rules * 100) if total_rules > 0 else 0
-            
-            report_data['metrics'] = {
-                'total_rules': total_rules,
-                'active_rules': active_rules,
-                'compliance_score': compliance_score,
-                'rules_by_severity': {},
-                'rules_by_type': {}
+
+            report_data["metrics"] = {
+                "total_rules": total_rules,
+                "active_rules": active_rules,
+                "compliance_score": compliance_score,
+                "rules_by_severity": {},
+                "rules_by_type": {},
             }
-        
+
         # Save report
         report = DataQualityComplianceReport(
             workspace_id=workspace_id,
@@ -444,14 +452,14 @@ async def generate_compliance_report(
             period_start=request.period_start,
             period_end=request.period_end,
             report_data=report_data,
-            generated_by=get_user_id(current_user)
+            generated_by=get_user_id(current_user),
         )
-        
+
         db.add(report)
         db.commit()
-        
+
         return report_data
-        
+
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to generate report: {str(e)}")
@@ -463,7 +471,7 @@ async def delete_data_quality_rule(
     reason: str = Query(..., description="Reason for deletion"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
-    http_request: Request = None
+    http_request: Request = None,
 ):
     """Soft delete a data quality rule with audit trail."""
     try:
@@ -471,15 +479,15 @@ async def delete_data_quality_rule(
         rule = db.query(DataQualityRule).filter(DataQualityRule.id == rule_id).first()
         if not rule:
             raise HTTPException(status_code=404, detail="Rule not found")
-        
+
         # Verify access
         ensure_product_access(db, http_request, rule.product_id)
-        
+
         # Soft delete (mark as archived)
         rule.status = RuleStatus.ARCHIVED
         rule.updated_by = get_user_id(current_user)
         rule.updated_at = datetime.utcnow()
-        
+
         # Create audit log
         audit_log = DataQualityRuleAudit(
             rule_id=rule.id,
@@ -487,14 +495,14 @@ async def delete_data_quality_rule(
             changed_by=get_user_id(current_user),
             change_reason=reason,
             ip_address=http_request.client.host if http_request.client else None,
-            user_agent=http_request.headers.get('user-agent')
+            user_agent=http_request.headers.get("user-agent"),
         )
-        
+
         db.add(audit_log)
         db.commit()
-        
+
         return {"message": "Rule deleted successfully", "rule_id": str(rule_id)}
-        
+
     except HTTPException:
         raise
     except Exception as e:

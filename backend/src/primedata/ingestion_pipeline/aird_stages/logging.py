@@ -16,13 +16,13 @@ def get_aird_logger(
     workspace_id: Optional[UUID] = None,
 ) -> Any:
     """Get a logger instance bound with AIRD stage context.
-    
+
     Args:
         stage_name: Name of the pipeline stage
         product_id: Product UUID
         version: Product version number
         workspace_id: Optional workspace UUID
-        
+
     Returns:
         Logger instance with context bound
     """
@@ -33,13 +33,13 @@ def get_aird_logger(
     }
     if workspace_id:
         context["workspace_id"] = str(workspace_id)
-    
+
     return logger.bind(**context)
 
 
 def setup_aird_logging():
     """Setup AIRD-specific logging configuration.
-    
+
     This is called automatically when the module is imported.
     Additional AIRD-specific log handlers can be added here if needed.
     """
@@ -50,7 +50,3 @@ def setup_aird_logging():
 
 # Setup logging when module is imported
 setup_aird_logging()
-
-
-
-

@@ -13,23 +13,19 @@ from primedata.services.s3_json_storage import load_json_from_s3
 from primedata.storage.minio_client import MinIOClient
 
 
-def load_product_json_field(
-    product: Any,
-    field_name: str,
-    minio_client: Optional[MinIOClient] = None
-) -> Optional[Any]:
+def load_product_json_field(product: Any, field_name: str, minio_client: Optional[MinIOClient] = None) -> Optional[Any]:
     """Load product JSON field from S3 if path exists, else from DB.
-    
+
     This function provides backward compatibility:
     - If S3 path exists (e.g., chunk_metrics_path), load from S3
     - Else if DB field exists (e.g., chunk_metrics), return from DB
     - Else return None
-    
+
     Args:
         product: Product SQLAlchemy model instance
         field_name: Name of the field (e.g., "chunk_metrics", "readiness_fingerprint")
         minio_client: Optional MinIO client
-        
+
     Returns:
         JSON data (dict/list) or None
     """
@@ -37,18 +33,18 @@ def load_product_json_field(
         # Check for S3 path field (e.g., chunk_metrics_path)
         path_field_name = f"{field_name}_path"
         s3_path = getattr(product, path_field_name, None)
-        
+
         if s3_path:
             # Load from S3
             logger.debug(f"Loading {field_name} from S3: {s3_path}")
             return load_json_from_s3(s3_path, minio_client)
-        
+
         # Fallback to DB field
         db_field = getattr(product, field_name, None)
         if db_field is not None:
             logger.debug(f"Loading {field_name} from DB")
             return db_field
-        
+
         # Field doesn't exist
         logger.debug(f"Field {field_name} not found in S3 or DB")
         return None
@@ -57,34 +53,31 @@ def load_product_json_field(
         return None
 
 
-def load_pipeline_run_metrics(
-    pipeline_run: Any,
-    minio_client: Optional[MinIOClient] = None
-) -> Dict[str, Any]:
+def load_pipeline_run_metrics(pipeline_run: Any, minio_client: Optional[MinIOClient] = None) -> Dict[str, Any]:
     """Load pipeline run metrics from S3 if archived, else from DB.
-    
+
     Args:
         pipeline_run: PipelineRun SQLAlchemy model instance
         minio_client: Optional MinIO client
-        
+
     Returns:
         Metrics dictionary (empty dict if not found)
     """
     try:
         # Check if metrics are archived to S3
-        metrics_path = getattr(pipeline_run, 'metrics_path', None)
+        metrics_path = getattr(pipeline_run, "metrics_path", None)
         if metrics_path:
             logger.debug(f"Loading metrics from S3: {metrics_path}")
             metrics = load_json_from_s3(metrics_path, minio_client)
             if metrics is not None:
                 return metrics
-        
+
         # Fallback to DB field
-        db_metrics = getattr(pipeline_run, 'metrics', None)
+        db_metrics = getattr(pipeline_run, "metrics", None)
         if db_metrics:
             logger.debug("Loading metrics from DB")
             return db_metrics if isinstance(db_metrics, dict) else {}
-        
+
         # Return empty dict if not found
         logger.debug("Metrics not found in S3 or DB")
         return {}
@@ -98,38 +91,29 @@ def save_product_json_field_with_auto_storage(
     field_name: str,
     data: Any,
     minio_client: Optional[MinIOClient] = None,
-    threshold: int = 1024 * 1024  # 1MB default
+    threshold: int = 1024 * 1024,  # 1MB default
 ) -> bool:
     """Save product JSON field, automatically choosing DB or S3 based on size.
-    
+
     Updates both the DB field and S3 path field as needed.
-    
+
     Args:
         product: Product SQLAlchemy model instance
         field_name: Name of the field
         data: Python object to save
         minio_client: Optional MinIO client
         threshold: Size threshold for S3 storage
-        
+
     Returns:
         True if successful, False otherwise
     """
     try:
-        from primedata.services.s3_json_storage import (
-            should_save_to_s3,
-            save_json_to_s3
-        )
-        
+        from primedata.services.s3_json_storage import should_save_to_s3, save_json_to_s3
+
         # Determine if should save to S3
         if should_save_to_s3(data, threshold):
             # Save to S3
-            s3_path = save_json_to_s3(
-                product.workspace_id,
-                product.id,
-                field_name,
-                data,
-                minio_client
-            )
+            s3_path = save_json_to_s3(product.workspace_id, product.id, field_name, data, minio_client)
             if s3_path:
                 # Update S3 path field
                 path_field_name = f"{field_name}_path"
@@ -155,4 +139,3 @@ def save_product_json_field_with_auto_storage(
     except Exception as e:
         logger.error(f"Error saving {field_name} for product {product.id}: {e}", exc_info=True)
         return False
-

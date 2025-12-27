@@ -6,7 +6,21 @@ This file contains placeholder models that will be expanded as the application g
 
 import uuid
 from enum import Enum
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, JSON, ForeignKey, Enum as SQLEnum, UniqueConstraint, Index, Float, BigInteger
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    DateTime,
+    Boolean,
+    Text,
+    JSON,
+    ForeignKey,
+    Enum as SQLEnum,
+    UniqueConstraint,
+    Index,
+    Float,
+    BigInteger,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -14,14 +28,20 @@ from primedata.db.database import Base
 
 # Import enterprise models
 from .models_enterprise import (
-    DataQualityRule, DataQualityRuleAudit, DataQualityRuleSet,
-    DataQualityRuleAssignment, DataQualityComplianceReport,
-    RuleSeverity, RuleStatus, AuditAction
+    DataQualityRule,
+    DataQualityRuleAudit,
+    DataQualityRuleSet,
+    DataQualityRuleAssignment,
+    DataQualityComplianceReport,
+    RuleSeverity,
+    RuleStatus,
+    AuditAction,
 )
 
 
 class AuthProvider(str, Enum):
     """Authentication provider enum."""
+
     GOOGLE = "google"
     SIMPLE = "simple"
     NONE = "none"
@@ -29,6 +49,7 @@ class AuthProvider(str, Enum):
 
 class WorkspaceRole(str, Enum):
     """Workspace role enum."""
+
     OWNER = "owner"
     ADMIN = "admin"
     EDITOR = "editor"
@@ -37,6 +58,7 @@ class WorkspaceRole(str, Enum):
 
 class ProductStatus(str, Enum):
     """Product status enum."""
+
     DRAFT = "draft"
     RUNNING = "running"
     READY = "ready"
@@ -47,6 +69,7 @@ class ProductStatus(str, Enum):
 
 class DataSourceType(str, Enum):
     """Data source type enum."""
+
     WEB = "web"
     DB = "db"
     CONFLUENCE = "confluence"
@@ -56,6 +79,7 @@ class DataSourceType(str, Enum):
 
 class BillingPlan(str, Enum):
     """Billing plan enum."""
+
     FREE = "free"
     PRO = "pro"
     ENTERPRISE = "enterprise"
@@ -63,6 +87,7 @@ class BillingPlan(str, Enum):
 
 class PipelineRunStatus(str, Enum):
     """Pipeline run status enum."""
+
     QUEUED = "queued"
     RUNNING = "running"
     SUCCEEDED = "succeeded"
@@ -73,6 +98,7 @@ class PipelineRunStatus(str, Enum):
 
 class PolicyStatus(str, Enum):
     """Policy evaluation status enum (M2)."""
+
     PASSED = "passed"
     FAILED = "failed"
     WARNINGS = "warnings"
@@ -81,6 +107,7 @@ class PolicyStatus(str, Enum):
 
 class RawFileStatus(str, Enum):
     """Raw file processing status enum."""
+
     INGESTED = "ingested"  # File uploaded to MinIO and recorded in DB
     PROCESSING = "processing"  # Currently being processed by pipeline
     PROCESSED = "processed"  # Successfully processed by pipeline
@@ -90,6 +117,7 @@ class RawFileStatus(str, Enum):
 
 class ArtifactType(str, Enum):
     """Pipeline artifact type enum."""
+
     JSONL = "jsonl"  # Processed chunks
     JSON = "json"  # Metrics, fingerprint, etc.
     CSV = "csv"  # Validation summaries
@@ -101,6 +129,7 @@ class ArtifactType(str, Enum):
 
 class ArtifactStatus(str, Enum):
     """Artifact status enum for lifecycle management."""
+
     ACTIVE = "active"  # Currently in use
     ARCHIVED = "archived"  # Moved to cold storage
     DELETED = "deleted"  # Soft deleted
@@ -109,6 +138,7 @@ class ArtifactStatus(str, Enum):
 
 class RetentionPolicy(str, Enum):
     """Artifact retention policy enum."""
+
     KEEP_FOREVER = "keep_forever"  # Never delete (production artifacts)
     DAYS_30 = "30_days"  # Keep for 30 days
     DAYS_90 = "90_days"  # Keep for 90 days
@@ -119,6 +149,7 @@ class RetentionPolicy(str, Enum):
 
 class ACLAccessType(str, Enum):
     """ACL access type enum (M5)."""
+
     FULL = "full"
     INDEX = "index"
     DOCUMENT = "document"
@@ -127,14 +158,15 @@ class ACLAccessType(str, Enum):
 
 class User(Base):
     """User model."""
+
     __tablename__ = "users"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     email = Column(String(255), unique=True, index=True, nullable=False)
     name = Column(String(255), nullable=False)
     first_name = Column(String(255), nullable=True)
     last_name = Column(String(255), nullable=True)
-    timezone = Column(String(50), nullable=True, default='UTC')
+    timezone = Column(String(50), nullable=True, default="UTC")
     picture_url = Column(String(500), nullable=True)
     auth_provider = Column(SQLEnum(AuthProvider), nullable=False, default=AuthProvider.NONE)
     google_sub = Column(String(255), unique=True, nullable=True, index=True)
@@ -142,7 +174,7 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    
+
     # Relationships
     workspace_memberships = relationship("WorkspaceMember", back_populates="user")
     owned_products = relationship("Product", back_populates="owner")
@@ -151,14 +183,15 @@ class User(Base):
 
 class Workspace(Base):
     """Workspace model."""
+
     __tablename__ = "workspaces"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     name = Column(String(255), nullable=False)
     settings = Column(JSON, nullable=True, default=dict)  # Workspace settings (API keys, etc.)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    
+
     # Relationships
     members = relationship("WorkspaceMember", back_populates="workspace")
     products = relationship("Product", back_populates="workspace")
@@ -168,29 +201,29 @@ class Workspace(Base):
 
 class WorkspaceMember(Base):
     """Workspace membership model."""
+
     __tablename__ = "workspace_members"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id"), nullable=False)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     role = Column(SQLEnum(WorkspaceRole), nullable=False, default=WorkspaceRole.VIEWER)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    
+
     # Relationships
     workspace = relationship("Workspace", back_populates="members")
     user = relationship("User", back_populates="workspace_memberships")
-    
+
     # Unique constraint
-    __table_args__ = (
-        UniqueConstraint('workspace_id', 'user_id', name='unique_workspace_user'),
-    )
+    __table_args__ = (UniqueConstraint("workspace_id", "user_id", name="unique_workspace_user"),)
 
 
 class Product(Base):
     """Product model."""
+
     __tablename__ = "products"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id"), nullable=False, index=True)
     owner_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
@@ -205,11 +238,15 @@ class Product(Base):
     # Playbook selection metadata (for auto-detection verification)
     playbook_selection = Column(JSON, nullable=True, default=None)  # Stores: method, reason, detected_at, confidence
     # Preprocessing statistics (M1) - Hybrid storage: small JSON in DB, large JSON in S3
-    preprocessing_stats = Column(JSON, nullable=True, default=None)  # sections, chunks, mid_sentence_boundary_rate (small JSON only)
+    preprocessing_stats = Column(
+        JSON, nullable=True, default=None
+    )  # sections, chunks, mid_sentence_boundary_rate (small JSON only)
     preprocessing_stats_path = Column(String(1000), nullable=True, default=None)  # S3 path for large JSON
     # Trust scoring and policy (M2) - Hybrid storage: small JSON in DB, large JSON in S3
     trust_score = Column(Float, nullable=True, default=None)  # Aggregated AI Trust Score
-    readiness_fingerprint = Column(JSON, nullable=True, default=None)  # Readiness fingerprint (all 13 metrics) - small JSON only
+    readiness_fingerprint = Column(
+        JSON, nullable=True, default=None
+    )  # Readiness fingerprint (all 13 metrics) - small JSON only
     readiness_fingerprint_path = Column(String(1000), nullable=True, default=None)  # S3 path for large JSON
     policy_status = Column(SQLEnum(PolicyStatus), nullable=True, default=PolicyStatus.UNKNOWN)  # M2: Policy evaluation status
     policy_violations = Column(JSON, nullable=True, default=list)  # List of violation strings
@@ -219,31 +256,28 @@ class Product(Base):
     validation_summary_path = Column(String(500), nullable=True, default=None)  # MinIO path to validation CSV
     trust_report_path = Column(String(500), nullable=True, default=None)  # MinIO path to trust report PDF
     # Chunking configuration
-    chunking_config = Column(JSON, nullable=True, default=lambda: {
-        "mode": "auto",  # "auto" or "manual"
-        "auto_settings": {
-            "content_type": "general",
-            "model_optimized": True,
-            "confidence_threshold": 0.7
+    chunking_config = Column(
+        JSON,
+        nullable=True,
+        default=lambda: {
+            "mode": "auto",  # "auto" or "manual"
+            "auto_settings": {"content_type": "general", "model_optimized": True, "confidence_threshold": 0.7},
+            "manual_settings": {
+                "chunk_size": 1000,
+                "chunk_overlap": 200,
+                "min_chunk_size": 100,
+                "max_chunk_size": 2000,
+                "chunking_strategy": "fixed_size",
+            },
+            "last_analyzed": None,
+            "analysis_confidence": 0.0,
         },
-        "manual_settings": {
-            "chunk_size": 1000,
-            "chunk_overlap": 200,
-            "min_chunk_size": 100,
-            "max_chunk_size": 2000,
-            "chunking_strategy": "fixed_size"
-        },
-        "last_analyzed": None,
-        "analysis_confidence": 0.0
-    })
+    )
     # Embedding configuration
-    embedding_config = Column(JSON, nullable=True, default=lambda: {
-        "embedder_name": "minilm",
-        "embedding_dimension": 384
-    })
+    embedding_config = Column(JSON, nullable=True, default=lambda: {"embedder_name": "minilm", "embedding_dimension": 384})
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    
+
     # Relationships
     workspace = relationship("Workspace", back_populates="products")
     owner = relationship("User", back_populates="owned_products")
@@ -253,21 +287,22 @@ class Product(Base):
     raw_files = relationship("RawFile", back_populates="product")  # Track ingested raw files
     acls = relationship("ACL", back_populates="product")  # M5
     pipeline_artifacts = relationship("PipelineArtifact", back_populates="product")  # Track pipeline artifacts
-    
+
     # Unique constraint and indexes
     __table_args__ = (
-        UniqueConstraint('workspace_id', 'name', name='unique_workspace_product_name'),
-        Index('idx_products_workspace_id', 'workspace_id'),
-        Index('idx_products_owner_user_id', 'owner_user_id'),
-        Index('idx_products_status', 'status'),  # For filtering by status
-        Index('idx_products_created_at', 'created_at'),  # For time-based queries
+        UniqueConstraint("workspace_id", "name", name="unique_workspace_product_name"),
+        Index("idx_products_workspace_id", "workspace_id"),
+        Index("idx_products_owner_user_id", "owner_user_id"),
+        Index("idx_products_status", "status"),  # For filtering by status
+        Index("idx_products_created_at", "created_at"),  # For time-based queries
     )
 
 
 class DataSource(Base):
     """Data source model."""
+
     __tablename__ = "data_sources"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id"), nullable=False, index=True)
     product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False, index=True)
@@ -277,20 +312,21 @@ class DataSource(Base):
     last_cursor = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    
+
     # Relationships
     workspace = relationship("Workspace")
     product = relationship("Product", back_populates="data_sources")
-    
+
     # Indexes
     __table_args__ = (
-        Index('idx_data_sources_workspace_id', 'workspace_id'),
-        Index('idx_data_sources_product_id', 'product_id'),
+        Index("idx_data_sources_workspace_id", "workspace_id"),
+        Index("idx_data_sources_product_id", "product_id"),
     )
 
 
 class RawFileStatus(str, Enum):
     """Raw file processing status enum."""
+
     INGESTED = "ingested"  # File uploaded to MinIO and recorded in DB
     PROCESSING = "processing"  # Currently being processed by pipeline
     PROCESSED = "processed"  # Successfully processed by pipeline
@@ -300,12 +336,13 @@ class RawFileStatus(str, Enum):
 
 class RawFile(Base):
     """Raw file model for tracking ingested files in MinIO.
-    
+
     Enterprise-grade metadata catalog for object storage files.
     Follows the metadata catalog pattern (DB for queries, MinIO for storage).
     """
+
     __tablename__ = "raw_files"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id"), nullable=False, index=True)
     product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False, index=True)
@@ -316,26 +353,26 @@ class RawFile(Base):
     minio_key = Column(String(1000), nullable=False, unique=True)  # Full MinIO object key
     minio_bucket = Column(String(255), nullable=False, default="primedata-raw")
     file_size = Column(Integer, nullable=False)  # Size in bytes
-    content_type = Column(String(255), nullable=False, default='application/octet-stream')  # MIME type
+    content_type = Column(String(255), nullable=False, default="application/octet-stream")  # MIME type
     status = Column(SQLEnum(RawFileStatus), nullable=False, default=RawFileStatus.INGESTED)  # Processing status
     file_checksum = Column(String(64), nullable=False)  # MD5 or SHA256 checksum for integrity validation
     minio_etag = Column(String(255), nullable=True)  # MinIO ETag for validation
     ingested_at = Column(DateTime(timezone=True), server_default=func.now())
     processed_at = Column(DateTime(timezone=True), nullable=True)  # When processing completed
     error_message = Column(Text, nullable=True)  # Error message if processing failed
-    
+
     # Relationships
     workspace = relationship("Workspace")
     product = relationship("Product")
     data_source = relationship("DataSource")
-    
+
     # Indexes
     __table_args__ = (
-        Index('idx_raw_files_product_version', 'product_id', 'version'),
-        Index('idx_raw_files_file_stem', 'file_stem'),
-        Index('idx_raw_files_data_source', 'data_source_id'),
-        Index('idx_raw_files_status', 'status'),  # For querying by status
-        UniqueConstraint('product_id', 'version', 'file_stem', name='uq_raw_file_product_version_stem'),
+        Index("idx_raw_files_product_version", "product_id", "version"),
+        Index("idx_raw_files_file_stem", "file_stem"),
+        Index("idx_raw_files_data_source", "data_source_id"),
+        Index("idx_raw_files_status", "status"),  # For querying by status
+        UniqueConstraint("product_id", "version", "file_stem", name="uq_raw_file_product_version_stem"),
     )
 
 
@@ -345,8 +382,9 @@ class RawFile(Base):
 
 class ACL(Base):
     """Access Control List model (M5)."""
+
     __tablename__ = "acls"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False, index=True)
@@ -355,24 +393,25 @@ class ACL(Base):
     doc_scope = Column(String(500), nullable=True)  # Comma-separated document IDs or null
     field_scope = Column(String(500), nullable=True)  # Comma-separated field names or null
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
+
     # Relationships
     user = relationship("User", back_populates="acls")
     product = relationship("Product", back_populates="acls")
-    
+
     # Indexes
     __table_args__ = (
-        Index('idx_acls_user_id', 'user_id'),
-        Index('idx_acls_product_id', 'product_id'),
-        Index('idx_acls_access_type', 'access_type'),
-        Index('idx_acls_user_product', 'user_id', 'product_id'),
+        Index("idx_acls_user_id", "user_id"),
+        Index("idx_acls_product_id", "product_id"),
+        Index("idx_acls_access_type", "access_type"),
+        Index("idx_acls_user_product", "user_id", "product_id"),
     )
 
 
 class PipelineRun(Base):
     """Pipeline run model."""
+
     __tablename__ = "pipeline_runs"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id"), nullable=False, index=True)
     product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False, index=True)
@@ -386,29 +425,34 @@ class PipelineRun(Base):
     archived_at = Column(DateTime(timezone=True), nullable=True)  # When metrics were moved to S3
     # AIRD stage tracking fields (M0)
     stage_metrics = Column(JSON, nullable=True, default=None)  # Per-stage metrics (deprecated, use metrics.aird_stages)
-    aird_stages_completed = Column(JSON, nullable=True, default=None)  # List of completed stage names (deprecated, use metrics.aird_stages_completed)
+    aird_stages_completed = Column(
+        JSON, nullable=True, default=None
+    )  # List of completed stage names (deprecated, use metrics.aird_stages_completed)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    
+
     # Relationships
     workspace = relationship("Workspace")
     product = relationship("Product")
     artifacts = relationship("PipelineArtifact", back_populates="pipeline_run", cascade="all, delete-orphan")
-    
+
     # Indexes
     __table_args__ = (
-        Index('idx_pipeline_runs_product_version', 'product_id', 'version'),
-        Index('idx_pipeline_runs_workspace_id', 'workspace_id'),
-        Index('idx_pipeline_runs_dag_run_id', 'dag_run_id'),
-        Index('idx_pipeline_runs_product_status_created', 'product_id', 'status', 'created_at'),  # Composite index for common queries
-        Index('idx_pipeline_runs_created_at', 'created_at'),  # For archiving queries
+        Index("idx_pipeline_runs_product_version", "product_id", "version"),
+        Index("idx_pipeline_runs_workspace_id", "workspace_id"),
+        Index("idx_pipeline_runs_dag_run_id", "dag_run_id"),
+        Index(
+            "idx_pipeline_runs_product_status_created", "product_id", "status", "created_at"
+        ),  # Composite index for common queries
+        Index("idx_pipeline_runs_created_at", "created_at"),  # For archiving queries
     )
 
 
 class CustomPlaybook(Base):
     """Custom playbook model for user-created playbooks."""
+
     __tablename__ = "custom_playbooks"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id"), nullable=False, index=True)
     owner_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
@@ -421,92 +465,94 @@ class CustomPlaybook(Base):
     is_active = Column(Boolean, nullable=False, default=True)  # Soft delete flag
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    
+
     # Relationships
     workspace = relationship("Workspace")
     owner = relationship("User")
-    
+
     # Indexes
     __table_args__ = (
-        UniqueConstraint('workspace_id', 'playbook_id', name='unique_workspace_playbook_id'),
-        Index('idx_custom_playbooks_workspace_id', 'workspace_id'),
-        Index('idx_custom_playbooks_owner_user_id', 'owner_user_id'),
-        Index('idx_custom_playbooks_playbook_id', 'playbook_id'),
+        UniqueConstraint("workspace_id", "playbook_id", name="unique_workspace_playbook_id"),
+        Index("idx_custom_playbooks_workspace_id", "workspace_id"),
+        Index("idx_custom_playbooks_owner_user_id", "owner_user_id"),
+        Index("idx_custom_playbooks_playbook_id", "playbook_id"),
     )
 
 
 class PipelineArtifact(Base):
     """Pipeline artifact registry for enterprise traceability.
-    
+
     Tracks all artifacts generated during pipeline execution:
     - Location (MinIO bucket/key)
     - Integrity (size, checksum)
     - Lineage (input artifacts)
     - Metadata (stage-specific info)
     - Retention (lifecycle management)
-    
+
     Enables full data lineage, audit trails, and cost optimization.
     """
+
     __tablename__ = "pipeline_artifacts"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     pipeline_run_id = Column(UUID(as_uuid=True), ForeignKey("pipeline_runs.id"), nullable=False, index=True)
     workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id"), nullable=False, index=True)
     product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False, index=True)
     version = Column(Integer, nullable=False, index=True)
-    
+
     # Artifact identification
     stage_name = Column(String(100), nullable=False, index=True)  # "preprocess", "scoring", "fingerprint", etc.
     artifact_type = Column(SQLEnum(ArtifactType), nullable=False)  # "jsonl", "json", "csv", "pdf", "vector"
     artifact_name = Column(String(255), nullable=False)  # "processed_chunks", "metrics", "fingerprint", etc.
-    
+
     # Storage location
     minio_bucket = Column(String(255), nullable=False)  # "primedata-clean", "primedata-embed", etc.
     minio_key = Column(String(1000), nullable=False, index=True)  # Full MinIO object key
     file_size = Column(BigInteger, nullable=False)  # Size in bytes
     checksum = Column(String(64), nullable=False)  # MD5 or SHA256 for integrity verification
     minio_etag = Column(String(255), nullable=False)  # MinIO ETag for validation
-    
+
     # Data lineage (Phase 2)
     input_artifacts = Column(JSON, nullable=True, default=list)  # List of artifact IDs this depends on
     # Format: [{"artifact_id": "uuid", "stage": "preprocess", "artifact_name": "processed_chunks"}]
-    
+
     # Stage-specific metadata (renamed from 'metadata' as it's reserved in SQLAlchemy)
     artifact_metadata = Column(JSON, nullable=True, default=dict)  # Stage-specific metadata:
     # - chunks_count, files_processed, playbook_id, thresholds, embedding_model, etc.
-    
+
     # Lifecycle management (Phase 3)
     status = Column(SQLEnum(ArtifactStatus), nullable=False, default=ArtifactStatus.ACTIVE, index=True)
     retention_policy = Column(SQLEnum(RetentionPolicy), nullable=False, default=RetentionPolicy.DAYS_90)
-    
+
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     archived_at = Column(DateTime(timezone=True), nullable=True)
     deleted_at = Column(DateTime(timezone=True), nullable=True)
-    
+
     # Optional: Track who/what created it (for audit)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)  # If user-triggered
-    
+
     # Relationships
     pipeline_run = relationship("PipelineRun", back_populates="artifacts")
     workspace = relationship("Workspace")
     product = relationship("Product")
     creator = relationship("User")
-    
+
     # Indexes
     __table_args__ = (
-        Index('idx_artifacts_product_version', 'product_id', 'version'),
-        Index('idx_artifacts_stage_type', 'stage_name', 'artifact_type'),
-        Index('idx_artifacts_status_created', 'status', 'created_at'),
-        Index('idx_artifacts_retention', 'retention_policy', 'created_at'),
-        Index('idx_artifacts_minio_key', 'minio_key'),  # For quick lookup by MinIO key
+        Index("idx_artifacts_product_version", "product_id", "version"),
+        Index("idx_artifacts_stage_type", "stage_name", "artifact_type"),
+        Index("idx_artifacts_status_created", "status", "created_at"),
+        Index("idx_artifacts_retention", "retention_policy", "created_at"),
+        Index("idx_artifacts_minio_key", "minio_key"),  # For quick lookup by MinIO key
     )
 
 
 class Pipeline(Base):
     """Data pipeline model (placeholder)."""
+
     __tablename__ = "pipelines"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=False)
     description = Column(Text)
@@ -518,6 +564,7 @@ class Pipeline(Base):
 
 class DqViolationSeverity(str, Enum):
     """Data quality violation severity levels."""
+
     ERROR = "error"
     WARNING = "warning"
     INFO = "info"
@@ -525,63 +572,67 @@ class DqViolationSeverity(str, Enum):
 
 class DqViolation(Base):
     """Data quality violation model."""
+
     __tablename__ = "dq_violations"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False, index=True)
     version = Column(Integer, nullable=False, index=True)
     pipeline_run_id = Column(UUID(as_uuid=True), nullable=True, index=True)
-    
+
     # Violation details
     rule_name = Column(String(255), nullable=False)
     rule_type = Column(String(100), nullable=False)
     severity = Column(SQLEnum(DqViolationSeverity), nullable=False)
     message = Column(Text, nullable=False)
     details = Column(JSON, nullable=True, default=dict)
-    
+
     # Statistics
     affected_count = Column(Integer, default=0)
     total_count = Column(Integer, default=0)
     violation_rate = Column(Float, default=0.0)
-    
+
     # Archiving fields for cost optimization
     archived_at = Column(DateTime(timezone=True), nullable=True)  # When violation was archived
     archived_to_s3 = Column(Boolean, nullable=False, default=False)  # Whether archived to S3
-    
+
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
+
     # Relationships
     product = relationship("Product")
-    
+
     # Indexes
     __table_args__ = (
-        Index('idx_dq_violations_product_version', 'product_id', 'version'),
-        Index('idx_dq_violations_severity', 'severity'),
-        Index('idx_dq_violations_created_at', 'created_at'),
-        Index('idx_dq_violations_product_version_severity', 'product_id', 'version', 'severity'),  # Composite index for filtering
+        Index("idx_dq_violations_product_version", "product_id", "version"),
+        Index("idx_dq_violations_severity", "severity"),
+        Index("idx_dq_violations_created_at", "created_at"),
+        Index(
+            "idx_dq_violations_product_version_severity", "product_id", "version", "severity"
+        ),  # Composite index for filtering
     )
 
 
 class BillingProfile(Base):
     """Billing profile for workspace."""
+
     __tablename__ = "billing_profiles"
-    
+
     workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id"), primary_key=True)
     stripe_customer_id = Column(String(255), unique=True, nullable=True, index=True)
     plan = Column(SQLEnum(BillingPlan), default=BillingPlan.FREE, nullable=False)
     default_payment_method_id = Column(String(255), nullable=True)
     usage = Column(JSON, default=dict, nullable=False)
-    
+
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-    
+
     # Relationships
     workspace = relationship("Workspace", back_populates="billing_profile")
-    
+
     # Indexes
     __table_args__ = (
-        Index('idx_billing_profiles_stripe_customer', 'stripe_customer_id'),
-        Index('idx_billing_profiles_plan', 'plan'),
+        Index("idx_billing_profiles_stripe_customer", "stripe_customer_id"),
+        Index("idx_billing_profiles_plan", "plan"),
     )

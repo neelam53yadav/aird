@@ -15,6 +15,3 @@ __all__ = [
     "load_playbook_yaml",
     "get_playbook_dir",
 ]
-
-
-

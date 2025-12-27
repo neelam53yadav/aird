@@ -23,7 +23,7 @@ def create_acl(
 ) -> ACL:
     """
     Create an ACL entry.
-    
+
     Args:
         db: Database session
         user_id: User ID
@@ -32,7 +32,7 @@ def create_acl(
         index_scope: Optional comma-separated index IDs
         doc_scope: Optional comma-separated document IDs
         field_scope: Optional comma-separated field names
-        
+
     Returns:
         Created ACL instance
     """
@@ -58,12 +58,12 @@ def get_acls_for_user(
 ) -> List[ACL]:
     """
     Get ACLs for a user, optionally filtered by product.
-    
+
     Args:
         db: Database session
         user_id: User ID
         product_id: Optional product ID filter
-        
+
     Returns:
         List of ACL instances
     """
@@ -80,12 +80,12 @@ def get_acls_for_product(
 ) -> List[ACL]:
     """
     Get ACLs for a product, optionally filtered by user.
-    
+
     Args:
         db: Database session
         product_id: Product ID
         user_id: Optional user ID filter
-        
+
     Returns:
         List of ACL instances
     """
@@ -103,25 +103,25 @@ def delete_acls(
 ) -> int:
     """
     Delete ACLs matching the given criteria.
-    
+
     Args:
         db: Database session
         acl_id: Optional specific ACL ID
         user_id: Optional user ID filter
         product_id: Optional product ID filter
-        
+
     Returns:
         Number of deleted ACLs
     """
     query = db.query(ACL)
-    
+
     if acl_id:
         query = query.filter(ACL.id == acl_id)
     if user_id:
         query = query.filter(ACL.user_id == user_id)
     if product_id:
         query = query.filter(ACL.product_id == product_id)
-    
+
     count = query.delete(synchronize_session=False)
     db.commit()
     logger.info(f"Deleted {count} ACLs: acl_id={acl_id}, user_id={user_id}, product_id={product_id}")
@@ -135,39 +135,39 @@ def apply_acl_filter_to_payloads(
 ) -> List[Dict[str, Any]]:
     """
     Filter Qdrant points based on user ACLs.
-    
+
     Args:
         all_points: List of Qdrant points (dicts with 'id' and 'payload')
         user_acls: User's ACLs for the product
         product_id: Product ID (UUID or str) for matching
-        
+
     Returns:
         Filtered list of point payloads
     """
     if not user_acls:
         return []
-    
+
     allowed = []
     allowed_chunk_ids: Set[str] = set()
     product_id_str = str(product_id)
-    
+
     for point in all_points:
         payload = point.get("payload", {})
         chunk_id = payload.get("chunk_id")
         if not chunk_id:
             continue
-        
+
         point_product_id = payload.get("product_id")
         document_id = payload.get("document_id") or payload.get("doc_scope")
         field_name = payload.get("field_name") or payload.get("field_scope")
-        
+
         for acl in user_acls:
             # Full access - allow everything
             if acl.access_type == ACLAccessType.FULL:
                 allowed.append(payload)
                 allowed_chunk_ids.add(chunk_id)
                 break
-            
+
             # Index scope - match by product_id (index_scope is product_id in AIRD)
             if acl.access_type == ACLAccessType.INDEX:
                 if acl.index_scope:
@@ -177,7 +177,7 @@ def apply_acl_filter_to_payloads(
                         allowed.append(payload)
                         allowed_chunk_ids.add(chunk_id)
                         break
-            
+
             # Document scope - match by document_id (from doc_scope)
             if acl.access_type == ACLAccessType.DOCUMENT:
                 if acl.doc_scope and document_id:
@@ -187,7 +187,7 @@ def apply_acl_filter_to_payloads(
                         allowed.append(payload)
                         allowed_chunk_ids.add(chunk_id)
                         break
-            
+
             # Field scope - match by field_name
             if acl.access_type == ACLAccessType.FIELD:
                 if acl.field_scope and field_name:
@@ -197,7 +197,7 @@ def apply_acl_filter_to_payloads(
                         allowed.append(payload)
                         allowed_chunk_ids.add(chunk_id)
                         break
-    
+
     # Remove duplicates by chunk_id
     seen = set()
     unique_allowed = []
@@ -206,17 +206,17 @@ def apply_acl_filter_to_payloads(
         if chunk_id and chunk_id not in seen:
             seen.add(chunk_id)
             unique_allowed.append(payload)
-    
+
     return unique_allowed
 
 
 def get_allowed_chunk_ids_from_payloads(payloads: List[Dict[str, Any]]) -> Set[str]:
     """
     Extract allowed chunk IDs from Qdrant payloads.
-    
+
     Args:
         payloads: List of Qdrant payload dictionaries
-        
+
     Returns:
         Set of chunk IDs
     """
@@ -233,20 +233,21 @@ def apply_acl_filter(
     This function is kept for backward compatibility but should not be used with new code.
     """
     from loguru import logger
+
     logger.warning("apply_acl_filter is deprecated. Use apply_acl_filter_to_payloads with Qdrant payloads.")
     # Convert VectorMetadata to payload dicts for compatibility
     payloads = []
     for v in all_vectors:
-        payloads.append({
-            "chunk_id": v.chunk_id,
-            "product_id": str(v.product_id),
-            "document_id": getattr(v, "document_id", None),
-            "field_name": v.field_name,
-        })
+        payloads.append(
+            {
+                "chunk_id": v.chunk_id,
+                "product_id": str(v.product_id),
+                "document_id": getattr(v, "document_id", None),
+                "field_name": v.field_name,
+            }
+        )
     return apply_acl_filter_to_payloads(
-        [{"payload": p} for p in payloads],
-        user_acls,
-        all_vectors[0].product_id if all_vectors else None
+        [{"payload": p} for p in payloads], user_acls, all_vectors[0].product_id if all_vectors else None
     )
 
 
@@ -255,6 +256,7 @@ def get_allowed_chunk_ids(vectors: List[Any]) -> Set[str]:
     Legacy function - deprecated. Use get_allowed_chunk_ids_from_payloads instead.
     """
     from loguru import logger
+
     logger.warning("get_allowed_chunk_ids is deprecated. Use get_allowed_chunk_ids_from_payloads with Qdrant payloads.")
     if not vectors:
         return set()
@@ -266,7 +268,3 @@ def get_allowed_chunk_ids(vectors: List[Any]) -> Set[str]:
         elif isinstance(v, dict):
             chunk_ids.add(v.get("chunk_id", ""))
     return chunk_ids
-
-
-
-

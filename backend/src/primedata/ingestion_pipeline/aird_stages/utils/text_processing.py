@@ -66,18 +66,18 @@ def apply_normalizers(text: str, steps: Optional[List[Dict[str, Any]]]) -> str:
         if not pat:
             logger.warning(f"Normalizer step missing 'pattern' field, skipping: {step}")
             continue
-        
+
         # Handle YAML parsing issue: sometimes patterns are parsed as lists (e.g., [\u2018\u2019])
         # Convert list to string character class pattern
         if isinstance(pat, list):
             # Convert list of characters to regex character class string
             pat = "[" + "".join(str(c) for c in pat) + "]"
             logger.debug(f"Converted list pattern to string: {pat}")
-        
+
         if not isinstance(pat, str):
             logger.warning(f"Normalizer pattern must be string or list, got {type(pat)}: {pat}, skipping")
             continue
-        
+
         repl = step.get("replace", "")
         flag_val = step.get("flags")
         # Handle flags: can be string, None, or other types
@@ -87,12 +87,16 @@ def apply_normalizers(text: str, steps: Optional[List[Dict[str, Any]]]) -> str:
             flags = 0
         else:
             # If flags is not a string or None, log and use 0
-            logger.warning(f"Unexpected flags type in normalizer (expected str or None, got {type(flag_val)}): {flag_val}, using 0")
+            logger.warning(
+                f"Unexpected flags type in normalizer (expected str or None, got {type(flag_val)}): {flag_val}, using 0"
+            )
             flags = 0
         try:
             out = re.sub(pat, repl, out, flags=flags)
         except (re.error, TypeError) as e:
-            logger.warning(f"Bad regex pattern in normalizer: {pat}, error: {e}, flags type: {type(flags)}, flags value: {flags}")
+            logger.warning(
+                f"Bad regex pattern in normalizer: {pat}, error: {e}, flags type: {type(flags)}, flags value: {flags}"
+            )
             # ignore bad regex in config; continue
             pass
     return out
@@ -105,14 +109,14 @@ def split_pages_by_config(text: str, page_fences: Optional[List[Dict[str, Any]]]
     """
     if not page_fences:
         return [{"page": 1, "text": text.strip()}]
-    
+
     for fence in page_fences:
         flags = _compile_flags(fence.get("flags"))
         pattern = fence.get("pattern", r"^$")
         lines = text.splitlines()
         pages, curr, page = [], [], 1
         found_any_marker = False
-        
+
         for line in lines:
             if re.match(pattern, line, flags=flags):
                 found_any_marker = True
@@ -128,11 +132,11 @@ def split_pages_by_config(text: str, page_fences: Optional[List[Dict[str, Any]]]
                     page = pages[-1]["page"] + 1 if pages else 1
                 continue
             curr.append(line)
-        
+
         # Add the last page if there's remaining content
         if curr:
             pages.append({"page": page, "text": "\n".join(curr).strip()})
-        
+
         # If we found any markers and have multiple pages, return them
         # Also return if we have at least one page (even if only one marker was found)
         if found_any_marker and len(pages) > 0:
@@ -140,7 +144,7 @@ def split_pages_by_config(text: str, page_fences: Optional[List[Dict[str, Any]]]
         # If we found markers but only got one page, that's still valid (single-page document)
         if found_any_marker:
             return pages
-    
+
     # No patterns matched, return single page
     return [{"page": 1, "text": text.strip()}]
 
@@ -222,45 +226,47 @@ def apply_enhanced_normalization(text: str) -> str:
     if len(text) > 100:
         sample = text[:500]
         # Check if more than 30% of characters are spaces (indicating corruption)
-        space_ratio = sample.count(' ') / len(sample) if len(sample) > 0 else 0
+        space_ratio = sample.count(" ") / len(sample) if len(sample) > 0 else 0
         if space_ratio > 0.3:
-            logger.warning("Text appears to be corrupted (excessive spaces), skipping enhanced normalization to avoid further corruption")
+            logger.warning(
+                "Text appears to be corrupted (excessive spaces), skipping enhanced normalization to avoid further corruption"
+            )
             return text
-    
+
     out = text
-    
+
     # Enhanced character normalization
     # Fix common OCR errors and encoding issues
     replacements = [
         # Remove control characters except \n, \t, \r
-        (r'[\x00-\x08\x0B-\x0C\x0E-\x1F]', ''),
+        (r"[\x00-\x08\x0B-\x0C\x0E-\x1F]", ""),
         # Normalize whitespace more aggressively
-        (r'[ \t]+', ' '),  # Multiple spaces/tabs to single space
-        (r'\n[ \t]+', '\n'),  # Remove leading spaces on new lines
-        (r'[ \t]+\n', '\n'),  # Remove trailing spaces before newlines
+        (r"[ \t]+", " "),  # Multiple spaces/tabs to single space
+        (r"\n[ \t]+", "\n"),  # Remove leading spaces on new lines
+        (r"[ \t]+\n", "\n"),  # Remove trailing spaces before newlines
         # Fix punctuation spacing (but be careful not to break words)
-        (r' +([,.!?;:])', r'\1'),  # Remove space before punctuation
-        (r'([,.!?;:])([^\s])', r'\1 \2'),  # Ensure space after punctuation (if missing)
+        (r" +([,.!?;:])", r"\1"),  # Remove space before punctuation
+        (r"([,.!?;:])([^\s])", r"\1 \2"),  # Ensure space after punctuation (if missing)
         # Fix quote normalization (more comprehensive)
-        (r'[\u2018\u2019\u2032]', "'"),  # Various single quotes to standard
-        (r'[\u201C\u201D\u2033]', '"'),  # Various double quotes to standard
-        (r'[\u2013\u2014\u2015]', '-'),  # Various dashes to hyphen
+        (r"[\u2018\u2019\u2032]", "'"),  # Various single quotes to standard
+        (r"[\u201C\u201D\u2033]", '"'),  # Various double quotes to standard
+        (r"[\u2013\u2014\u2015]", "-"),  # Various dashes to hyphen
         # Fix ellipsis
-        (r'\.{4,}', '...'),  # More than 3 dots -> ellipsis
+        (r"\.{4,}", "..."),  # More than 3 dots -> ellipsis
         # Remove excessive line breaks but preserve paragraphs
-        (r'\n{4,}', '\n\n\n'),  # More than 3 newlines -> 3
+        (r"\n{4,}", "\n\n\n"),  # More than 3 newlines -> 3
     ]
-    
+
     for pattern, replacement in replacements:
         try:
             out = re.sub(pattern, replacement, out)
         except (re.error, TypeError) as e:
             logger.warning(f"Enhanced normalization pattern failed: {pattern}, error: {e}")
             continue
-    
+
     # Final cleanup
     out = out.strip()
-    
+
     return out
 
 
@@ -274,47 +280,47 @@ def apply_error_correction(text: str) -> str:
     if len(text) > 100:
         sample = text[:500]
         # Check if more than 30% of characters are spaces (indicating corruption)
-        space_ratio = sample.count(' ') / len(sample) if len(sample) > 0 else 0
+        space_ratio = sample.count(" ") / len(sample) if len(sample) > 0 else 0
         if space_ratio > 0.3:
-            logger.warning("Text appears to be corrupted (excessive spaces), skipping error correction to avoid further corruption")
+            logger.warning(
+                "Text appears to be corrupted (excessive spaces), skipping error correction to avoid further corruption"
+            )
             return text
-    
+
     try:
         from spellchecker import SpellChecker
+
         spell = SpellChecker()
         HAS_SPELLCHECKER = True
     except ImportError:
         HAS_SPELLCHECKER = False
         logger.debug("spellchecker library not available, using pattern-based correction only")
-    
+
     out = text
-    
+
     # Pattern-based fixes (don't require external libraries)
     # Only fix clear OCR errors, avoid patterns that could corrupt valid text
     pattern_fixes = [
         # Common OCR word errors (using word boundaries to avoid false positives)
-        (r'\bteh\b', 'the'),
-        (r'\badn\b', 'and'),
-        (r'\btha\b', 'that'),
-        (r'\btaht\b', 'that'),
-        (r'\bhte\b', 'the'),
+        (r"\bteh\b", "the"),
+        (r"\badn\b", "and"),
+        (r"\btha\b", "that"),
+        (r"\btaht\b", "that"),
+        (r"\bhte\b", "the"),
         # Fix excessive repeated letters (4+ repeats -> 2)
-        (r'([a-z])\1{3,}', r'\1\1'),
+        (r"([a-z])\1{3,}", r"\1\1"),
         # Fix missing space after sentence-ending punctuation (but only if next char is uppercase letter)
-        (r'([.!?])([A-Z][a-z])', r'\1 \2'),
+        (r"([.!?])([A-Z][a-z])", r"\1 \2"),
     ]
-    
+
     for pattern, replacement in pattern_fixes:
         try:
             out = re.sub(pattern, replacement, out, flags=re.IGNORECASE)
         except (re.error, TypeError) as e:
             logger.warning(f"Error correction pattern failed: {pattern}, error: {e}")
             continue
-    
+
     # Disable spellchecker-based correction for now - it's too risky and can corrupt valid text
     # The pattern-based fixes above are safer and sufficient for common OCR errors
-    
+
     return out
-
-
-

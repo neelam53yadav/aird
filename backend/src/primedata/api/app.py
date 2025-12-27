@@ -85,6 +85,7 @@ async def check_qdrant() -> Dict[str, Any]:
     """Check Qdrant connectivity."""
     try:
         import httpx
+
         async with httpx.AsyncClient() as client:
             response = await client.get("http://localhost:6333/", timeout=5.0)
             if response.status_code == 200:
@@ -99,6 +100,7 @@ async def check_minio() -> Dict[str, Any]:
     """Check MinIO connectivity."""
     try:
         import httpx
+
         async with httpx.AsyncClient() as client:
             response = await client.get("http://localhost:9000/minio/health/live", timeout=5.0)
             if response.status_code == 200:
@@ -119,6 +121,7 @@ async def check_airflow() -> Dict[str, Any]:
     """Check Airflow connectivity."""
     try:
         import httpx
+
         async with httpx.AsyncClient() as client:
             response = await client.get("http://localhost:8080/health", timeout=5.0)
             if response.status_code == 200:
@@ -133,44 +136,41 @@ async def check_airflow() -> Dict[str, Any]:
 async def health_check():
     """Comprehensive health check endpoint."""
     # Check all services concurrently (MLflow removed)
-    services = await asyncio.gather(
-        check_database(),
-        check_qdrant(),
-        check_minio(),
-        check_airflow(),
-        return_exceptions=True
-    )
-    
+    services = await asyncio.gather(check_database(), check_qdrant(), check_minio(), check_airflow(), return_exceptions=True)
+
     # Process results
     service_results = {
-        "database": services[0] if not isinstance(services[0], Exception) else {"status": "unhealthy", "message": str(services[0])},
-        "qdrant": services[1] if not isinstance(services[1], Exception) else {"status": "unhealthy", "message": str(services[1])},
-        "minio": services[2] if not isinstance(services[2], Exception) else {"status": "unhealthy", "message": str(services[2])},
-        "airflow": services[3] if not isinstance(services[3], Exception) else {"status": "unhealthy", "message": str(services[3])},
+        "database": (
+            services[0] if not isinstance(services[0], Exception) else {"status": "unhealthy", "message": str(services[0])}
+        ),
+        "qdrant": (
+            services[1] if not isinstance(services[1], Exception) else {"status": "unhealthy", "message": str(services[1])}
+        ),
+        "minio": (
+            services[2] if not isinstance(services[2], Exception) else {"status": "unhealthy", "message": str(services[2])}
+        ),
+        "airflow": (
+            services[3] if not isinstance(services[3], Exception) else {"status": "unhealthy", "message": str(services[3])}
+        ),
     }
-    
+
     # Determine overall status
     all_healthy = all(service["status"] == "healthy" for service in service_results.values())
     overall_status = "healthy" if all_healthy else "degraded"
-    
+
     return {
         "status": overall_status,
         "service": "PrimeData",
         "version": "0.1.0",
         "services": service_results,
-        "timestamp": asyncio.get_event_loop().time()
+        "timestamp": asyncio.get_event_loop().time(),
     }
-
 
 
 @app.get("/health/simple")
 async def simple_health_check():
     """Simple health check endpoint (app only)."""
-    return {
-        "status": "ok",
-        "service": "PrimeData",
-        "version": "0.1.0"
-    }
+    return {"status": "ok", "service": "PrimeData", "version": "0.1.0"}
 
 
 @app.get("/.well-known/jwks.json")
@@ -181,4 +181,5 @@ async def get_jwks():
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)

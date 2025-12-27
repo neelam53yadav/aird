@@ -11,12 +11,7 @@ from primedata.core.settings import get_settings
 settings = get_settings()
 
 # Create database engine
-engine = create_engine(
-    settings.DATABASE_URL,
-    pool_pre_ping=True,
-    pool_recycle=300,
-    echo=settings.ENV == "development"
-)
+engine = create_engine(settings.DATABASE_URL, pool_pre_ping=True, pool_recycle=300, echo=settings.ENV == "development")
 
 # Create session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

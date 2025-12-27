@@ -31,11 +31,7 @@ def get_current_user_optional(request: Request, db: Session = Depends(get_db)):
     settings = get_settings()
     if settings.DISABLE_AUTH or settings.TESTING_MODE:
         # Return a mock user for testing
-        return {
-            "id": "test-user-id",
-            "email": "test@example.com",
-            "workspace_ids": ["550e8400-e29b-41d4-a716-446655440001"]
-        }
+        return {"id": "test-user-id", "email": "test@example.com", "workspace_ids": ["550e8400-e29b-41d4-a716-446655440001"]}
     else:
         return get_current_user(request, db)
 
@@ -53,6 +49,7 @@ class ChunkingConfigRequest(BaseModel):
     optimization_mode: Optional[str] = None  # "pattern", "hybrid", or "llm"
     auto_settings: Optional[Dict[str, Any]] = None
     manual_settings: Optional[Dict[str, Any]] = None
+
 
 class ProductUpdateRequest(BaseModel):
     name: Optional[str] = None
@@ -91,6 +88,7 @@ class ProductResponse(BaseModel):
 
 class TrustMetricsResponse(BaseModel):
     """Trust metrics response (M2)."""
+
     ai_trust_score: float
     metrics: Dict[str, Any]  # All 13 metrics (can contain nested structures)
     chunk_count: int
@@ -99,6 +97,7 @@ class TrustMetricsResponse(BaseModel):
 
 class ProductInsightsResponse(BaseModel):
     """Product insights response (M2)."""
+
     fingerprint: Dict[str, Any]  # Readiness fingerprint (can contain nested structures)
     policy: Dict[str, Any]  # Policy evaluation result
     optimizer: Optional[Dict[str, Any]] = None  # Optimizer suggestions (M3)
@@ -109,7 +108,7 @@ async def create_product(
     request_body: ProductCreateRequest,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Create a new product in the specified workspace.
@@ -117,30 +116,26 @@ async def create_product(
     try:
         # Ensure user has access to the workspace
         ensure_workspace_access(db, request, request_body.workspace_id)
-        
+
         # Check billing limits for product creation
-        current_product_count = db.query(Product).filter(
-            Product.workspace_id == request_body.workspace_id
-        ).count()
-        
-        if not check_billing_limits(str(request_body.workspace_id), 'max_products', current_product_count, db):
+        current_product_count = db.query(Product).filter(Product.workspace_id == request_body.workspace_id).count()
+
+        if not check_billing_limits(str(request_body.workspace_id), "max_products", current_product_count, db):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Product limit exceeded. Please upgrade your plan to create more products."
+                detail="Product limit exceeded. Please upgrade your plan to create more products.",
             )
-        
+
         # Check if product name already exists in workspace
-        existing_product = db.query(Product).filter(
-            Product.workspace_id == request_body.workspace_id,
-            Product.name == request_body.name
-        ).first()
-        
+        existing_product = (
+            db.query(Product)
+            .filter(Product.workspace_id == request_body.workspace_id, Product.name == request_body.name)
+            .first()
+        )
+
         if existing_product:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Product name already exists in this workspace"
-            )
-        
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Product name already exists in this workspace")
+
         # Create new product
         # Initialize playbook_selection metadata if playbook is provided
         playbook_selection = None
@@ -151,7 +146,7 @@ async def create_product(
                 "reason": None,
                 "detected_at": None,
             }
-        
+
         product = Product(
             workspace_id=request_body.workspace_id,
             owner_user_id=get_user_id(current_user),
@@ -161,25 +156,19 @@ async def create_product(
             playbook_id=request_body.playbook_id,  # M1
             playbook_selection=playbook_selection,  # Store selection metadata
             chunking_config=request_body.chunking_config,  # Chunking configuration
-            embedding_config=request_body.embedding_config or {  # Embedding configuration
-                "embedder_name": "minilm",
-                "embedding_dimension": 384
-            },
+            embedding_config=request_body.embedding_config
+            or {"embedder_name": "minilm", "embedding_dimension": 384},  # Embedding configuration
         )
-        
+
         # Log the chunking config being saved
-        logger.info(
-            f"Creating product '{request_body.name}' with chunking_config: {request_body.chunking_config}"
-        )
-        
+        logger.info(f"Creating product '{request_body.name}' with chunking_config: {request_body.chunking_config}")
+
         db.add(product)
         db.commit()
         db.refresh(product)
-        
-        logger.info(
-            f"Product created with ID {product.id}. Saved chunking_config: {product.chunking_config}"
-        )
-        
+
+        logger.info(f"Product created with ID {product.id}. Saved chunking_config: {product.chunking_config}")
+
         return ProductResponse.from_orm(product)
     except HTTPException:
         # Re-raise HTTP exceptions (they already have proper error messages)
@@ -188,10 +177,7 @@ async def create_product(
         # Log the full error for debugging
         logger.error(f"Failed to create product: {e}", exc_info=True)
         db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create product: {str(e)}"
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to create product: {str(e)}")
 
 
 @router.get("/", response_model=List[ProductResponse])
@@ -199,28 +185,26 @@ async def list_products(
     workspace_id: Optional[UUID] = Query(None, description="Filter by workspace ID"),
     request: Request = None,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     """
     List products. If workspace_id is provided, filter by that workspace.
     Otherwise, return products from all accessible workspaces.
     """
     allowed_workspace_ids = allowed_workspaces(request, db)
-    
+
     query = db.query(Product).filter(Product.workspace_id.in_(allowed_workspace_ids))
-    
+
     if workspace_id:
         # Ensure user has access to the specified workspace
         if workspace_id not in allowed_workspace_ids:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Access denied to workspace"
-            )
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to workspace")
         query = query.filter(Product.workspace_id == workspace_id)
-    
+
     products = query.all()
     # Lazy-load JSON fields from S3 if needed
     from primedata.services.lazy_json_loader import load_product_json_field
+
     result = []
     for product in products:
         # Create response with lazy-loaded fields
@@ -253,21 +237,19 @@ async def list_products(
 
 @router.get("/{product_id}", response_model=ProductResponse)
 async def get_product(
-    product_id: UUID,
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    product_id: UUID, request: Request, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)
 ):
     """
     Get a specific product by ID.
     """
     from primedata.core.scope import ensure_product_access
-    
+
     product = ensure_product_access(db, request, product_id)
     # Refresh to ensure we get the latest data from database (in case of recent updates)
     db.refresh(product)
     # Lazy-load JSON fields from S3 if needed
     from primedata.services.lazy_json_loader import load_product_json_field
+
     product_dict = {
         "id": product.id,
         "workspace_id": product.workspace_id,
@@ -300,33 +282,34 @@ async def update_product(
     request_body: ProductUpdateRequest,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Update a product's name or status.
     """
     logger.info(f"PATCH /api/v1/products/{product_id} - Received update request")
     logger.info(f"Request body: {request_body.dict()}")
-    
+
     try:
         from primedata.core.scope import ensure_product_access
-        
+
         product = ensure_product_access(db, request, product_id)
-        
+
         # Check if new name conflicts with existing product in same workspace
         if request_body.name and request_body.name != product.name:
-            existing_product = db.query(Product).filter(
-                Product.workspace_id == product.workspace_id,
-                Product.name == request_body.name,
-                Product.id != product_id
-            ).first()
-            
+            existing_product = (
+                db.query(Product)
+                .filter(
+                    Product.workspace_id == product.workspace_id, Product.name == request_body.name, Product.id != product_id
+                )
+                .first()
+            )
+
             if existing_product:
                 raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="Product name already exists in this workspace"
+                    status_code=status.HTTP_409_CONFLICT, detail="Product name already exists in this workspace"
                 )
-        
+
         # Update fields
         if request_body.name is not None:
             product.name = request_body.name
@@ -334,73 +317,77 @@ async def update_product(
             product.status = request_body.status
         if request_body.playbook_id is not None:
             product.playbook_id = request_body.playbook_id
-        
+
         # Update chunking configuration
         if request_body.chunking_config is not None:
             current_config = product.chunking_config or {}
-            
+
             # Preserve resolved_settings if it exists (from previous pipeline runs) before updating
-            resolved_settings = current_config.get('resolved_settings')
-            
+            resolved_settings = current_config.get("resolved_settings")
+
             if request_body.chunking_config.mode is not None:
-                current_config['mode'] = request_body.chunking_config.mode
-            
+                current_config["mode"] = request_body.chunking_config.mode
+
             # Update optimization_mode if provided (preserve existing if not provided, default to 'pattern')
             if request_body.chunking_config.optimization_mode is not None:
-                current_config['optimization_mode'] = request_body.chunking_config.optimization_mode
+                current_config["optimization_mode"] = request_body.chunking_config.optimization_mode
                 logger.info(f"Updated optimization_mode to: {request_body.chunking_config.optimization_mode}")
-            elif 'optimization_mode' not in current_config:
+            elif "optimization_mode" not in current_config:
                 # Set default if not present
-                current_config['optimization_mode'] = 'pattern'
+                current_config["optimization_mode"] = "pattern"
                 logger.info(f"Set default optimization_mode to: pattern")
-            
+
             # Get the new mode to determine what to update
-            new_mode = request_body.chunking_config.mode if request_body.chunking_config.mode is not None else current_config.get('mode', 'auto')
-            
+            new_mode = (
+                request_body.chunking_config.mode
+                if request_body.chunking_config.mode is not None
+                else current_config.get("mode", "auto")
+            )
+
             # Update auto_settings
             if request_body.chunking_config.auto_settings is not None:
-                current_config['auto_settings'] = request_body.chunking_config.auto_settings
-            elif new_mode == 'auto':
+                current_config["auto_settings"] = request_body.chunking_config.auto_settings
+            elif new_mode == "auto":
                 # If switching to auto mode but auto_settings not provided, ensure we have defaults
-                if 'auto_settings' not in current_config or not current_config.get('auto_settings'):
-                    current_config['auto_settings'] = {
-                        'content_type': 'general',
-                        'model_optimized': True,
-                        'confidence_threshold': 0.7
+                if "auto_settings" not in current_config or not current_config.get("auto_settings"):
+                    current_config["auto_settings"] = {
+                        "content_type": "general",
+                        "model_optimized": True,
+                        "confidence_threshold": 0.7,
                     }
-            
+
             # Update manual_settings - ALWAYS overwrite when provided, even if mode is manual
             if request_body.chunking_config.manual_settings is not None:
                 # Completely replace manual_settings with new values (don't merge)
                 # Create a fresh dict to ensure no reference issues
-                current_config['manual_settings'] = dict(request_body.chunking_config.manual_settings)
+                current_config["manual_settings"] = dict(request_body.chunking_config.manual_settings)
                 logger.info(f"🔄 REPLACING manual_settings with: {current_config['manual_settings']}")
                 logger.info(f"   Old manual_settings was: {current_config.get('manual_settings', 'None')}")
-            elif new_mode == 'manual':
+            elif new_mode == "manual":
                 # If switching to manual mode but manual_settings not provided, keep existing or use defaults
-                if 'manual_settings' not in current_config or not current_config.get('manual_settings'):
-                    current_config['manual_settings'] = {
-                        'chunk_size': 1000,
-                        'chunk_overlap': 200,
-                        'min_chunk_size': 100,
-                        'max_chunk_size': 2000,
-                        'chunking_strategy': 'fixed_size'
+                if "manual_settings" not in current_config or not current_config.get("manual_settings"):
+                    current_config["manual_settings"] = {
+                        "chunk_size": 1000,
+                        "chunk_overlap": 200,
+                        "min_chunk_size": 100,
+                        "max_chunk_size": 2000,
+                        "chunking_strategy": "fixed_size",
                     }
                     logger.info(f"Using default manual_settings for new manual mode")
-            
+
             # Restore resolved_settings if it existed (for reference only, won't affect editing)
             if resolved_settings:
-                current_config['resolved_settings'] = resolved_settings
-            
+                current_config["resolved_settings"] = resolved_settings
+
             # CRITICAL: Assign the entire config dict to ensure SQLAlchemy detects the change
             # Create a fresh dict to avoid any reference issues
             product.chunking_config = dict(current_config)
-            
+
             # Force SQLAlchemy to mark this as changed (required for JSON columns)
-            flag_modified(product, 'chunking_config')
-            
+            flag_modified(product, "chunking_config")
+
             logger.info(f"📝 Product chunking_config assigned: {product.chunking_config}")
-            
+
             # Log the saved configuration for verification
             logger.info(
                 f"Updated chunking_config for product {product_id}: "
@@ -409,22 +396,22 @@ async def update_product(
                 f"manual_settings={current_config.get('manual_settings')}, "
                 f"auto_settings={current_config.get('auto_settings')}"
             )
-    
+
         # Update embedding configuration
         if request_body.embedding_config is not None:
             product.embedding_config = request_body.embedding_config
             logger.info(f"Updated embedding_config for product {product_id}: {product.embedding_config}")
-        
+
         # Log playbook_id update
         if request_body.playbook_id is not None:
             logger.info(f"Updated playbook_id for product {product_id}: {product.playbook_id}")
-        
+
         # Commit all changes
         logger.info(f"Committing changes to database for product {product_id}")
         db.commit()
         logger.info(f"Commit successful, refreshing product")
         db.refresh(product)
-        
+
         # Log final saved state for verification
         logger.info(
             f"Product {product_id} saved successfully. "
@@ -432,19 +419,20 @@ async def update_product(
             f"embedding_config={product.embedding_config}, "
             f"playbook_id={product.playbook_id}"
         )
-        
+
         # Verify the saved values, especially manual_settings
-        if product.chunking_config and product.chunking_config.get('manual_settings'):
-            manual = product.chunking_config['manual_settings']
+        if product.chunking_config and product.chunking_config.get("manual_settings"):
+            manual = product.chunking_config["manual_settings"]
             logger.info(
                 f"✅ Verified saved manual_settings: "
                 f"chunk_size={manual.get('chunk_size')}, "
                 f"chunk_overlap={manual.get('chunk_overlap')}, "
                 f"strategy={manual.get('chunking_strategy')}"
             )
-        
+
         # Lazy-load JSON fields from S3 if needed
         from primedata.services.lazy_json_loader import load_product_json_field
+
         product_dict = {
             "id": product.id,
             "workspace_id": product.workspace_id,
@@ -469,7 +457,7 @@ async def update_product(
             "updated_at": product.updated_at,
         }
         return ProductResponse(**product_dict)
-        
+
     except HTTPException:
         # Re-raise HTTP exceptions (they already have proper error messages)
         raise
@@ -477,109 +465,98 @@ async def update_product(
         # Log the full error for debugging
         logger.error(f"Failed to update product {product_id}: {e}", exc_info=True)
         db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update product: {str(e)}"
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update product: {str(e)}")
 
 
 @router.delete("/{product_id}")
 async def delete_product(
-    product_id: UUID,
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    product_id: UUID, request: Request, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)
 ):
     """
     Delete a product and all related data.
     """
-    from primedata.db.models import (
-        DataSource, RawFile, PipelineRun, ACL,
-        PipelineArtifact, DqViolation
-    )
-    
+    from primedata.db.models import DataSource, RawFile, PipelineRun, ACL, PipelineArtifact, DqViolation
+
     # Try to import enterprise models if available
     try:
         from primedata.db.models_enterprise import DataQualityRule
+
         has_dq_rules = True
     except ImportError:
         has_dq_rules = False
-    
+
     # Ensure user has access to the product
     product = ensure_product_access(db, request, product_id)
-    
+
     try:
         # Delete all related records that have foreign key constraints
         # Use synchronize_session=False to avoid loading objects into memory
         # IMPORTANT: Delete order matters due to foreign key constraints
-        
+
         # Delete raw files FIRST (they reference data_sources via data_source_id)
         db.query(RawFile).filter(RawFile.product_id == product_id).delete(synchronize_session=False)
-        
+
         # Delete data sources (after raw files, since raw_files references data_sources)
         db.query(DataSource).filter(DataSource.product_id == product_id).delete(synchronize_session=False)
-        
+
         # Delete pipeline artifacts (deleted before pipeline runs due to foreign key)
         db.query(PipelineArtifact).filter(PipelineArtifact.product_id == product_id).delete(synchronize_session=False)
-        
+
         # Delete pipeline runs
         db.query(PipelineRun).filter(PipelineRun.product_id == product_id).delete(synchronize_session=False)
-        
+
         # Delete data quality violations
         db.query(DqViolation).filter(DqViolation.product_id == product_id).delete(synchronize_session=False)
-        
+
         # Delete data quality rules (if available)
         if has_dq_rules:
             db.query(DataQualityRule).filter(DataQualityRule.product_id == product_id).delete(synchronize_session=False)
-        
+
         # Delete document metadata
         # Note: Metadata is now stored in Qdrant payloads, not PostgreSQL
         # Qdrant collections are deleted separately when product is deleted
-        
+
         # Delete ACLs
         db.query(ACL).filter(ACL.product_id == product_id).delete(synchronize_session=False)
-        
+
         # Now delete the product itself
         db.delete(product)
         db.commit()
-        
+
         return {"message": "Product deleted successfully"}
     except Exception as e:
         db.rollback()
         logger.error(f"Failed to delete product {product_id}: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete product: {str(e)}"
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to delete product: {str(e)}")
 
 
 @router.get("/{product_id}/trust-metrics", response_model=TrustMetricsResponse)
 async def get_trust_metrics(
-    product_id: UUID,
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    product_id: UUID, request: Request, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)
 ):
     """
     Get aggregated trust metrics for a product (M2).
     """
     from primedata.core.scope import ensure_product_access
     from primedata.ingestion_pipeline.aird_stages.storage import AirdStorageAdapter
-    
+
     product = ensure_product_access(db, request, product_id)
-    
+
     # Try to get from product model first (lazy load from S3 if needed)
     from primedata.services.lazy_json_loader import load_product_json_field
+
     fingerprint_data = load_product_json_field(product, "readiness_fingerprint")
-    
+
     if fingerprint_data:
-        
+
         # Handle both old format (nested in metrics) and new format (direct fingerprint)
         if isinstance(fingerprint_data, dict):
             # Check if it's the old format with nested fingerprint
             if "fingerprint" in fingerprint_data and isinstance(fingerprint_data["fingerprint"], dict):
                 fingerprint = fingerprint_data["fingerprint"]
-                trust_score = fingerprint.get("AI_Trust_Score", fingerprint_data.get("trust_score", product.trust_score or 0.0))
+                trust_score = fingerprint.get(
+                    "AI_Trust_Score", fingerprint_data.get("trust_score", product.trust_score or 0.0)
+                )
             else:
                 # New format: fingerprint is directly the metrics dict
                 fingerprint = fingerprint_data
@@ -587,13 +564,13 @@ async def get_trust_metrics(
         else:
             fingerprint = {}
             trust_score = product.trust_score or 0.0
-        
+
         return TrustMetricsResponse(
             ai_trust_score=float(trust_score) if trust_score is not None else 0.0,
             metrics=fingerprint,
             chunk_count=0,  # Could be calculated from chunk_metrics if available
         )
-    
+
     # Fallback: try to load from storage
     try:
         storage = AirdStorageAdapter(
@@ -601,13 +578,14 @@ async def get_trust_metrics(
             product_id=product.id,
             version=product.current_version,
         )
-        
+
         metrics = storage.get_metrics_json()
         if metrics:
             from primedata.services.fingerprint import generate_fingerprint
+
             fingerprint = generate_fingerprint(metrics)
             trust_score = fingerprint.get("AI_Trust_Score", 0.0)
-            
+
             return TrustMetricsResponse(
                 ai_trust_score=trust_score,
                 metrics=fingerprint,
@@ -615,20 +593,14 @@ async def get_trust_metrics(
             )
     except Exception as e:
         logger.warning(f"Failed to load metrics from storage: {e}")
-    
+
     # Return empty if no metrics found
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="Trust metrics not available for this product"
-    )
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trust metrics not available for this product")
 
 
 @router.get("/{product_id}/insights", response_model=ProductInsightsResponse)
 async def get_product_insights(
-    product_id: UUID,
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    product_id: UUID, request: Request, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)
 ):
     """
     Get product insights including fingerprint, policy, and optimizer (M2).
@@ -637,14 +609,15 @@ async def get_product_insights(
     from primedata.ingestion_pipeline.aird_stages.storage import AirdStorageAdapter
     from primedata.services.policy_engine import evaluate_policy
     from primedata.ingestion_pipeline.aird_stages.config import get_aird_config
-    
+
     product = ensure_product_access(db, request, product_id)
-    
+
     # Get fingerprint (lazy load from S3 if needed)
     from primedata.services.lazy_json_loader import load_product_json_field
+
     fingerprint_data = load_product_json_field(product, "readiness_fingerprint")
     fingerprint = None
-    
+
     if fingerprint_data:
         # Handle both old format (nested in metrics) and new format (direct fingerprint)
         if isinstance(fingerprint_data, dict):
@@ -654,7 +627,7 @@ async def get_product_insights(
             else:
                 # New format: fingerprint is directly the metrics dict
                 fingerprint = fingerprint_data
-    
+
     if not fingerprint:
         # Try to load from storage
         try:
@@ -663,20 +636,18 @@ async def get_product_insights(
                 product_id=product.id,
                 version=product.current_version,
             )
-            
+
             metrics = storage.get_metrics_json()
             if metrics:
                 from primedata.services.fingerprint import generate_fingerprint
+
                 fingerprint = generate_fingerprint(metrics)
         except Exception as e:
             logger.warning(f"Failed to load fingerprint from storage: {e}")
-    
+
     if not fingerprint:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Fingerprint not available for this product"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fingerprint not available for this product")
+
     # Evaluate policy
     config = get_aird_config()
     thresholds = {
@@ -685,17 +656,18 @@ async def get_product_insights(
         "min_metadata_presence": config.policy_min_metadata_presence,
         "min_kb_ready": config.policy_min_kb_ready,
     }
-    
+
     policy_result = evaluate_policy(fingerprint, thresholds)
-    
+
     # Optimizer suggestions (M5)
     from primedata.services.optimizer import suggest_next_config
+
     optimizer = suggest_next_config(
         fingerprint=fingerprint,
         policy=policy_result,
         current_playbook=product.playbook_id,
     )
-    
+
     return ProductInsightsResponse(
         fingerprint=fingerprint,
         policy=policy_result,
@@ -705,12 +677,19 @@ async def get_product_insights(
 
 class ApplyRecommendationRequest(BaseModel):
     """Request model for applying an optimizer recommendation."""
-    action: str = Field(..., description="Action to apply: 'increase_chunk_overlap', 'switch_playbook', 'enhance_normalization', 'extract_metadata'")
-    recommendation_config: Dict[str, Any] = Field(default_factory=dict, description="Configuration for the recommendation action")
+
+    action: str = Field(
+        ...,
+        description="Action to apply: 'increase_chunk_overlap', 'switch_playbook', 'enhance_normalization', 'extract_metadata'",
+    )
+    recommendation_config: Dict[str, Any] = Field(
+        default_factory=dict, description="Configuration for the recommendation action"
+    )
 
 
 class ApplyRecommendationResponse(BaseModel):
     """Response model for applying an optimizer recommendation."""
+
     success: bool
     message: str
     applied_changes: Dict[str, Any]
@@ -723,11 +702,11 @@ async def apply_recommendation(
     request_body: ApplyRecommendationRequest,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Apply an optimizer recommendation to improve AI readiness.
-    
+
     This endpoint allows users to apply specific recommendations from the optimizer
     service, such as increasing chunk overlap, switching playbooks, or enhancing
     text normalization.
@@ -737,29 +716,29 @@ async def apply_recommendation(
     from primedata.services.optimizer import suggest_next_config
     from primedata.services.policy_engine import evaluate_policy
     from primedata.ingestion_pipeline.aird_stages.config import get_aird_config
-    
+
     logger.info(f"POST /api/v1/products/{product_id}/apply-recommendation - Action: {request_body.action}")
-    
+
     try:
         product = ensure_product_access(db, request, product_id)
-        
+
         # Get current optimizer recommendations to validate the action
         fingerprint_data = product.readiness_fingerprint
         fingerprint = None
-        
+
         if fingerprint_data:
             if isinstance(fingerprint_data, dict):
                 if "fingerprint" in fingerprint_data and isinstance(fingerprint_data["fingerprint"], dict):
                     fingerprint = fingerprint_data["fingerprint"]
                 else:
                     fingerprint = fingerprint_data
-        
+
         if not fingerprint:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No fingerprint data available. Run a pipeline first to generate metrics."
+                detail="No fingerprint data available. Run a pipeline first to generate metrics.",
             )
-        
+
         # Evaluate policy and get optimizer recommendations
         config = get_aird_config()
         thresholds = {
@@ -768,40 +747,37 @@ async def apply_recommendation(
             "min_metadata_presence": config.policy_min_metadata_presence,
             "min_kb_ready": config.policy_min_kb_ready,
         }
-        
+
         policy_result = evaluate_policy(fingerprint, thresholds)
         optimizer = suggest_next_config(
             fingerprint=fingerprint,
             policy=policy_result,
             current_playbook=product.playbook_id,
         )
-        
+
         applied_changes = {}
         requires_rerun = True
-        
+
         # Apply the requested action
         if request_body.action == "increase_chunk_overlap":
             # Increase chunk overlap in manual settings
             current_config = product.chunking_config or {}
             manual_settings = current_config.get("manual_settings", {})
-            
+
             # Get current overlap or default
             current_overlap = manual_settings.get("chunk_overlap", 200)
             chunk_size = manual_settings.get("chunk_size", 1000)
-            
+
             # Calculate new overlap (increase by 20-25% or use min from config)
             increase_percent = request_body.recommendation_config.get("increase_by_percent", 20)
             min_overlap = request_body.recommendation_config.get("min_overlap", 200)
-            
-            new_overlap = max(
-                min_overlap,
-                int(current_overlap * (1 + increase_percent / 100))
-            )
-            
+
+            new_overlap = max(min_overlap, int(current_overlap * (1 + increase_percent / 100)))
+
             # Ensure overlap doesn't exceed chunk_size - 10%
             max_overlap = int(chunk_size * 0.9)
             new_overlap = min(new_overlap, max_overlap)
-            
+
             # Ensure mode is manual to apply manual settings
             if current_config.get("mode") != "manual":
                 current_config["mode"] = "manual"
@@ -810,131 +786,132 @@ async def apply_recommendation(
                     current_config["auto_settings"] = {
                         "content_type": "general",
                         "model_optimized": True,
-                        "confidence_threshold": 0.7
+                        "confidence_threshold": 0.7,
                     }
-            
+
             # Update manual settings
             if "manual_settings" not in current_config:
                 current_config["manual_settings"] = {}
-            
+
             current_config["manual_settings"]["chunk_overlap"] = new_overlap
             # Ensure chunk_size is set if not already
             if "chunk_size" not in current_config["manual_settings"]:
                 current_config["manual_settings"]["chunk_size"] = chunk_size
             if "chunking_strategy" not in current_config["manual_settings"]:
                 current_config["manual_settings"]["chunking_strategy"] = manual_settings.get("chunking_strategy", "semantic")
-            
+
             product.chunking_config = current_config
-            flag_modified(product, 'chunking_config')
-            
-            applied_changes = {
-                "chunk_overlap": {"old": current_overlap, "new": new_overlap}
-            }
-            
+            flag_modified(product, "chunking_config")
+
+            applied_changes = {"chunk_overlap": {"old": current_overlap, "new": new_overlap}}
+
             message = f"Chunk overlap increased from {current_overlap} to {new_overlap} tokens."
-            
+
         elif request_body.action == "switch_playbook":
             # Switch to recommended playbook
             new_playbook_id = request_body.recommendation_config.get("playbook_id")
             if not new_playbook_id:
                 raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="playbook_id is required for switch_playbook action"
+                    status_code=status.HTTP_400_BAD_REQUEST, detail="playbook_id is required for switch_playbook action"
                 )
-            
+
             old_playbook_id = product.playbook_id
             product.playbook_id = new_playbook_id
-            
-            applied_changes = {
-                "playbook_id": {"old": old_playbook_id, "new": new_playbook_id}
-            }
-            
+
+            applied_changes = {"playbook_id": {"old": old_playbook_id, "new": new_playbook_id}}
+
             message = f"Playbook switched from {old_playbook_id} to {new_playbook_id}."
-            
+
         elif request_body.action == "enhance_normalization":
             # This would require changes to the playbook or preprocessing config
             # For now, we'll add a flag to the chunking config to indicate enhanced normalization is desired
             current_config = product.chunking_config or {}
             # Preserve optimization_mode if it exists
-            existing_optimization_mode = current_config.get('optimization_mode', 'pattern')
+            existing_optimization_mode = current_config.get("optimization_mode", "pattern")
             if "preprocessing_flags" not in current_config:
                 current_config["preprocessing_flags"] = {}
             current_config["preprocessing_flags"]["enhanced_normalization"] = True
-            current_config["preprocessing_flags"]["error_correction"] = request_body.recommendation_config.get("error_correction", True)
+            current_config["preprocessing_flags"]["error_correction"] = request_body.recommendation_config.get(
+                "error_correction", True
+            )
             # Preserve optimization_mode
-            current_config['optimization_mode'] = existing_optimization_mode
-            
+            current_config["optimization_mode"] = existing_optimization_mode
+
             product.chunking_config = current_config
-            flag_modified(product, 'chunking_config')
-            
+            flag_modified(product, "chunking_config")
+
             applied_changes = {
                 "enhanced_normalization": True,
-                "error_correction": current_config["preprocessing_flags"]["error_correction"]
+                "error_correction": current_config["preprocessing_flags"]["error_correction"],
             }
-            
-            message = "Enhanced text normalization and error correction enabled. This will be applied on the next pipeline run."
-            
+
+            message = (
+                "Enhanced text normalization and error correction enabled. This will be applied on the next pipeline run."
+            )
+
         elif request_body.action == "extract_metadata":
             # Add metadata extraction flags
             current_config = product.chunking_config or {}
             # Preserve optimization_mode if it exists
-            existing_optimization_mode = current_config.get('optimization_mode', 'pattern')
+            existing_optimization_mode = current_config.get("optimization_mode", "pattern")
             if "preprocessing_flags" not in current_config:
                 current_config["preprocessing_flags"] = {}
             current_config["preprocessing_flags"]["extract_metadata"] = True
-            current_config["preprocessing_flags"]["force_metadata_extraction"] = request_body.recommendation_config.get("force_extraction", True)
-            current_config["preprocessing_flags"]["additional_metadata_fields"] = request_body.recommendation_config.get("additional_fields", True)
+            current_config["preprocessing_flags"]["force_metadata_extraction"] = request_body.recommendation_config.get(
+                "force_extraction", True
+            )
+            current_config["preprocessing_flags"]["additional_metadata_fields"] = request_body.recommendation_config.get(
+                "additional_fields", True
+            )
             # Preserve optimization_mode
-            current_config['optimization_mode'] = existing_optimization_mode
-            
+            current_config["optimization_mode"] = existing_optimization_mode
+
             product.chunking_config = current_config
-            flag_modified(product, 'chunking_config')
-            
+            flag_modified(product, "chunking_config")
+
             applied_changes = {
                 "extract_metadata": True,
                 "force_metadata_extraction": current_config["preprocessing_flags"]["force_metadata_extraction"],
-                "additional_metadata_fields": current_config["preprocessing_flags"]["additional_metadata_fields"]
+                "additional_metadata_fields": current_config["preprocessing_flags"]["additional_metadata_fields"],
             }
-            
+
             message = "Enhanced metadata extraction enabled. This will be applied on the next pipeline run."
             requires_rerun = True
-        
+
         elif request_body.action == "error_correction":
             # Enable error correction specifically
             current_config = product.chunking_config or {}
             # Preserve optimization_mode if it exists
-            existing_optimization_mode = current_config.get('optimization_mode', 'pattern')
+            existing_optimization_mode = current_config.get("optimization_mode", "pattern")
             if "preprocessing_flags" not in current_config:
                 current_config["preprocessing_flags"] = {}
             current_config["preprocessing_flags"]["error_correction"] = True
             # Preserve optimization_mode
-            current_config['optimization_mode'] = existing_optimization_mode
-            
+            current_config["optimization_mode"] = existing_optimization_mode
+
             product.chunking_config = current_config
-            flag_modified(product, 'chunking_config')
-            
-            applied_changes = {
-                "error_correction": True
-            }
-            
+            flag_modified(product, "chunking_config")
+
+            applied_changes = {"error_correction": True}
+
             message = "Error correction enabled. This will fix OCR mistakes and typos on the next pipeline run."
             requires_rerun = True
-        
+
         elif request_body.action == "apply_all_quality_improvements":
             # Apply all quality improvements at once for maximum impact
             current_config = product.chunking_config or {}
             # Preserve optimization_mode if it exists
-            existing_optimization_mode = current_config.get('optimization_mode', 'pattern')
+            existing_optimization_mode = current_config.get("optimization_mode", "pattern")
             if "preprocessing_flags" not in current_config:
                 current_config["preprocessing_flags"] = {}
-            
+
             # Enable all quality improvements
             current_config["preprocessing_flags"]["enhanced_normalization"] = True
             current_config["preprocessing_flags"]["error_correction"] = True
             current_config["preprocessing_flags"]["extract_metadata"] = True
             # Preserve optimization_mode
-            current_config['optimization_mode'] = existing_optimization_mode
-            
+            current_config["optimization_mode"] = existing_optimization_mode
+
             # Also increase chunk overlap if recommended
             if request_body.recommendation_config.get("increase_overlap", False):
                 if "manual_settings" not in current_config:
@@ -946,76 +923,66 @@ async def apply_recommendation(
                     "enhanced_normalization": True,
                     "error_correction": True,
                     "extract_metadata": True,
-                    "chunk_overlap": {"old": current_overlap, "new": new_overlap}
+                    "chunk_overlap": {"old": current_overlap, "new": new_overlap},
                 }
             else:
-                applied_changes = {
-                    "enhanced_normalization": True,
-                    "error_correction": True,
-                    "extract_metadata": True
-                }
-            
+                applied_changes = {"enhanced_normalization": True, "error_correction": True, "extract_metadata": True}
+
             product.chunking_config = current_config
-            flag_modified(product, 'chunking_config')
-            
+            flag_modified(product, "chunking_config")
+
             message = "All quality improvements enabled (enhanced normalization, error correction, metadata extraction). This will maximize AI readiness scores on the next pipeline run."
             requires_rerun = True
-        
+
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Unknown action: {request_body.action}. Supported actions: increase_chunk_overlap, switch_playbook, enhance_normalization, error_correction, extract_metadata, apply_all_quality_improvements"
+                detail=f"Unknown action: {request_body.action}. Supported actions: increase_chunk_overlap, switch_playbook, enhance_normalization, error_correction, extract_metadata, apply_all_quality_improvements",
             )
-        
+
         # Commit changes
         db.commit()
         db.refresh(product)
-        
+
         # Log optimization_mode being used
         saved_config = product.chunking_config or {}
-        optimization_mode = saved_config.get('optimization_mode', 'pattern')
+        optimization_mode = saved_config.get("optimization_mode", "pattern")
         logger.info(
             f"Successfully applied recommendation {request_body.action} for product {product_id}: {applied_changes}. "
             f"Optimization mode: {optimization_mode} (this will be used during next pipeline run)"
         )
-        
+
         return ApplyRecommendationResponse(
-            success=True,
-            message=message,
-            applied_changes=applied_changes,
-            requires_pipeline_rerun=requires_rerun
+            success=True, message=message, applied_changes=applied_changes, requires_pipeline_rerun=requires_rerun
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Failed to apply recommendation for product {product_id}: {e}", exc_info=True)
         db.rollback()
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to apply recommendation: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to apply recommendation: {str(e)}"
         )
 
 
 @router.get("/{product_id}/validation-summary")
 async def download_validation_summary(
-    product_id: UUID,
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    product_id: UUID, request: Request, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)
 ):
     """
     Download validation summary CSV for a product (M3).
     """
     from primedata.core.scope import ensure_product_access
     from primedata.ingestion_pipeline.aird_stages.storage import AirdStorageAdapter
-    
+
     product = ensure_product_access(db, request, product_id)
-    
+
     # Try to get from product model first
     if product.validation_summary_path:
         try:
             from primedata.storage.minio_client import minio_client
+
             # Extract bucket and key from path
             # Path format: "ws/{ws}/prod/{prod}/v/{version}/artifacts/ai_validation_summary.csv"
             # Or full MinIO path
@@ -1026,19 +993,17 @@ async def download_validation_summary(
                 # Assume it's a key in primedata-exports bucket
                 bucket = "primedata-exports"
                 key = product.validation_summary_path
-            
+
             csv_data = minio_client.get_bytes(bucket, key)
             if csv_data:
                 return Response(
                     content=csv_data,
                     media_type="text/csv",
-                    headers={
-                        "Content-Disposition": f'attachment; filename="validation_summary_{product_id}.csv"'
-                    }
+                    headers={"Content-Disposition": f'attachment; filename="validation_summary_{product_id}.csv"'},
                 )
         except Exception as e:
             logger.warning(f"Failed to load validation summary from path: {e}")
-    
+
     # Fallback: try to generate on-the-fly from storage
     try:
         storage = AirdStorageAdapter(
@@ -1046,50 +1011,43 @@ async def download_validation_summary(
             product_id=product.id,
             version=product.current_version,
         )
-        
+
         metrics = storage.get_metrics_json()
         if metrics:
             from primedata.services.reporting import generate_validation_summary
             from primedata.ingestion_pipeline.aird_stages.config import get_aird_config
-            
+
             config = get_aird_config()
             csv_content = generate_validation_summary(metrics, config.default_scoring_threshold)
-            
+
             return Response(
                 content=csv_content.encode("utf-8"),
                 media_type="text/csv",
-                headers={
-                    "Content-Disposition": f'attachment; filename="validation_summary_{product_id}.csv"'
-                }
+                headers={"Content-Disposition": f'attachment; filename="validation_summary_{product_id}.csv"'},
             )
     except Exception as e:
         logger.warning(f"Failed to generate validation summary: {e}")
-    
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="Validation summary not available for this product"
-    )
+
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Validation summary not available for this product")
 
 
 @router.get("/{product_id}/trust-report")
 async def download_trust_report(
-    product_id: UUID,
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    product_id: UUID, request: Request, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)
 ):
     """
     Download trust report PDF for a product (M3).
     """
     from primedata.core.scope import ensure_product_access
     from primedata.ingestion_pipeline.aird_stages.storage import AirdStorageAdapter
-    
+
     product = ensure_product_access(db, request, product_id)
-    
+
     # Try to get from product model first
     if product.trust_report_path:
         try:
             from primedata.storage.minio_client import minio_client
+
             # Extract bucket and key from path
             if product.trust_report_path.startswith("primedata-exports/"):
                 key = product.trust_report_path.replace("primedata-exports/", "")
@@ -1097,19 +1055,17 @@ async def download_trust_report(
             else:
                 bucket = "primedata-exports"
                 key = product.trust_report_path
-            
+
             pdf_data = minio_client.get_bytes(bucket, key)
             if pdf_data:
                 return Response(
                     content=pdf_data,
                     media_type="application/pdf",
-                    headers={
-                        "Content-Disposition": f'attachment; filename="trust_report_{product_id}.pdf"'
-                    }
+                    headers={"Content-Disposition": f'attachment; filename="trust_report_{product_id}.pdf"'},
                 )
         except Exception as e:
             logger.warning(f"Failed to load trust report from path: {e}")
-    
+
     # Fallback: try to generate on-the-fly from storage
     try:
         storage = AirdStorageAdapter(
@@ -1117,33 +1073,29 @@ async def download_trust_report(
             product_id=product.id,
             version=product.current_version,
         )
-        
+
         metrics = storage.get_metrics_json()
         if metrics:
             from primedata.services.reporting import generate_trust_report
             from primedata.ingestion_pipeline.aird_stages.config import get_aird_config
-            
+
             config = get_aird_config()
             pdf_bytes = generate_trust_report(metrics, config.default_scoring_threshold)
-            
+
             return Response(
                 content=pdf_bytes,
                 media_type="application/pdf",
-                headers={
-                    "Content-Disposition": f'attachment; filename="trust_report_{product_id}.pdf"'
-                }
+                headers={"Content-Disposition": f'attachment; filename="trust_report_{product_id}.pdf"'},
             )
     except Exception as e:
         logger.warning(f"Failed to generate trust report: {e}")
-    
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="Trust report not available for this product"
-    )
+
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trust report not available for this product")
 
 
 class ChunkMetadataResponse(BaseModel):
     """Chunk metadata response (M4)."""
+
     id: UUID
     chunk_id: str
     score: Optional[float]
@@ -1160,14 +1112,11 @@ class ChunkMetadataResponse(BaseModel):
 
 @router.get("/{product_id}/embedding-diagnostics")
 async def get_embedding_diagnostics(
-    product_id: UUID,
-    request: Request = None,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    product_id: UUID, request: Request = None, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)
 ):
     """
     Diagnostic endpoint to check embedding model configuration and status.
-    
+
     Returns information about:
     - Embedding model configured for the product
     - API key status (configured/not configured)
@@ -1176,62 +1125,56 @@ async def get_embedding_diagnostics(
     """
     # Ensure user has access to the product
     ensure_product_access(db, request, product_id)
-    
+
     product = db.query(Product).filter(Product.id == product_id).first()
     if not product:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Product not found"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+
     # Get embedding configuration
     embedding_config = product.embedding_config or {}
     model_name = embedding_config.get("embedder_name", "minilm")
     dimension = embedding_config.get("embedding_dimension", 384)
-    
+
     # Check workspace settings for API key
     workspace = db.query(Workspace).filter(Workspace.id == product.workspace_id).first()
     workspace_has_key = False
     if workspace and workspace.settings:
         workspace_has_key = bool(workspace.settings.get("openai_api_key"))
-    
+
     # Check environment variable
     from primedata.core.settings import get_settings
+
     settings = get_settings()
     env_has_key = bool(settings.OPENAI_API_KEY)
-    
+
     # Try to initialize embedding generator to check status
     from primedata.indexing.embeddings import EmbeddingGenerator
+
     try:
-        embedder = EmbeddingGenerator(
-            model_name=model_name,
-            dimension=dimension,
-            workspace_id=product.workspace_id,
-            db=db
-        )
+        embedder = EmbeddingGenerator(model_name=model_name, dimension=dimension, workspace_id=product.workspace_id, db=db)
         model_info = embedder.get_model_info()
         actual_dimension = embedder.get_dimension()
-        
-        is_loaded = model_info.get('is_loaded', False)
-        is_openai = model_info.get('is_openai', False)
-        fallback_mode = model_info.get('fallback_mode', False)
-        model_type = model_info.get('model_type', 'unknown')
-        model_loaded = model_info.get('model_loaded', False)
-        
+
+        is_loaded = model_info.get("is_loaded", False)
+        is_openai = model_info.get("is_openai", False)
+        fallback_mode = model_info.get("fallback_mode", False)
+        model_type = model_info.get("model_type", "unknown")
+        model_loaded = model_info.get("model_loaded", False)
+
         # Test embedding generation to verify actual status
         test_text = "This is a test sentence for embedding generation."
         try:
             test_embedding = embedder.embed(test_text)
             embedding_works = True
             embedding_error = None
-            
+
             # Verify it's actually OpenAI if configured as such
             # Check if openai_client is set (most reliable indicator)
-            if model_name.startswith('openai'):
-                if hasattr(embedder, 'openai_client') and embedder.openai_client is not None:
+            if model_name.startswith("openai"):
+                if hasattr(embedder, "openai_client") and embedder.openai_client is not None:
                     is_openai = True
                     fallback_mode = False
-                    model_type = 'openai'
+                    model_type = "openai"
                 elif len(test_embedding) == dimension and dimension >= 1536:
                     # High dimension suggests OpenAI (hash-based would be different)
                     # But verify by checking if it's consistent (OpenAI embeddings are deterministic)
@@ -1240,7 +1183,7 @@ async def get_embedding_diagnostics(
                         # Consistent embeddings suggest OpenAI
                         is_openai = True
                         fallback_mode = False
-                        model_type = 'openai'
+                        model_type = "openai"
         except Exception as e:
             embedding_works = False
             embedding_error = str(e)
@@ -1248,13 +1191,14 @@ async def get_embedding_diagnostics(
         is_loaded = False
         is_openai = False
         fallback_mode = True
-        model_type = 'unknown'
+        model_type = "unknown"
         actual_dimension = dimension
         embedding_works = False
         embedding_error = str(e)
-    
+
     # Get model configuration details
     from primedata.core.embedding_config import get_embedding_model_config
+
     model_config = get_embedding_model_config(model_name)
     model_config_details = None
     if model_config:
@@ -1264,9 +1208,9 @@ async def get_embedding_diagnostics(
             "dimension": model_config.dimension,
             "requires_api_key": model_config.requires_api_key,
             "is_available": model_config.is_available,
-            "model_path": model_config.model_path if hasattr(model_config, 'model_path') else None,
+            "model_path": model_config.model_path if hasattr(model_config, "model_path") else None,
         }
-    
+
     return {
         "product_id": str(product_id),
         "product_name": product.name,
@@ -1279,7 +1223,7 @@ async def get_embedding_diagnostics(
             "workspace_configured": workspace_has_key,
             "environment_configured": env_has_key,
             "has_api_key": workspace_has_key or env_has_key,
-            "note": "OpenAI models require API key. Check workspace settings or OPENAI_API_KEY environment variable."
+            "note": "OpenAI models require API key. Check workspace settings or OPENAI_API_KEY environment variable.",
         },
         "model_status": {
             "is_loaded": is_loaded,
@@ -1292,50 +1236,38 @@ async def get_embedding_diagnostics(
         "model_config": model_config_details,
         "recommendations": _get_embedding_recommendations(
             model_name, fallback_mode, workspace_has_key, env_has_key, embedding_works
-        )
+        ),
     }
 
 
 def _get_embedding_recommendations(
-    model_name: str, 
-    fallback_mode: bool, 
-    workspace_has_key: bool, 
-    env_has_key: bool,
-    embedding_works: bool
+    model_name: str, fallback_mode: bool, workspace_has_key: bool, env_has_key: bool, embedding_works: bool
 ) -> List[str]:
     """Generate recommendations based on diagnostic results."""
     recommendations = []
-    
+
     if fallback_mode:
         recommendations.append(
             "⚠️ CRITICAL: Using hash-based fallback embeddings. Semantic search will NOT work correctly. "
             "Results will be random and irrelevant."
         )
-    
+
     if "openai" in model_name.lower():
         if not workspace_has_key and not env_has_key:
             recommendations.append(
                 "❌ OpenAI API key not configured. Configure it in workspace settings or set OPENAI_API_KEY environment variable."
             )
         elif not embedding_works:
-            recommendations.append(
-                "❌ OpenAI API key is configured but embedding generation failed. Check API key validity."
-            )
+            recommendations.append("❌ OpenAI API key is configured but embedding generation failed. Check API key validity.")
         else:
-            recommendations.append(
-                "✅ OpenAI API key is configured and working correctly."
-            )
-    
+            recommendations.append("✅ OpenAI API key is configured and working correctly.")
+
     if not embedding_works and not fallback_mode:
-        recommendations.append(
-            "❌ Embedding generation failed. Check model installation and configuration."
-        )
-    
+        recommendations.append("❌ Embedding generation failed. Check model installation and configuration.")
+
     if not fallback_mode and embedding_works:
-        recommendations.append(
-            "✅ Embedding model is working correctly. Semantic search should function properly."
-        )
-    
+        recommendations.append("✅ Embedding model is working correctly. Semantic search should function properly.")
+
     return recommendations
 
 
@@ -1349,20 +1281,20 @@ async def list_chunk_metadata(
     offset: int = Query(0, ge=0, description="Offset for pagination"),
     request: Request = None,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     """
     List chunk metadata for a product (M4).
     """
     from primedata.core.scope import ensure_product_access
     from primedata.services.vector_metadata import get_chunk_metadata
-    
+
     product = ensure_product_access(db, request, product_id)
-    
+
     # Use version from product if not specified
     if version is None:
         version = product.current_version
-    
+
     metadata = get_chunk_metadata(
         db=db,
         product_id=product_id,
@@ -1372,33 +1304,41 @@ async def list_chunk_metadata(
         limit=limit,
         offset=offset,
     )
-    
+
     # Metadata is now returned as dicts from Qdrant, not ORM objects
     # Map dict keys to ChunkMetadataResponse fields
     result = []
     for m in metadata:
         # Map Qdrant payload fields to response model
-        result.append(ChunkMetadataResponse(
-            id=uuid_uuid4(),  # Generate new UUID for response (not stored in Qdrant)
-            chunk_id=m.get("chunk_id", ""),
-            score=m.get("score"),
-            source_file=m.get("source_file"),
-            page_number=m.get("page_number"),
-            section=m.get("section"),
-            field_name=m.get("field_name"),
-            extra_tags=m.get("extra_tags"),
-            created_at=datetime.fromisoformat(m.get("created_at", datetime.utcnow().isoformat())) if isinstance(m.get("created_at"), str) else m.get("created_at", datetime.utcnow()),
-        ))
+        result.append(
+            ChunkMetadataResponse(
+                id=uuid_uuid4(),  # Generate new UUID for response (not stored in Qdrant)
+                chunk_id=m.get("chunk_id", ""),
+                score=m.get("score"),
+                source_file=m.get("source_file"),
+                page_number=m.get("page_number"),
+                section=m.get("section"),
+                field_name=m.get("field_name"),
+                extra_tags=m.get("extra_tags"),
+                created_at=(
+                    datetime.fromisoformat(m.get("created_at", datetime.utcnow().isoformat()))
+                    if isinstance(m.get("created_at"), str)
+                    else m.get("created_at", datetime.utcnow())
+                ),
+            )
+        )
     return result
 
 
 class CostEstimateRequest(BaseModel):
     """Request model for cost estimation (M5)."""
+
     playbook_id: Optional[str] = None  # REGULATORY/SCANNED/TECH/None
 
 
 class CostEstimateResponse(BaseModel):
     """Response model for cost estimation (M5)."""
+
     filename: str
     playbook: str
     estimated_tokens: int
@@ -1417,7 +1357,7 @@ async def estimate_cost(
 ):
     """
     Estimate cost for creating AI-ready data from a file (M5).
-    
+
     Lightweight estimate endpoint:
       • Extracts text from file
       • Selects playbook (forced or via router)
@@ -1432,58 +1372,56 @@ async def estimate_cost(
     from primedata.ingestion_pipeline.aird_stages.playbooks.router import route_playbook, resolve_playbook_file
     from primedata.ingestion_pipeline.aird_stages.playbooks.loader import load_playbook_yaml
     from primedata.ingestion_pipeline.aird_stages.utils.text_processing import tokens_estimate
-    
+
     # Create temp file
     tmp_dir = Path(tempfile.gettempdir()) / "primedata_estimates"
     tmp_dir.mkdir(parents=True, exist_ok=True)
     tmp_path = tmp_dir / file.filename
-    
+
     try:
         # 1) Save temp file
         with tmp_path.open("wb") as buf:
             shutil.copyfileobj(file.file, buf)
-        
+
         # 2) Extract text - use simple text extraction for estimate
         try:
             # For cost estimation, we'll use a simple text extraction
             # In production, this should match the actual preprocessing extraction logic
-            if tmp_path.suffix.lower() == '.txt':
-                text = tmp_path.read_text(encoding='utf-8', errors='ignore')
-            elif tmp_path.suffix.lower() == '.pdf':
+            if tmp_path.suffix.lower() == ".txt":
+                text = tmp_path.read_text(encoding="utf-8", errors="ignore")
+            elif tmp_path.suffix.lower() == ".pdf":
                 # Try PDF extraction if available
                 try:
                     import PyPDF2
-                    with tmp_path.open('rb') as f:
+
+                    with tmp_path.open("rb") as f:
                         pdf_reader = PyPDF2.PdfReader(f)
-                        text = '\n'.join([page.extract_text() for page in pdf_reader.pages])
+                        text = "\n".join([page.extract_text() for page in pdf_reader.pages])
                 except ImportError:
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
-                        detail="PDF extraction requires PyPDF2. Please install it or use a .txt file."
+                        detail="PDF extraction requires PyPDF2. Please install it or use a .txt file.",
                     )
             else:
                 # Try to read as text
-                text = tmp_path.read_text(encoding='utf-8', errors='ignore')
+                text = tmp_path.read_text(encoding="utf-8", errors="ignore")
         except Exception as e:
             logger.error(f"Failed to extract text: {e}", exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Failed to extract text for estimate: {e}",
             )
-        
+
         if not text.strip():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No text extracted from file."
-            )
-        
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No text extracted from file.")
+
         # 3) Choose playbook (forced or via router)
         if playbook_id and playbook_id.upper() in {"REGULATORY", "SCANNED", "TECH"}:
             pb_id = playbook_id.upper()
         else:
             # Use router to select playbook
             pb_id, _ = route_playbook(sample_text=text[:1000], filename=file.filename)
-        
+
         # 4) Load chunking config to get max_tokens
         playbook_file = resolve_playbook_file(pb_id)
         if not playbook_file:
@@ -1496,24 +1434,26 @@ async def estimate_cost(
             except Exception as e:
                 logger.warning(f"Failed to load playbook {pb_id}: {e}, using defaults")
                 chunk_cfg = {}
-        
+
         max_tokens = int(chunk_cfg.get("max_tokens", 900) or 900)
-        
+
         # 5) Estimate tokens using same heuristic as preprocess
         token_est = tokens_estimate(text)
-        
+
         # 6) Estimate chunk count
         est_chunks = max(1, math.ceil(token_est / max_tokens)) if max_tokens > 0 else 1
-        
+
         # 7) Simple cost model (adjust to your real infra/API costs)
         PRICE_PREPROC_PER_1K = 0.0001  # $ per 1k tokens for preprocessing
-        PRICE_EMBED_PER_1K = 0.0002    # $ per 1k tokens for embedding
+        PRICE_EMBED_PER_1K = 0.0002  # $ per 1k tokens for embedding
         total_per_1k = PRICE_PREPROC_PER_1K + PRICE_EMBED_PER_1K
-        
+
         est_cost = (token_est / 1000.0) * total_per_1k
-        
-        logger.info(f"Cost estimate: file={file.filename}, playbook={pb_id}, tokens={token_est}, chunks={est_chunks}, cost=${est_cost:.6f}")
-        
+
+        logger.info(
+            f"Cost estimate: file={file.filename}, playbook={pb_id}, tokens={token_est}, chunks={est_chunks}, cost=${est_cost:.6f}"
+        )
+
         return CostEstimateResponse(
             filename=file.filename,
             playbook=pb_id,
@@ -1526,7 +1466,7 @@ async def estimate_cost(
             },
             estimated_cost_usd=round(est_cost, 6),
         )
-    
+
     finally:
         # Cleanup
         try:
@@ -1540,15 +1480,18 @@ class ContentAnalysisRequest(BaseModel):
     content: str
     filename: Optional[str] = None
 
+
 class ContentAnalysisResponse(BaseModel):
     content_type: str
     confidence: float
     recommended_config: Dict[str, Any]
     reasoning: str
 
+
 class ChunkingPreviewRequest(BaseModel):
     content: str
     config: Dict[str, Any]
+
 
 class ChunkingPreviewResponse(BaseModel):
     total_chunks: int
@@ -1565,21 +1508,18 @@ async def analyze_content(
     request_body: ContentAnalysisRequest,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Analyze content and recommend optimal chunking configuration.
     """
     # Ensure user has access to the product
     product = ensure_product_access(db, request, product_id)
-    
+
     try:
         # Analyze content
-        chunking_config = content_analyzer.analyze_content(
-            request_body.content, 
-            request_body.filename
-        )
-        
+        chunking_config = content_analyzer.analyze_content(request_body.content, request_body.filename)
+
         return ContentAnalysisResponse(
             content_type=chunking_config.content_type.value,
             confidence=chunking_config.confidence,
@@ -1588,16 +1528,13 @@ async def analyze_content(
                 "chunk_overlap": chunking_config.chunk_overlap,
                 "min_chunk_size": chunking_config.min_chunk_size,
                 "max_chunk_size": chunking_config.max_chunk_size,
-                "strategy": chunking_config.strategy.value
+                "strategy": chunking_config.strategy.value,
             },
-            reasoning=chunking_config.reasoning
+            reasoning=chunking_config.reasoning,
         )
-        
+
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Content analysis failed: {str(e)}"
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Content analysis failed: {str(e)}")
 
 
 @router.post("/{product_id}/preview-chunking", response_model=ChunkingPreviewResponse)
@@ -1606,113 +1543,108 @@ async def preview_chunking(
     request_body: ChunkingPreviewRequest,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Preview how content would be chunked with given configuration.
     """
     # Ensure user has access to the product
     product = ensure_product_access(db, request, product_id)
-    
+
     try:
         # Create ChunkingConfig object from request
         from primedata.analysis.content_analyzer import ChunkingConfig, ChunkingStrategy, ContentType
-        
+
         config = ChunkingConfig(
-            chunk_size=request_body.config.get('chunk_size', 1000),
-            chunk_overlap=request_body.config.get('chunk_overlap', 200),
-            min_chunk_size=request_body.config.get('min_chunk_size', 100),
-            max_chunk_size=request_body.config.get('max_chunk_size', 2000),
-            strategy=ChunkingStrategy(request_body.config.get('strategy', 'fixed_size')),
-            content_type=ContentType(request_body.config.get('content_type', 'general')),
+            chunk_size=request_body.config.get("chunk_size", 1000),
+            chunk_overlap=request_body.config.get("chunk_overlap", 200),
+            min_chunk_size=request_body.config.get("min_chunk_size", 100),
+            max_chunk_size=request_body.config.get("max_chunk_size", 2000),
+            strategy=ChunkingStrategy(request_body.config.get("strategy", "fixed_size")),
+            content_type=ContentType(request_body.config.get("content_type", "general")),
             confidence=1.0,
-            reasoning="User preview"
+            reasoning="User preview",
         )
-        
+
         # Generate preview
         preview = content_analyzer.preview_chunking(request_body.content, config)
-        
+
         return ChunkingPreviewResponse(
-            total_chunks=preview['total_chunks'],
-            avg_chunk_size=preview['avg_chunk_size'],
-            min_chunk_size=preview['min_chunk_size'],
-            max_chunk_size=preview['max_chunk_size'],
-            estimated_retrieval_quality=preview['estimated_retrieval_quality'],
-            preview_chunks=preview['chunks']
+            total_chunks=preview["total_chunks"],
+            avg_chunk_size=preview["avg_chunk_size"],
+            min_chunk_size=preview["min_chunk_size"],
+            max_chunk_size=preview["max_chunk_size"],
+            estimated_retrieval_quality=preview["estimated_retrieval_quality"],
+            preview_chunks=preview["chunks"],
         )
-        
+
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Chunking preview failed: {str(e)}"
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Chunking preview failed: {str(e)}")
 
 
 @router.post("/{product_id}/auto-configure-chunking")
 async def auto_configure_chunking(
-    product_id: UUID,
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    product_id: UUID, request: Request, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)
 ):
     """
     Automatically configure chunking settings based on product's data sources.
     """
     # Ensure user has access to the product
     product = ensure_product_access(db, request, product_id)
-    
+
     try:
         # Get sample content from data sources
         from primedata.storage.minio_client import minio_client
         from primedata.storage.paths import raw_prefix
-        
+
         # Try to get sample content from the latest version
         version = product.current_version or 1
         raw_prefix_path = raw_prefix(product.workspace_id, product_id, version)
-        
+
         # Get a few sample files
         raw_objects = minio_client.list_objects("primedata-raw", raw_prefix_path)
         sample_content = ""
-        
+
         for obj in raw_objects[:3]:  # Sample first 3 files
-            content = minio_client.get_object("primedata-raw", obj['name'])
+            content = minio_client.get_object("primedata-raw", obj["name"])
             if content:
-                sample_content += content.decode('utf-8', errors='ignore')[:5000]  # First 5000 chars
+                sample_content += content.decode("utf-8", errors="ignore")[:5000]  # First 5000 chars
                 if len(sample_content) > 10000:  # Limit total sample size
                     break
-        
+
         if not sample_content:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No content found to analyze. Please run data ingestion first."
+                status_code=status.HTTP_400_BAD_REQUEST, detail="No content found to analyze. Please run data ingestion first."
             )
-        
+
         # Analyze content and get recommended configuration
         chunking_config = content_analyzer.analyze_content(sample_content)
-        
+
         # Update product configuration
         current_config = product.chunking_config or {}
-        current_config.update({
-            'mode': 'auto',
-            'auto_settings': {
-                'content_type': chunking_config.content_type.value,
-                'model_optimized': True,
-                'confidence_threshold': 0.7
-            },
-            'manual_settings': {
-                'chunk_size': chunking_config.chunk_size,
-                'chunk_overlap': chunking_config.chunk_overlap,
-                'min_chunk_size': chunking_config.min_chunk_size,
-                'max_chunk_size': chunking_config.max_chunk_size,
-                'chunking_strategy': chunking_config.strategy.value
-            },
-            'last_analyzed': datetime.utcnow().isoformat(),
-            'analysis_confidence': chunking_config.confidence
-        })
-        
+        current_config.update(
+            {
+                "mode": "auto",
+                "auto_settings": {
+                    "content_type": chunking_config.content_type.value,
+                    "model_optimized": True,
+                    "confidence_threshold": 0.7,
+                },
+                "manual_settings": {
+                    "chunk_size": chunking_config.chunk_size,
+                    "chunk_overlap": chunking_config.chunk_overlap,
+                    "min_chunk_size": chunking_config.min_chunk_size,
+                    "max_chunk_size": chunking_config.max_chunk_size,
+                    "chunking_strategy": chunking_config.strategy.value,
+                },
+                "last_analyzed": datetime.utcnow().isoformat(),
+                "analysis_confidence": chunking_config.confidence,
+            }
+        )
+
         product.chunking_config = current_config
         db.commit()
-        
+
         return {
             "message": "Chunking configuration updated automatically",
             "content_type": chunking_config.content_type.value,
@@ -1723,23 +1655,17 @@ async def auto_configure_chunking(
                 "chunk_overlap": chunking_config.chunk_overlap,
                 "min_chunk_size": chunking_config.min_chunk_size,
                 "max_chunk_size": chunking_config.max_chunk_size,
-                "strategy": chunking_config.strategy.value
-            }
+                "strategy": chunking_config.strategy.value,
+            },
         }
-        
+
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Auto-configuration failed: {str(e)}"
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Auto-configuration failed: {str(e)}")
 
 
 @router.get("/{product_id}/mlflow-metrics")
 async def get_mlflow_metrics(
-    product_id: UUID,
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user_optional)
+    product_id: UUID, request: Request, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user_optional)
 ):
     """
     Get MLflow metrics for the product's latest pipeline run.
@@ -1747,12 +1673,9 @@ async def get_mlflow_metrics(
     """
     # Ensure user has access to the product
     product = ensure_product_access(db, request, product_id)
-    
+
     # Return empty response - MLflow disabled (no MLflow queries will be made)
-    return {
-        "has_mlflow_data": False,
-        "message": "MLflow tracking is disabled"
-    }
+    return {"has_mlflow_data": False, "message": "MLflow tracking is disabled"}
 
 
 @router.get("/{product_id}/mlflow-run-url")
@@ -1761,7 +1684,7 @@ async def get_mlflow_run_url(
     request: Request,
     run_id: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user_optional)
+    current_user: dict = Depends(get_current_user_optional),
 ):
     """
     Get MLflow UI URL for viewing runs.
@@ -1769,17 +1692,14 @@ async def get_mlflow_run_url(
     """
     # Ensure user has access to the product
     product = ensure_product_access(db, request, product_id)
-    
+
     # Return empty response - MLflow disabled
-    return {
-        "mlflow_ui_url": None,
-        "tracking_uri": None,
-        "message": "MLflow tracking is disabled"
-    }
+    return {"mlflow_ui_url": None, "tracking_uri": None, "message": "MLflow tracking is disabled"}
 
 
 class PromoteVersionRequest(BaseModel):
     """Request model for promoting a version to production."""
+
     version: int
 
 
@@ -1789,76 +1709,67 @@ async def promote_version(
     request_body: PromoteVersionRequest,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Promote a specific version to production by setting up a Qdrant alias.
     """
     # Ensure user has access to the product
     product = ensure_product_access(db, request, product_id)
-    
+
     version = request_body.version
-    
+
     # Check if the version exists and has succeeded
-    pipeline_run = db.query(PipelineRun).filter(
-        PipelineRun.product_id == product_id,
-        PipelineRun.version == version,
-        PipelineRun.status == PipelineRunStatus.SUCCEEDED
-    ).first()
-    
-    if not pipeline_run:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Version {version} not found or has not succeeded"
+    pipeline_run = (
+        db.query(PipelineRun)
+        .filter(
+            PipelineRun.product_id == product_id,
+            PipelineRun.version == version,
+            PipelineRun.status == PipelineRunStatus.SUCCEEDED,
         )
-    
+        .first()
+    )
+
+    if not pipeline_run:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Version {version} not found or has not succeeded")
+
     try:
         from primedata.indexing.qdrant_client import qdrant_client
-        
+
         if not qdrant_client.is_connected():
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Qdrant client not connected"
-            )
-        
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Qdrant client not connected")
+
         # Set the production alias in Qdrant (using product name for better readability)
         success = qdrant_client.set_prod_alias(
-            workspace_id=str(product.workspace_id),
-            product_id=str(product_id),
-            version=version,
-            product_name=product.name
+            workspace_id=str(product.workspace_id), product_id=str(product_id), version=version, product_name=product.name
         )
-        
+
         if not success:
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to set production alias in Qdrant"
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to set production alias in Qdrant"
             )
-        
+
         # Update the product's promoted_version
         product.promoted_version = version
         db.commit()
         db.refresh(product)
-        
+
         # Get the actual collection name (which may use product name)
         sanitized_name = qdrant_client._sanitize_collection_name(product.name)
         alias_name = f"prod_ws_{product.workspace_id}__{sanitized_name}"
         collection_name = f"ws_{product.workspace_id}__{sanitized_name}__v_{version}"
-        
+
         return {
             "message": f"Version {version} promoted to production successfully",
             "promoted_version": version,
             "alias_name": alias_name,
-            "collection_name": collection_name
+            "collection_name": collection_name,
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to promote version: {str(e)}"
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to promote version: {str(e)}")
 
 
 @router.get("/{product_id}/mlflow-metrics/{version}")
@@ -1867,7 +1778,7 @@ async def get_mlflow_metrics_for_version(
     version: int,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user_optional)
+    current_user: dict = Depends(get_current_user_optional),
 ):
     """
     Get MLflow metrics for a specific version of the product's pipeline run.
@@ -1875,10 +1786,6 @@ async def get_mlflow_metrics_for_version(
     """
     # Ensure user has access to the product
     product = ensure_product_access(db, request, product_id)
-    
+
     # Return empty response - MLflow disabled (no MLflow queries will be made)
-    return {
-        "has_mlflow_data": False,
-        "message": "MLflow tracking is disabled",
-        "version": version
-    }
+    return {"has_mlflow_data": False, "message": "MLflow tracking is disabled", "version": version}

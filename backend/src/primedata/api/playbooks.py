@@ -24,6 +24,7 @@ router = APIRouter(prefix="/api/v1/playbooks", tags=["Playbooks"])
 
 class PlaybookInfo(BaseModel):
     """Playbook information."""
+
     id: str
     description: str
     path: str
@@ -31,6 +32,7 @@ class PlaybookInfo(BaseModel):
 
 class PlaybookResponse(BaseModel):
     """Full playbook configuration response."""
+
     id: str
     description: str
     config: Dict[str, Any]
@@ -38,10 +40,7 @@ class PlaybookResponse(BaseModel):
 
 @router.get("/{playbook_id}/yaml")
 async def get_playbook_yaml(
-    playbook_id: str,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
-    request: Request = None
+    playbook_id: str, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user), request: Request = None
 ):
     """
     Get playbook YAML content as plain text.
@@ -50,13 +49,15 @@ async def get_playbook_yaml(
     try:
         # Try custom playbook first (if table exists)
         try:
-            custom_playbook = db.query(CustomPlaybook).filter(
-                CustomPlaybook.playbook_id == playbook_id.upper(),
-                CustomPlaybook.is_active == True
-            ).first()
-            
+            custom_playbook = (
+                db.query(CustomPlaybook)
+                .filter(CustomPlaybook.playbook_id == playbook_id.upper(), CustomPlaybook.is_active == True)
+                .first()
+            )
+
             if custom_playbook:
                 from primedata.core.scope import ensure_workspace_access
+
                 ensure_workspace_access(db, request, custom_playbook.workspace_id)
                 return {"yaml": custom_playbook.yaml_content, "is_custom": True}
         except Exception as db_error:
@@ -65,28 +66,23 @@ async def get_playbook_yaml(
                 logger.debug(f"Custom playbooks table not available, using file-based lookup: {db_error}")
             else:
                 logger.warning(f"Error querying custom playbooks, falling back to file-based: {db_error}")
-        
+
         # Try built-in playbook
         from primedata.ingestion_pipeline.aird_stages.playbooks.router import resolve_playbook_file
+
         playbook_path = resolve_playbook_file(playbook_id)
-        
+
         if playbook_path and playbook_path.exists():
-            with open(playbook_path, 'r', encoding='utf-8') as f:
+            with open(playbook_path, "r", encoding="utf-8") as f:
                 yaml_content = f.read()
             return {"yaml": yaml_content, "is_custom": False}
-        
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Playbook '{playbook_id}' not found"
-        )
+
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Playbook '{playbook_id}' not found")
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Failed to get playbook YAML: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get playbook YAML: {str(e)}"
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to get playbook YAML: {str(e)}")
 
 
 @router.get("/", response_model=List[PlaybookInfo])
@@ -94,11 +90,11 @@ async def list_available_playbooks(
     workspace_id: Optional[UUID] = None,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
-    request: Request = None
+    request: Request = None,
 ):
     """
     List all available playbooks.
-    
+
     Returns all playbooks found in the configured playbook directory,
     including TECH, SCANNED, REGULATORY, and any other playbooks.
     """
@@ -106,71 +102,73 @@ async def list_available_playbooks(
         # Refresh the playbook index to ensure we have the latest playbooks
         refresh_index()
         playbook_map = list_playbooks()
-        
+
         if not playbook_map:
             logger.warning("No playbooks found in configured directory")
             return []
-        
+
         playbooks = []
-        
+
         # Sort by playbook ID (case-insensitive) for consistent ordering
         sorted_items = sorted(playbook_map.items(), key=lambda x: x[0].lower())
-        
+
         for playbook_id, path in sorted_items:
             try:
                 # Load playbook to get description and actual ID from YAML
                 config = load_playbook_yaml(playbook_id)
                 # Use the ID from the YAML file, or fallback to uppercase version of the key
                 playbook_id_from_yaml = config.get("id", playbook_id.upper())
-                playbooks.append(PlaybookInfo(
-                    id=playbook_id_from_yaml,
-                    description=config.get("description", "No description"),
-                    path=str(path),
-                ))
+                playbooks.append(
+                    PlaybookInfo(
+                        id=playbook_id_from_yaml,
+                        description=config.get("description", "No description"),
+                        path=str(path),
+                    )
+                )
             except Exception as e:
                 logger.warning(f"Failed to load playbook {playbook_id}: {e}")
                 # Still include it with minimal info using the filename as ID
-                playbooks.append(PlaybookInfo(
-                    id=playbook_id.upper(),
-                    description="Playbook available but failed to load",
-                    path=str(path),
-                ))
-        
+                playbooks.append(
+                    PlaybookInfo(
+                        id=playbook_id.upper(),
+                        description="Playbook available but failed to load",
+                        path=str(path),
+                    )
+                )
+
         # Add custom playbooks if workspace_id is provided
         if workspace_id:
             try:
                 from primedata.core.scope import ensure_workspace_access
+
                 ensure_workspace_access(db, request, workspace_id)
-                
-                custom_playbooks = db.query(CustomPlaybook).filter(
-                    CustomPlaybook.workspace_id == workspace_id,
-                    CustomPlaybook.is_active == True
-                ).all()
-                
+
+                custom_playbooks = (
+                    db.query(CustomPlaybook)
+                    .filter(CustomPlaybook.workspace_id == workspace_id, CustomPlaybook.is_active == True)
+                    .all()
+                )
+
                 for custom_pb in custom_playbooks:
-                    playbooks.append(PlaybookInfo(
-                        id=custom_pb.playbook_id,
-                        description=custom_pb.description or f"Custom playbook: {custom_pb.name}",
-                        path=f"custom:{custom_pb.id}",  # Mark as custom
-                    ))
+                    playbooks.append(
+                        PlaybookInfo(
+                            id=custom_pb.playbook_id,
+                            description=custom_pb.description or f"Custom playbook: {custom_pb.name}",
+                            path=f"custom:{custom_pb.id}",  # Mark as custom
+                        )
+                    )
             except Exception as e:
                 logger.warning(f"Failed to load custom playbooks: {e}")
-        
+
         return playbooks
     except Exception as e:
         logger.error(f"Failed to list playbooks: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to list playbooks"
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to list playbooks")
 
 
 @router.get("/{playbook_id}", response_model=PlaybookResponse)
 async def get_playbook(
-    playbook_id: str,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
-    request: Request = None
+    playbook_id: str, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user), request: Request = None
 ):
     """
     Get playbook configuration by ID.
@@ -179,16 +177,18 @@ async def get_playbook(
     try:
         # First try to load from database (custom playbooks) - if table exists
         try:
-            custom_playbook = db.query(CustomPlaybook).filter(
-                CustomPlaybook.playbook_id == playbook_id.upper(),
-                CustomPlaybook.is_active == True
-            ).first()
-            
+            custom_playbook = (
+                db.query(CustomPlaybook)
+                .filter(CustomPlaybook.playbook_id == playbook_id.upper(), CustomPlaybook.is_active == True)
+                .first()
+            )
+
             if custom_playbook:
                 # Check workspace access
                 from primedata.core.scope import ensure_workspace_access
+
                 ensure_workspace_access(db, request, custom_playbook.workspace_id)
-                
+
                 # Parse YAML content
                 try:
                     config = yaml.safe_load(custom_playbook.yaml_content)
@@ -200,8 +200,7 @@ async def get_playbook(
                 except yaml.YAMLError as e:
                     logger.error(f"Failed to parse custom playbook YAML: {e}")
                     raise HTTPException(
-                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                        detail=f"Invalid YAML in custom playbook: {str(e)}"
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Invalid YAML in custom playbook: {str(e)}"
                     )
         except Exception as db_error:
             # If table doesn't exist, just skip custom playbook lookup
@@ -209,7 +208,7 @@ async def get_playbook(
                 logger.debug(f"Custom playbooks table not available, using file-based lookup: {db_error}")
             else:
                 logger.warning(f"Error querying custom playbooks, falling back to file-based: {db_error}")
-        
+
         # Fallback to built-in playbooks (from files)
         config = load_playbook_yaml(playbook_id)
         return PlaybookResponse(
@@ -218,21 +217,16 @@ async def get_playbook(
             config=config,
         )
     except FileNotFoundError:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Playbook '{playbook_id}' not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Playbook '{playbook_id}' not found")
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Failed to load playbook {playbook_id}: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to load playbook: {str(e)}"
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to load playbook: {str(e)}")
 
 
 # Custom Playbook Endpoints
+
 
 class CustomPlaybookCreateRequest(BaseModel):
     name: str
@@ -260,7 +254,7 @@ class CustomPlaybookResponse(BaseModel):
     is_active: bool
     created_at: datetime
     updated_at: Optional[datetime]
-    
+
     class Config:
         orm_mode = True
 
@@ -271,16 +265,16 @@ async def create_custom_playbook(
     workspace_id: UUID = Query(..., description="Workspace ID"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
-    request: Request = None
+    request: Request = None,
 ):
     """
     Create a custom playbook based on an existing playbook or from scratch.
     """
     from primedata.core.user_utils import get_user_id
     from primedata.core.scope import ensure_workspace_access
-    
+
     ensure_workspace_access(db, request, workspace_id)
-    
+
     # Validate YAML
     try:
         config = yaml.safe_load(request_body.yaml_content)
@@ -290,39 +284,37 @@ async def create_custom_playbook(
         if "id" not in config:
             config["id"] = request_body.playbook_id.upper()
     except yaml.YAMLError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid YAML: {str(e)}"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid YAML: {str(e)}")
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid playbook configuration: {str(e)}"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid playbook configuration: {str(e)}")
+
     # Check if playbook_id already exists in this workspace
     try:
-        existing = db.query(CustomPlaybook).filter(
-            CustomPlaybook.workspace_id == workspace_id,
-            CustomPlaybook.playbook_id == request_body.playbook_id.upper(),
-            CustomPlaybook.is_active == True
-        ).first()
-        
+        existing = (
+            db.query(CustomPlaybook)
+            .filter(
+                CustomPlaybook.workspace_id == workspace_id,
+                CustomPlaybook.playbook_id == request_body.playbook_id.upper(),
+                CustomPlaybook.is_active == True,
+            )
+            .first()
+        )
+
         if existing:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"Playbook with ID '{request_body.playbook_id}' already exists in this workspace"
+                detail=f"Playbook with ID '{request_body.playbook_id}' already exists in this workspace",
             )
     except Exception as db_error:
         # If table doesn't exist, provide a helpful error message
         if "does not exist" in str(db_error) or "UndefinedTable" in str(type(db_error).__name__):
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Custom playbooks feature is not available. Please run the database migration first: 'alembic upgrade head'"
+                detail="Custom playbooks feature is not available. Please run the database migration first: 'alembic upgrade head'",
             )
         # Re-raise other database errors
         raise
-    
+
     # Create custom playbook
     custom_playbook = CustomPlaybook(
         workspace_id=workspace_id,
@@ -333,15 +325,15 @@ async def create_custom_playbook(
         yaml_content=request_body.yaml_content,
         config=config,  # Store parsed YAML for quick access
         base_playbook_id=request_body.base_playbook_id.upper() if request_body.base_playbook_id else None,
-        is_active=True
+        is_active=True,
     )
-    
+
     db.add(custom_playbook)
     db.commit()
     db.refresh(custom_playbook)
-    
+
     logger.info(f"Created custom playbook {custom_playbook.playbook_id} in workspace {workspace_id}")
-    
+
     return CustomPlaybookResponse.from_orm(custom_playbook)
 
 
@@ -350,21 +342,22 @@ async def list_custom_playbooks(
     workspace_id: UUID = Query(..., description="Workspace ID"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
-    request: Request = None
+    request: Request = None,
 ):
     """
     List all custom playbooks in a workspace.
     """
     from primedata.core.scope import ensure_workspace_access
-    
+
     ensure_workspace_access(db, request, workspace_id)
-    
+
     try:
-        custom_playbooks = db.query(CustomPlaybook).filter(
-            CustomPlaybook.workspace_id == workspace_id,
-            CustomPlaybook.is_active == True
-        ).all()
-        
+        custom_playbooks = (
+            db.query(CustomPlaybook)
+            .filter(CustomPlaybook.workspace_id == workspace_id, CustomPlaybook.is_active == True)
+            .all()
+        )
+
         return [CustomPlaybookResponse.from_orm(pb) for pb in custom_playbooks]
     except Exception as db_error:
         # If table doesn't exist, return empty list
@@ -380,28 +373,29 @@ async def get_custom_playbook(
     workspace_id: UUID = Query(..., description="Workspace ID"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
-    request: Request = None
+    request: Request = None,
 ):
     """
     Get a specific custom playbook.
     """
     from primedata.core.scope import ensure_workspace_access
-    
+
     ensure_workspace_access(db, request, workspace_id)
-    
+
     try:
-        custom_playbook = db.query(CustomPlaybook).filter(
-            CustomPlaybook.workspace_id == workspace_id,
-            CustomPlaybook.playbook_id == playbook_id.upper(),
-            CustomPlaybook.is_active == True
-        ).first()
-        
-        if not custom_playbook:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Custom playbook '{playbook_id}' not found"
+        custom_playbook = (
+            db.query(CustomPlaybook)
+            .filter(
+                CustomPlaybook.workspace_id == workspace_id,
+                CustomPlaybook.playbook_id == playbook_id.upper(),
+                CustomPlaybook.is_active == True,
             )
-        
+            .first()
+        )
+
+        if not custom_playbook:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Custom playbook '{playbook_id}' not found")
+
         return CustomPlaybookResponse.from_orm(custom_playbook)
     except HTTPException:
         raise
@@ -410,7 +404,7 @@ async def get_custom_playbook(
         if "does not exist" in str(db_error) or "UndefinedTable" in str(type(db_error).__name__):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Custom playbook '{playbook_id}' not found. Custom playbooks feature is not available. Please run the database migration first."
+                detail=f"Custom playbook '{playbook_id}' not found. Custom playbooks feature is not available. Please run the database migration first.",
             )
         raise
 
@@ -422,29 +416,30 @@ async def update_custom_playbook(
     request_body: CustomPlaybookUpdateRequest = ...,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
-    request: Request = None
+    request: Request = None,
 ):
     """
     Update a custom playbook.
     """
     from primedata.core.scope import ensure_workspace_access
     from sqlalchemy.orm.attributes import flag_modified
-    
+
     ensure_workspace_access(db, request, workspace_id)
-    
+
     try:
-        custom_playbook = db.query(CustomPlaybook).filter(
-            CustomPlaybook.workspace_id == workspace_id,
-            CustomPlaybook.playbook_id == playbook_id.upper(),
-            CustomPlaybook.is_active == True
-        ).first()
-        
-        if not custom_playbook:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Custom playbook '{playbook_id}' not found"
+        custom_playbook = (
+            db.query(CustomPlaybook)
+            .filter(
+                CustomPlaybook.workspace_id == workspace_id,
+                CustomPlaybook.playbook_id == playbook_id.upper(),
+                CustomPlaybook.is_active == True,
             )
-        
+            .first()
+        )
+
+        if not custom_playbook:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Custom playbook '{playbook_id}' not found")
+
         # Update fields
         if request_body.name is not None:
             custom_playbook.name = request_body.name
@@ -458,18 +453,15 @@ async def update_custom_playbook(
                     raise ValueError("YAML must be a dictionary")
                 custom_playbook.yaml_content = request_body.yaml_content
                 custom_playbook.config = config
-                flag_modified(custom_playbook, 'config')
+                flag_modified(custom_playbook, "config")
             except yaml.YAMLError as e:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Invalid YAML: {str(e)}"
-                )
-        
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid YAML: {str(e)}")
+
         db.commit()
         db.refresh(custom_playbook)
-        
+
         logger.info(f"Updated custom playbook {custom_playbook.playbook_id}")
-        
+
         return CustomPlaybookResponse.from_orm(custom_playbook)
     except HTTPException:
         raise
@@ -479,7 +471,7 @@ async def update_custom_playbook(
             db.rollback()
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Custom playbooks feature is not available. Please run the database migration first: 'alembic upgrade head'"
+                detail="Custom playbooks feature is not available. Please run the database migration first: 'alembic upgrade head'",
             )
         # Re-raise other database errors
         db.rollback()
@@ -490,7 +482,7 @@ async def update_custom_playbook(
             db.rollback()
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Custom playbooks feature is not available. Please run the database migration first: 'alembic upgrade head'"
+                detail="Custom playbooks feature is not available. Please run the database migration first: 'alembic upgrade head'",
             )
         # Re-raise other database errors
         db.rollback()
@@ -503,34 +495,35 @@ async def delete_custom_playbook(
     workspace_id: UUID = Query(..., description="Workspace ID"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
-    request: Request = None
+    request: Request = None,
 ):
     """
     Delete (soft delete) a custom playbook.
     """
     from primedata.core.scope import ensure_workspace_access
-    
+
     ensure_workspace_access(db, request, workspace_id)
-    
+
     try:
-        custom_playbook = db.query(CustomPlaybook).filter(
-            CustomPlaybook.workspace_id == workspace_id,
-            CustomPlaybook.playbook_id == playbook_id.upper(),
-            CustomPlaybook.is_active == True
-        ).first()
-        
-        if not custom_playbook:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Custom playbook '{playbook_id}' not found"
+        custom_playbook = (
+            db.query(CustomPlaybook)
+            .filter(
+                CustomPlaybook.workspace_id == workspace_id,
+                CustomPlaybook.playbook_id == playbook_id.upper(),
+                CustomPlaybook.is_active == True,
             )
-        
+            .first()
+        )
+
+        if not custom_playbook:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Custom playbook '{playbook_id}' not found")
+
         # Soft delete
         custom_playbook.is_active = False
         db.commit()
-        
+
         logger.info(f"Deleted custom playbook {custom_playbook.playbook_id}")
-        
+
         return None
     except HTTPException:
         raise
@@ -540,9 +533,8 @@ async def delete_custom_playbook(
             db.rollback()
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Custom playbook '{playbook_id}' not found. Custom playbooks feature is not available."
+                detail=f"Custom playbook '{playbook_id}' not found. Custom playbooks feature is not available.",
             )
         # Re-raise other database errors
         db.rollback()
         raise
-
