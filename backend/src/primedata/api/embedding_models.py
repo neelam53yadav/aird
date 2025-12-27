@@ -15,7 +15,7 @@ from ..core.embedding_config import (
     EmbeddingModelConfig
 )
 
-router = APIRouter(prefix="/embedding-models", tags=["embedding-models"])
+router = APIRouter(prefix="/api/v1/embedding-models", tags=["embedding-models"])
 
 
 class EmbeddingModelResponse(BaseModel):

@@ -108,7 +108,7 @@ services:
       _AIRFLOW_WWW_USER_PASSWORD: ${AIRFLOW_PASSWORD:-admin}
       # PrimeData specific environment variables
       PRIMEDATA_BACKEND_URL: http://host.docker.internal:8000
-      DATABASE_URL: postgresql+psycopg2://postgres:postgres@host.docker.internal:5432/primedata
+      DATABASE_URL: postgresql+psycopg2://primedata:primedata123@postgres:5432/primedata
       MINIO_HOST: minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin123}
@@ -134,7 +134,7 @@ services:
       - ./airflow/triggers:/opt/airflow/triggers
       - ./airflow/dags:/opt/airflow/dags:ro
       - ../backend/src:/opt/airflow/primedata/src:ro
-      - D:/projects/data:/opt/airflow/data
+      - /Users/atul7717/Desktop/aird_data:/opt/airflow/data
     command: webserver
     depends_on:
       postgres:
@@ -162,7 +162,7 @@ services:
       _AIRFLOW_DB_UPGRADE: 'true'
       # PrimeData specific environment variables
       PRIMEDATA_BACKEND_URL: http://host.docker.internal:8000
-      DATABASE_URL: postgresql+psycopg2://postgres:postgres@host.docker.internal:5432/primedata
+      DATABASE_URL: postgresql+psycopg2://primedata:primedata123@postgres:5432/primedata
       MINIO_HOST: minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin123}
@@ -186,7 +186,7 @@ services:
       - ./airflow/triggers:/opt/airflow/triggers
       - ./airflow/dags:/opt/airflow/dags:ro
       - ../backend/src:/opt/airflow/primedata/src:ro
-      - D:/projects/data:/opt/airflow/data
+      - /Users/atul7717/Desktop/aird_data:/opt/airflow/data
     command: scheduler
     depends_on:
       postgres:

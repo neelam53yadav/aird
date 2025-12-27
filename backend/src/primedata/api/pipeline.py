@@ -10,7 +10,7 @@ import json
 import logging
 from typing import List, Optional, Dict, Any
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from sqlalchemy.orm import Session
@@ -45,7 +45,7 @@ class PipelineRunResponse(BaseModel):
     created_at: datetime
 
     class Config:
-        from_attributes = True
+        orm_mode = True  # Pydantic v1 uses orm_mode instead of from_attributes
 
 class TriggerPipelineResponse(BaseModel):
     """Response model for pipeline trigger."""
@@ -92,12 +92,12 @@ async def trigger_pipeline(
     # If version is None, auto-detect latest ingested version
     if request.version is not None:
         # Explicit version provided - validate raw files exist
-        # Look for files that can be processed: INGESTED, FAILED (can retry), or PROCESSING (stuck, can retry)
+        # Include PROCESSED files to allow reprocessing with new configurations
         version = request.version
         raw_file_count = db.query(RawFile).filter(
             RawFile.product_id == product.id,
             RawFile.version == version,
-            RawFile.status.in_([RawFileStatus.INGESTED, RawFileStatus.FAILED, RawFileStatus.PROCESSING])
+            RawFile.status.in_([RawFileStatus.INGESTED, RawFileStatus.FAILED, RawFileStatus.PROCESSING, RawFileStatus.PROCESSED])
         ).count()
         
         if raw_file_count == 0:
@@ -144,42 +144,56 @@ async def trigger_pipeline(
         
         logger.info(f"Using explicit version {version} (validated: {raw_file_count} raw files found)")
     else:
-        # Auto-detect: Use latest version with raw files
-        latest_raw_file = db.query(RawFile).filter(
+        # Auto-detect: Prefer PROCESSED versions over FAILED versions for reprocessing
+        # This ensures we use valid, successfully processed data as the source
+        latest_processed = db.query(RawFile).filter(
             RawFile.product_id == product.id,
-            RawFile.status.in_([RawFileStatus.INGESTED, RawFileStatus.FAILED])
+            RawFile.status == RawFileStatus.PROCESSED
         ).order_by(RawFile.version.desc()).first()
         
-        if not latest_raw_file:
-            # Check if any raw files exist at all (even processed ones)
-            any_raw_file = db.query(RawFile).filter(
-                RawFile.product_id == product.id,
-                RawFile.status != RawFileStatus.DELETED
-            ).first()
-            
-            if any_raw_file:
-                error_detail = {
-                    "message": "No unprocessed raw files found. All ingested files have been processed or deleted.",
-                    "suggestion": "Please run initial ingestion to create a new version with raw files"
-                }
-            else:
-                error_detail = {
-                    "message": "No raw files found for this product",
-                    "suggestion": "Please run initial ingestion first to upload data"
-                }
-            
-            logger.warning(f"Pipeline trigger failed: No raw files for product {product.id}")
-            
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=error_detail
+        if latest_processed:
+            version = latest_processed.version
+            logger.info(
+                f"Auto-detected latest processed version: {version} "
+                f"(found file: {latest_processed.filename})"
             )
-        
-        version = latest_raw_file.version
-        logger.info(
-            f"Auto-detected latest ingested version: {version} "
-            f"(found file: {latest_raw_file.filename}, status: {latest_raw_file.status.value})"
-        )
+        else:
+            # Fallback to INGESTED files if no PROCESSED files exist
+            latest_ingested = db.query(RawFile).filter(
+                RawFile.product_id == product.id,
+                RawFile.status == RawFileStatus.INGESTED
+            ).order_by(RawFile.version.desc()).first()
+            
+            if not latest_ingested:
+                # Check if any raw files exist at all
+                any_raw_file = db.query(RawFile).filter(
+                    RawFile.product_id == product.id,
+                    RawFile.status != RawFileStatus.DELETED
+                ).first()
+                
+                if any_raw_file:
+                    error_detail = {
+                        "message": "No raw files found for processing.",
+                        "suggestion": "Please run initial ingestion to create a new version with raw files"
+                    }
+                else:
+                    error_detail = {
+                        "message": "No raw files found for this product",
+                        "suggestion": "Please run initial ingestion first to upload data"
+                    }
+                
+                logger.warning(f"Pipeline trigger failed: No raw files for product {product.id}")
+                
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=error_detail
+                )
+            
+            version = latest_ingested.version
+            logger.info(
+                f"Auto-detected latest ingested version: {version} "
+                f"(found file: {latest_ingested.filename})"
+            )
     
     # Check if there's already a running pipeline for this version
     existing_run = db.query(PipelineRun).filter(
@@ -193,14 +207,22 @@ async def trigger_pipeline(
         force_run = request.force_run
         
         if not force_run:
+            # Provide helpful error message with details about existing run
+            status_msg = existing_run.status.value.lower()
+            started_msg = ""
+            if existing_run.started_at:
+                now = datetime.now(timezone.utc)
+                elapsed = now - existing_run.started_at.replace(tzinfo=timezone.utc)
+                started_msg = f" (running for {int(elapsed.total_seconds() / 60)} minutes)"
+            
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={
-                    "message": f"Pipeline run already exists for product {request.product_id} version {version}",
+                    "message": f"A pipeline run is already {status_msg} for this product (version {version}){started_msg}",
                     "existing_run_id": str(existing_run.id),
                     "existing_status": existing_run.status.value,
                     "existing_started_at": existing_run.started_at.isoformat() if existing_run.started_at else None,
-                    "suggestion": "Use force_run=true to override existing run or wait for current run to complete"
+                    "suggestion": "You can force run to cancel the existing run and start a new one, or wait for the current run to complete."
                 }
             )
         else:
@@ -211,6 +233,166 @@ async def trigger_pipeline(
             existing_run.metrics = existing_run.metrics or {}
             existing_run.metrics["cancelled_reason"] = "Replaced by new pipeline run"
             db.commit()
+    
+    # Check if we're reprocessing already-processed files - if so, create a new version
+    # Only do this if version was auto-detected (not explicitly provided)
+    if request.version is None:
+        # First, check if there are any existing raw files for this version that might be missing files in MinIO
+        existing_files_for_version = db.query(RawFile).filter(
+            RawFile.product_id == request.product_id,
+            RawFile.version == version,
+            RawFile.status.in_([RawFileStatus.FAILED, RawFileStatus.INGESTED, RawFileStatus.PROCESSING])
+        ).all()
+        
+        # Check if any of these files are missing in MinIO and need to be copied from previous version
+        if existing_files_for_version:
+            from primedata.storage.minio_client import minio_client as minio_client_instance
+            files_need_copy = []
+            
+            for existing_file in existing_files_for_version:
+                if not minio_client_instance.object_exists(existing_file.minio_bucket, existing_file.minio_key):
+                    # File doesn't exist, need to find the original source file from previous version
+                    # Find the original PROCESSED file from previous versions
+                    original_file = db.query(RawFile).filter(
+                        RawFile.product_id == request.product_id,
+                        RawFile.filename == existing_file.filename,
+                        RawFile.status == RawFileStatus.PROCESSED
+                    ).order_by(RawFile.version.desc()).first()
+                    
+                    if original_file and minio_client_instance.object_exists(original_file.minio_bucket, original_file.minio_key):
+                        # Copy from original location
+                        logger.info(f"Copying missing file from original version: {original_file.minio_key} to {existing_file.minio_key}")
+                        copy_success = minio_client_instance.copy_object(
+                            source_bucket=original_file.minio_bucket,
+                            source_key=original_file.minio_key,
+                            dest_bucket=existing_file.minio_bucket,
+                            dest_key=existing_file.minio_key
+                        )
+                        
+                        if copy_success:
+                            # Verify copy succeeded
+                            if minio_client_instance.object_exists(existing_file.minio_bucket, existing_file.minio_key):
+                                existing_file.status = RawFileStatus.INGESTED
+                                existing_file.error_message = None
+                                logger.info(f"Successfully copied file and updated status for {existing_file.filename}")
+                            else:
+                                logger.error(f"Copy verification failed for {existing_file.filename}")
+                        else:
+                            logger.error(f"Failed to copy file for {existing_file.filename}")
+                    else:
+                        logger.warning(f"Cannot find source file to copy for {existing_file.filename}")
+            
+            if existing_files_for_version:
+                db.commit()
+        
+        # Now check for PROCESSED files to create a new version from
+        processed_files_to_reprocess = db.query(RawFile).filter(
+            RawFile.product_id == request.product_id,
+            RawFile.version == version,
+            RawFile.status == RawFileStatus.PROCESSED
+        ).all()
+        
+        if processed_files_to_reprocess:
+            # We're reprocessing - create a new version by incrementing
+            # Get the maximum version number for this product
+            max_version = db.query(func.max(RawFile.version)).filter(
+                RawFile.product_id == request.product_id
+            ).scalar() or 0
+            
+            new_version = max_version + 1
+            logger.info(
+                f"Reprocessing {len(processed_files_to_reprocess)} PROCESSED files from version {version} "
+                f"to new version {new_version} with new configuration"
+            )
+            
+            # Create new raw file records with the new version (copy the old ones)
+            import uuid as uuid_lib
+            from primedata.storage.paths import raw_prefix
+            from primedata.storage.minio_client import minio_client as minio_client_instance
+            
+            for old_raw_file in processed_files_to_reprocess:
+                # Update minio_key to use the new version number
+                # Extract just the filename from the old minio_key
+                # Old format: ws/{ws}/prod/{prod}/v/{old_version}/raw/{filename}
+                # New format: ws/{ws}/prod/{prod}/v/{new_version}/raw/{filename}
+                old_key_parts = old_raw_file.minio_key.split('/')
+                filename = old_key_parts[-1]  # Get the filename
+                new_minio_key = f"{raw_prefix(old_raw_file.workspace_id, old_raw_file.product_id, new_version)}{filename}"
+                
+                # Verify source file exists before copying
+                source_exists = minio_client_instance.object_exists(
+                    old_raw_file.minio_bucket, 
+                    old_raw_file.minio_key
+                )
+                
+                if not source_exists:
+                    logger.error(f"Source file does not exist in MinIO: {old_raw_file.minio_key}")
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail=f"Source file {old_raw_file.filename} not found in MinIO at {old_raw_file.minio_key}. Cannot reprocess."
+                    )
+                
+                # Check if destination already exists (shouldn't happen, but be safe)
+                dest_exists = minio_client_instance.object_exists(
+                    old_raw_file.minio_bucket,
+                    new_minio_key
+                )
+                if dest_exists:
+                    logger.info(f"Destination file already exists in MinIO: {new_minio_key}, skipping copy")
+                else:
+                    # Copy the file in MinIO from old version path to new version path
+                    logger.info(f"Copying file from {old_raw_file.minio_key} to {new_minio_key}")
+                    copy_success = minio_client_instance.copy_object(
+                        source_bucket=old_raw_file.minio_bucket,
+                        source_key=old_raw_file.minio_key,
+                        dest_bucket=old_raw_file.minio_bucket,
+                        dest_key=new_minio_key
+                    )
+                    
+                    if not copy_success:
+                        logger.error(f"Failed to copy file from {old_raw_file.minio_key} to {new_minio_key}")
+                        raise HTTPException(
+                            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            detail=f"Failed to copy file {old_raw_file.filename} to new version path"
+                        )
+                    
+                    # Verify the copy succeeded
+                    verify_exists = minio_client_instance.object_exists(
+                        old_raw_file.minio_bucket,
+                        new_minio_key
+                    )
+                    if not verify_exists:
+                        logger.error(f"Copy verification failed: file does not exist at {new_minio_key} after copy")
+                        raise HTTPException(
+                            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            detail=f"File copy verification failed for {old_raw_file.filename}"
+                        )
+                
+                new_raw_file = RawFile(
+                    id=uuid_lib.uuid4(),
+                    workspace_id=old_raw_file.workspace_id,
+                    product_id=old_raw_file.product_id,
+                    data_source_id=old_raw_file.data_source_id,
+                    version=new_version,
+                    filename=old_raw_file.filename,
+                    file_stem=old_raw_file.file_stem,
+                    minio_key=new_minio_key,  # Use new version in the key
+                    minio_bucket=old_raw_file.minio_bucket,
+                    file_size=old_raw_file.file_size,
+                    content_type=old_raw_file.content_type,
+                    status=RawFileStatus.INGESTED,  # Start as INGESTED for reprocessing
+                    file_checksum=old_raw_file.file_checksum,
+                    minio_etag=old_raw_file.minio_etag,
+                    ingested_at=datetime.utcnow(),
+                    processed_at=None,
+                    error_message=None
+                )
+                db.add(new_raw_file)
+                logger.info(f"Copied file {old_raw_file.filename} from v{version} to v{new_version} in MinIO")
+            
+            version = new_version  # Use the new version for the pipeline run
+            db.commit()
+            logger.info(f"Created new version {version} for reprocessing")
     
     try:
         # Create pipeline run record
@@ -225,9 +407,20 @@ async def trigger_pipeline(
         db.commit()
         db.refresh(pipeline_run)
         
-        # Get chunking and embedding configuration from product
+        # Refresh product from database to ensure we have latest configuration
+        db.refresh(product)
+        
+        # Get chunking and embedding configuration from product (after refresh)
         chunking_config = product.chunking_config or {}
         embedding_config = product.embedding_config or {}
+        
+        # Log the configuration being passed to Airflow for verification
+        logger.info(
+            f"Triggering pipeline for product {request.product_id} with configuration:\n"
+            f"  chunking_config: {chunking_config}\n"
+            f"  embedding_config: {embedding_config}\n"
+            f"  playbook_id: {product.playbook_id}"
+        )
         
         # Trigger Airflow DAG with configuration
         dag_run_id = await _trigger_airflow_dag(
@@ -236,7 +429,8 @@ async def trigger_pipeline(
             version=version,
             pipeline_run_id=pipeline_run.id,
             chunking_config=chunking_config,
-            embedding_config=embedding_config
+            embedding_config=embedding_config,
+            playbook_id=product.playbook_id
         )
         
         # Update pipeline run with DAG run ID
@@ -358,7 +552,7 @@ async def update_pipeline_run(
     current_user: dict = Depends(get_current_user)
 ):
     """
-    Update a pipeline run status (used by Airflow DAG).
+    Update a pipeline run status (used by Airflow DAG or for manual cancellation).
     """
     run = db.query(PipelineRun).filter(PipelineRun.id == run_id).first()
     if not run:
@@ -367,10 +561,23 @@ async def update_pipeline_run(
             detail="Pipeline run not found"
         )
     
+    # Ensure user has access to the product
+    ensure_product_access(db, request_obj, run.product_id)
+    
     # Update fields if provided
     if request_body.status is not None:
         try:
-            run.status = PipelineRunStatus(request_body.status)
+            new_status = PipelineRunStatus(request_body.status)
+            # If cancelling a running/queued pipeline, mark it as failed
+            if new_status == PipelineRunStatus.FAILED and run.status in [PipelineRunStatus.RUNNING, PipelineRunStatus.QUEUED]:
+                logger.info(f"Cancelling pipeline run {run_id} (was {run.status.value})")
+                run.status = PipelineRunStatus.FAILED
+                run.finished_at = datetime.utcnow()
+                if not run.metrics:
+                    run.metrics = {}
+                run.metrics["cancelled_reason"] = "Manually cancelled by user"
+            else:
+                run.status = new_status
         except ValueError:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -387,12 +594,15 @@ async def update_pipeline_run(
             )
     
     if request_body.metrics is not None:
-        run.metrics = request_body.metrics
+        if run.metrics:
+            run.metrics.update(request_body.metrics)
+        else:
+            run.metrics = request_body.metrics
     
     db.commit()
     db.refresh(run)
     
-    logger.info(f"Updated pipeline run {run_id} to status {run.status}")
+    logger.info(f"Updated pipeline run {run_id} to status {run.status.value}")
     
     return PipelineRunResponse(
         id=run.id,
@@ -531,7 +741,7 @@ def _sync_pipeline_runs_with_airflow(db: Session) -> int:
                 # Update finished_at if available
                 if airflow_status.get('end_date'):
                     try:
-                        from datetime import datetime
+                        from datetime import datetime, timezone
                         run.finished_at = datetime.fromisoformat(
                             airflow_status['end_date'].replace('Z', '+00:00')
                         )
@@ -618,7 +828,8 @@ async def _trigger_airflow_dag(
     version: int,
     pipeline_run_id: UUID,
     chunking_config: Dict[str, Any] = None,
-    embedding_config: Dict[str, Any] = None
+    embedding_config: Dict[str, Any] = None,
+    playbook_id: str = None
 ) -> str:
     """
     Trigger Airflow DAG for pipeline execution.
@@ -654,9 +865,18 @@ async def _trigger_airflow_dag(
                 "version": version,
                 "pipeline_run_id": str(pipeline_run_id),
                 "chunking_config": chunking_config or {},
-                "embedding_config": embedding_config or {}
+                "embedding_config": embedding_config or {},
+                "playbook_id": playbook_id
             }
         }
+        
+        # Log the exact configuration being sent to Airflow
+        logger.info(
+            f"Sending to Airflow DAG:\n"
+            f"  chunking_config: {json.dumps(chunking_config or {}, indent=2)}\n"
+            f"  embedding_config: {json.dumps(embedding_config or {}, indent=2)}\n"
+            f"  playbook_id: {playbook_id}"
+        )
         
         try:
             import requests
@@ -675,30 +895,52 @@ async def _trigger_airflow_dag(
                 timeout=30
             )
             
-            if response.status_code == 200:
-                logger.info(f"Successfully triggered DAG run {dag_run_id} via REST API")
+            if response.status_code in [200, 201]:
+                logger.info(f"Successfully triggered DAG run {dag_run_id} via REST API (status {response.status_code})")
             else:
-                logger.error(f"Failed to trigger DAG run: {response.status_code} - {response.text}")
-                raise Exception(f"Failed to trigger DAG run: {response.text}")
+                error_msg = f"Failed to trigger DAG run via REST API: {response.status_code} - {response.text}"
+                logger.error(error_msg)
+                raise Exception(error_msg)
                 
         except Exception as e:
-            logger.error(f"Error triggering DAG via REST API: {e}")
-            # Fallback to file-based trigger
-            trigger_dir = os.getenv('AIRFLOW_TRIGGER_DIR', '/opt/airflow/triggers')
-            os.makedirs(trigger_dir, exist_ok=True)
+            logger.error(f"Error triggering DAG via REST API: {e}", exc_info=True)
+            # Fallback to file-based trigger (use tmp directory that's writable)
+            import tempfile
+            trigger_dir = os.getenv('AIRFLOW_TRIGGER_DIR', os.path.join(tempfile.gettempdir(), 'airflow_triggers'))
+            
+            try:
+                os.makedirs(trigger_dir, exist_ok=True)
+            except OSError as dir_error:
+                logger.error(f"Failed to create trigger directory {trigger_dir}: {dir_error}")
+                # Last resort: use tempfile.gettempdir() directly
+                trigger_dir = tempfile.gettempdir()
+                logger.warning(f"Using temp directory as fallback: {trigger_dir}")
             
             trigger_file = os.path.join(trigger_dir, f"{dag_run_id}.json")
             
-            with open(trigger_file, 'w') as f:
-                json.dump(trigger_data, f, indent=2)
-            
-            logger.info(f"Created trigger file {trigger_file} for DAG run {dag_run_id}")
+            try:
+                with open(trigger_file, 'w') as f:
+                    json.dump(trigger_data, f, indent=2)
+                logger.info(f"Created trigger file {trigger_file} for DAG run {dag_run_id}")
+                logger.warning(
+                    f"Using file-based trigger fallback. Ensure Airflow can read from {trigger_dir}. "
+                    f"REST API error was: {e}"
+                )
+            except OSError as file_error:
+                error_msg = (
+                    f"Failed to create trigger file {trigger_file}: {file_error}. "
+                    f"REST API error was: {e}. "
+                    f"Please check AIRFLOW_URL, AIRFLOW_USERNAME, and AIRFLOW_PASSWORD environment variables."
+                )
+                logger.error(error_msg)
+                raise Exception(error_msg) from e
         
         return dag_run_id
         
     except Exception as e:
-        logger.error(f"Failed to create Airflow trigger file: {e}")
-        raise
+        error_msg = f"Failed to trigger Airflow DAG: {e}"
+        logger.error(error_msg, exc_info=True)
+        raise Exception(error_msg) from e
 
 def update_pipeline_run_status(
     db: Session,

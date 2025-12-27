@@ -42,12 +42,10 @@ export default function DashboardPage() {
       exchangeToken().catch((error) => {
         console.error("Token exchange failed on dashboard:", error)
       })
+      // Load data when authenticated
+      loadDashboardData()
     }
   }, [status, session])
-
-  useEffect(() => {
-    loadDashboardData()
-  }, [])
 
   const loadDashboardData = async () => {
     try {
@@ -276,25 +274,31 @@ export default function DashboardPage() {
                 {products.slice(0, 5).map((product) => {
                   const StatusIcon = getStatusIcon(product.status)
                   return (
-                    <div key={product.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-                      <div className="flex items-center">
-                        <div className="bg-blue-100 rounded-lg p-2 mr-4">
-                          <Package className="h-5 w-5 text-blue-600" />
+                    <Link 
+                      key={product.id} 
+                      href={`/app/products/${product.id}`}
+                      className="block"
+                    >
+                      <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer">
+                        <div className="flex items-center">
+                          <div className="bg-blue-100 rounded-lg p-2 mr-4">
+                            <Package className="h-5 w-5 text-blue-600" />
+                          </div>
+                          <div>
+                            <h4 className="font-medium text-gray-900 hover:text-blue-600 transition-colors">{product.name}</h4>
+                            <p className="text-sm text-gray-500">
+                              Created {new Date(product.created_at).toLocaleDateString()}
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <h4 className="font-medium text-gray-900">{product.name}</h4>
-                          <p className="text-sm text-gray-500">
-                            Created {new Date(product.created_at).toLocaleDateString()}
-                          </p>
+                        <div className="flex items-center">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(product.status)}`}>
+                            <StatusIcon className="h-3 w-3 mr-1" />
+                            {product.status}
+                          </span>
                         </div>
                       </div>
-                      <div className="flex items-center">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(product.status)}`}>
-                          <StatusIcon className="h-3 w-3 mr-1" />
-                          {product.status}
-                        </span>
-                      </div>
-                    </div>
+                    </Link>
                   )
                 })}
               </div>

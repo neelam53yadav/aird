@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Play, RefreshCw, Clock, CheckCircle, XCircle, AlertTriangle, Loader2 } from 'lucide-react'
+import { ArrowLeft, Play, RefreshCw, Clock, CheckCircle, XCircle, AlertTriangle, Loader2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import AppLayout from '@/components/layout/AppLayout'
 import { apiClient, PipelineRun } from '@/lib/api-client'
@@ -21,6 +21,7 @@ export default function PipelineRunsPage() {
   const [polling, setPolling] = useState(false)
   const [triggering, setTriggering] = useState(false)
   const [syncing, setSyncing] = useState(false)
+  const [pipelineConflict, setPipelineConflict] = useState<any>(null)
 
   const loadPipelineRuns = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true)
@@ -75,15 +76,26 @@ export default function PipelineRunsPage() {
     }
   }, [pipelineRuns, polling, loadPipelineRuns])
 
-  const handleTriggerPipeline = async () => {
+  const handleTriggerPipeline = async (forceRun: boolean = false) => {
     setTriggering(true)
+    setPipelineConflict(null)
     try {
-      const response = await apiClient.triggerPipeline(productId)
+      const response = await apiClient.triggerPipeline(productId, undefined, forceRun)
       
       if (response.error) {
+        // Check if it's a conflict error (409)
+        if (response.status === 409) {
+          // Handle both structured errorData and plain error messages
+          const conflictData = response.errorData && typeof response.errorData === 'object' 
+            ? response.errorData 
+            : { message: response.error || 'A pipeline run is already in progress' }
+          setPipelineConflict(conflictData)
+          return
+        }
+        
         addToast({
           type: 'error',
-          message: `Failed to trigger pipeline: ${response.error}`,
+          message: typeof response.error === 'string' ? response.error : 'Failed to trigger pipeline',
         })
       } else if (response.data) {
         addToast({
@@ -235,7 +247,7 @@ export default function PipelineRunsPage() {
                 {syncing ? 'Syncing...' : 'Sync with Airflow'}
               </Button>
               <Button
-                onClick={handleTriggerPipeline}
+                onClick={() => handleTriggerPipeline(false)}
                 disabled={triggering}
                 className="flex items-center gap-2"
               >
@@ -245,6 +257,54 @@ export default function PipelineRunsPage() {
             </div>
           </div>
         </div>
+
+        {/* Pipeline Conflict Modal */}
+        {pipelineConflict && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+              <div className="flex items-center mb-4">
+                <AlertTriangle className="h-6 w-6 text-orange-600 mr-3" />
+                <h3 className="text-lg font-semibold text-gray-900">Pipeline Already Running</h3>
+              </div>
+              <div className="mb-6">
+                <p className="text-sm text-gray-700 mb-2">
+                  {pipelineConflict.message || 'A pipeline run is already in progress for this product and version.'}
+                </p>
+                {pipelineConflict.existing_status && (
+                  <p className="text-sm text-gray-600">
+                    Current status: <strong>{pipelineConflict.existing_status}</strong>
+                  </p>
+                )}
+                <p className="text-sm text-gray-600 mt-3">
+                  {pipelineConflict.suggestion || 'You can force run to cancel the existing run and start a new one, or wait for the current run to complete.'}
+                </p>
+              </div>
+              <div className="flex justify-end space-x-3">
+                <Button
+                  variant="outline"
+                  onClick={() => setPipelineConflict(null)}
+                  disabled={triggering}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => handleTriggerPipeline(true)}
+                  disabled={triggering}
+                  className="bg-orange-600 hover:bg-orange-700 text-white"
+                >
+                  {triggering ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Starting...
+                    </>
+                  ) : (
+                    'Force Run (Override)'
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Error State */}
         {error && (
@@ -269,7 +329,7 @@ export default function PipelineRunsPage() {
             <p className="text-gray-600 mb-6">
               Trigger a pipeline run to start processing your data product.
             </p>
-            <Button onClick={handleTriggerPipeline} disabled={triggering}>
+            <Button onClick={() => handleTriggerPipeline(false)} disabled={triggering}>
               <Play className="h-4 w-4 mr-2" />
               {triggering ? 'Triggering...' : 'Trigger First Pipeline Run'}
             </Button>
@@ -297,6 +357,9 @@ export default function PipelineRunsPage() {
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       DAG Run ID
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
                     </th>
                   </tr>
                 </thead>
@@ -355,6 +418,19 @@ export default function PipelineRunsPage() {
                               <span className="text-gray-400">N/A</span>
                             )}
                           </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {(run.status === 'running' || run.status === 'queued') && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleCancelRun(run.id)}
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <X className="h-4 w-4 mr-1" />
+                              Cancel
+                            </Button>
+                          )}
                         </td>
                       </tr>
                     )

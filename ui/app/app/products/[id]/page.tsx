@@ -470,9 +470,13 @@ export default function ProductDetailPage() {
       const response = await apiClient.triggerPipeline(product.id, version, forceRun)
       
       if (response.error) {
-        // Check if it's a conflict error
-        if (response.status === 409 && response.errorData && typeof response.errorData === 'object' && response.errorData.message) {
-          setPipelineConflict(response.errorData)
+        // Check if it's a conflict error (409)
+        if (response.status === 409) {
+          // Handle both structured errorData and plain error messages
+          const conflictData = response.errorData && typeof response.errorData === 'object' 
+            ? response.errorData 
+            : { message: response.error || 'A pipeline run is already in progress' }
+          setPipelineConflict(conflictData)
           setShowPipelineModal(false)
           return
         }

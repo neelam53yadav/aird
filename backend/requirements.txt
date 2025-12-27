@@ -15,3 +15,5 @@ python-multipart==0.0.6
 tenacity==8.2.3
 loguru==0.7.2
 pypdf==3.17.4
+sentence-transformers==2.2.2
+openai>=1.0.0

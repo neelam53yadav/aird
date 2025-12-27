@@ -21,6 +21,7 @@ RUN pip install --no-cache-dir \
     minio \
     qdrant-client \
     sentence-transformers \
+    openai>=1.0.0 \
     pydantic \
     pydantic-settings \
     fastapi \

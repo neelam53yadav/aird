@@ -9,12 +9,13 @@ from sqlalchemy.orm import Session
 from primedata.db.models import Workspace, Product, WorkspaceMember, WorkspaceRole
 
 
-def allowed_workspaces(request: Request) -> List[UUID]:
+def allowed_workspaces(request: Request, db: Optional[Session] = None) -> List[UUID]:
     """
     Get list of workspace IDs that the current user has access to.
     
     Args:
         request: FastAPI request object with user state
+        db: Optional database session to query actual workspace memberships (used in dev mode)
         
     Returns:
         List of workspace UUIDs the user can access
@@ -25,6 +26,30 @@ def allowed_workspaces(request: Request) -> List[UUID]:
             detail="User not authenticated"
         )
     
+    user_id = UUID(request.state.user['sub'])
+    
+    # If database session is provided, query actual workspace memberships (more reliable, especially in dev mode)
+    if db:
+        from primedata.core.settings import get_settings
+        settings = get_settings()
+        
+        # In dev mode, always query database for actual memberships (more accurate than middleware)
+        # In production, prefer database query for consistency, but can fall back to token
+        if settings.DISABLE_AUTH:
+            # Dev mode: always use database
+            memberships = db.query(WorkspaceMember).filter(
+                WorkspaceMember.user_id == user_id
+            ).all()
+            return [m.workspace_id for m in memberships]
+        else:
+            # Production: try database first, fall back to token if needed
+            memberships = db.query(WorkspaceMember).filter(
+                WorkspaceMember.user_id == user_id
+            ).all()
+            if memberships:
+                return [m.workspace_id for m in memberships]
+    
+    # Fallback: use workspaces from user token/state
     user_workspaces = request.state.user.get('workspaces', [])
     # Handle both string and UUID workspace IDs
     result = []
@@ -67,56 +92,67 @@ def ensure_workspace_access(
             detail="User not authenticated"
         )
     
-    user_id = UUID(request.state.user['sub'])
-    allowed_workspace_ids = allowed_workspaces(request)
+    from primedata.core.settings import get_settings
+    settings = get_settings()
     
-    # Check if workspace is in allowed list
-    if workspace_id not in allowed_workspace_ids:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied to workspace"
-        )
+    user_id = UUID(request.state.user['sub'])
     
     # Get workspace
     workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+    
+    # In dev mode, auto-create workspace and membership if they don't exist
+    if not workspace and settings.DISABLE_AUTH:
+        workspace = Workspace(
+            id=workspace_id,
+            name="Default Workspace"
+        )
+        db.add(workspace)
+        # Also create workspace membership for the user
+        membership = WorkspaceMember(
+            workspace_id=workspace_id,
+            user_id=user_id,
+            role=WorkspaceRole.OWNER
+        )
+        db.add(membership)
+        db.commit()
+        db.refresh(workspace)
+    
     if not workspace:
-        # Auto-create workspace if DISABLE_AUTH is enabled (development mode)
-        from primedata.core.settings import get_settings
-        settings = get_settings()
-        if settings.DISABLE_AUTH:
-            # Create the workspace
-            workspace = Workspace(
-                id=workspace_id,
-                name="Default Workspace"
-            )
-            db.add(workspace)
-            # Also create workspace membership for the user
-            from primedata.db.models import WorkspaceMember, WorkspaceRole
-            membership = WorkspaceMember(
-                workspace_id=workspace_id,
-                user_id=user_id,
-                role=WorkspaceRole.OWNER
-            )
-            db.add(membership)
-            db.commit()
-            db.refresh(workspace)
-        else:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Workspace not found"
+        )
+    
+    # Check database membership first (more reliable)
+    membership = db.query(WorkspaceMember).filter(
+        WorkspaceMember.workspace_id == workspace_id,
+        WorkspaceMember.user_id == user_id
+    ).first()
+    
+    # In dev mode, if no membership exists but workspace exists, create it
+    if not membership and settings.DISABLE_AUTH:
+        membership = WorkspaceMember(
+            workspace_id=workspace_id,
+            user_id=user_id,
+            role=WorkspaceRole.OWNER
+        )
+        db.add(membership)
+        db.commit()
+    elif not membership:
+        # Check if workspace is in allowed list (fallback for non-database cases)
+        allowed_workspace_ids = allowed_workspaces(request, db)
+        if workspace_id not in allowed_workspace_ids:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Workspace not found"
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied to workspace"
             )
     
     # If specific roles are required, check user's role in this workspace
-    if roles:
-        membership = db.query(WorkspaceMember).filter(
-            WorkspaceMember.workspace_id == workspace_id,
-            WorkspaceMember.user_id == user_id
-        ).first()
-        
-        if not membership or membership.role.value not in roles:
+    if roles and membership:
+        if membership.role.value not in roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Required role not found. Required: {roles}"
+                detail=f"Required role not found. Required: {roles}, Current: {membership.role.value}"
             )
     
     return workspace

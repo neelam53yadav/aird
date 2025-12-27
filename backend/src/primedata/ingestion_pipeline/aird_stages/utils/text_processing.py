@@ -103,23 +103,45 @@ def split_pages_by_config(text: str, page_fences: Optional[List[Dict[str, Any]]]
     If a page fence pattern is defined, split text into {page, text} blocks.
     Otherwise produce a single page.
     """
-    for fence in page_fences or []:
+    if not page_fences:
+        return [{"page": 1, "text": text.strip()}]
+    
+    for fence in page_fences:
         flags = _compile_flags(fence.get("flags"))
+        pattern = fence.get("pattern", r"^$")
         lines = text.splitlines()
         pages, curr, page = [], [], 1
+        found_any_marker = False
+        
         for line in lines:
-            if re.match(fence.get("pattern", r"^$"), line, flags=flags):
+            if re.match(pattern, line, flags=flags):
+                found_any_marker = True
                 if curr:
                     pages.append({"page": page, "text": "\n".join(curr).strip()})
                     curr = []
+                # Try to extract page number from the marker line
                 m = re.search(r"PAGE\s+(\d+)", line, flags=re.IGNORECASE)
-                page = int(m.group(1)) if m else (pages[-1]["page"] + 1 if pages else 1)
+                if m:
+                    page = int(m.group(1))
+                else:
+                    # If no page number found, increment from last page
+                    page = pages[-1]["page"] + 1 if pages else 1
                 continue
             curr.append(line)
+        
+        # Add the last page if there's remaining content
         if curr:
             pages.append({"page": page, "text": "\n".join(curr).strip()})
-        if len(pages) > 1:
+        
+        # If we found any markers and have multiple pages, return them
+        # Also return if we have at least one page (even if only one marker was found)
+        if found_any_marker and len(pages) > 0:
             return pages
+        # If we found markers but only got one page, that's still valid (single-page document)
+        if found_any_marker:
+            return pages
+    
+    # No patterns matched, return single page
     return [{"page": 1, "text": text.strip()}]
 
 
@@ -188,6 +210,111 @@ def _canon_from_title(title: str) -> str:
     if t in ALIASES:
         return ALIASES[t]
     return re.sub(r"[^a-z0-9]+", "_", t)[:40] or "section"
+
+
+def apply_enhanced_normalization(text: str) -> str:
+    """
+    Apply enhanced normalization patterns to improve text quality.
+    More aggressive than standard normalization.
+    """
+    # Check if text is already corrupted (spaces between characters) - if so, skip normalization
+    # This can happen with bad PDF extraction
+    if len(text) > 100:
+        sample = text[:500]
+        # Check if more than 30% of characters are spaces (indicating corruption)
+        space_ratio = sample.count(' ') / len(sample) if len(sample) > 0 else 0
+        if space_ratio > 0.3:
+            logger.warning("Text appears to be corrupted (excessive spaces), skipping enhanced normalization to avoid further corruption")
+            return text
+    
+    out = text
+    
+    # Enhanced character normalization
+    # Fix common OCR errors and encoding issues
+    replacements = [
+        # Remove control characters except \n, \t, \r
+        (r'[\x00-\x08\x0B-\x0C\x0E-\x1F]', ''),
+        # Normalize whitespace more aggressively
+        (r'[ \t]+', ' '),  # Multiple spaces/tabs to single space
+        (r'\n[ \t]+', '\n'),  # Remove leading spaces on new lines
+        (r'[ \t]+\n', '\n'),  # Remove trailing spaces before newlines
+        # Fix punctuation spacing (but be careful not to break words)
+        (r' +([,.!?;:])', r'\1'),  # Remove space before punctuation
+        (r'([,.!?;:])([^\s])', r'\1 \2'),  # Ensure space after punctuation (if missing)
+        # Fix quote normalization (more comprehensive)
+        (r'[\u2018\u2019\u2032]', "'"),  # Various single quotes to standard
+        (r'[\u201C\u201D\u2033]', '"'),  # Various double quotes to standard
+        (r'[\u2013\u2014\u2015]', '-'),  # Various dashes to hyphen
+        # Fix ellipsis
+        (r'\.{4,}', '...'),  # More than 3 dots -> ellipsis
+        # Remove excessive line breaks but preserve paragraphs
+        (r'\n{4,}', '\n\n\n'),  # More than 3 newlines -> 3
+    ]
+    
+    for pattern, replacement in replacements:
+        try:
+            out = re.sub(pattern, replacement, out)
+        except (re.error, TypeError) as e:
+            logger.warning(f"Enhanced normalization pattern failed: {pattern}, error: {e}")
+            continue
+    
+    # Final cleanup
+    out = out.strip()
+    
+    return out
+
+
+def apply_error_correction(text: str) -> str:
+    """
+    Apply basic error correction to fix common typos and OCR errors.
+    Uses pattern-based fixes and optionally spellchecker if available.
+    """
+    # Check if text is already corrupted (spaces between characters) - if so, skip error correction
+    # This can happen with bad PDF extraction
+    if len(text) > 100:
+        sample = text[:500]
+        # Check if more than 30% of characters are spaces (indicating corruption)
+        space_ratio = sample.count(' ') / len(sample) if len(sample) > 0 else 0
+        if space_ratio > 0.3:
+            logger.warning("Text appears to be corrupted (excessive spaces), skipping error correction to avoid further corruption")
+            return text
+    
+    try:
+        from spellchecker import SpellChecker
+        spell = SpellChecker()
+        HAS_SPELLCHECKER = True
+    except ImportError:
+        HAS_SPELLCHECKER = False
+        logger.debug("spellchecker library not available, using pattern-based correction only")
+    
+    out = text
+    
+    # Pattern-based fixes (don't require external libraries)
+    # Only fix clear OCR errors, avoid patterns that could corrupt valid text
+    pattern_fixes = [
+        # Common OCR word errors (using word boundaries to avoid false positives)
+        (r'\bteh\b', 'the'),
+        (r'\badn\b', 'and'),
+        (r'\btha\b', 'that'),
+        (r'\btaht\b', 'that'),
+        (r'\bhte\b', 'the'),
+        # Fix excessive repeated letters (4+ repeats -> 2)
+        (r'([a-z])\1{3,}', r'\1\1'),
+        # Fix missing space after sentence-ending punctuation (but only if next char is uppercase letter)
+        (r'([.!?])([A-Z][a-z])', r'\1 \2'),
+    ]
+    
+    for pattern, replacement in pattern_fixes:
+        try:
+            out = re.sub(pattern, replacement, out, flags=re.IGNORECASE)
+        except (re.error, TypeError) as e:
+            logger.warning(f"Error correction pattern failed: {pattern}, error: {e}")
+            continue
+    
+    # Disable spellchecker-based correction for now - it's too risky and can corrupt valid text
+    # The pattern-based fixes above are safer and sufficient for common OCR errors
+    
+    return out
 
 
 

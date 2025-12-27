@@ -96,6 +96,7 @@ reporting_task = PythonOperator(
 indexing_task = PythonOperator(
     task_id='indexing',
     python_callable=task_indexing,
+    execution_timeout=timedelta(hours=2),  # Allow up to 2 hours for large models
     dag=dag,
 )
 

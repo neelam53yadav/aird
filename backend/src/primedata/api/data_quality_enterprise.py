@@ -193,7 +193,7 @@ async def list_data_quality_rules(
         else:
             # Get accessible workspaces
             from ..core.scope import allowed_workspaces
-            allowed_workspace_ids = allowed_workspaces(http_request)
+            allowed_workspace_ids = allowed_workspaces(http_request, db)
             query = query.filter(DataQualityRule.workspace_id.in_(allowed_workspace_ids))
         
         # Apply filters

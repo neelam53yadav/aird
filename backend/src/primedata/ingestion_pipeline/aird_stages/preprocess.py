@@ -29,27 +29,40 @@ from primedata.ingestion_pipeline.aird_stages.utils.text_processing import (
 from primedata.ingestion_pipeline.aird_stages.utils.chunking import (
     char_chunk,
     sentence_chunk,
+    paragraph_chunk,
     tokens_estimate,
 )
 
 
-# Audience patterns (aligned with AIRD)
+# Audience patterns (aligned with AIRD) - ordered by specificity
 AUDIENCE_PATTERNS = {
-    "hcp": r"\b(hcp|physician|prescriber|clinical)\b",
-    "executive": r"\b(executive|vp|steerco|cxo)\b",
-    "patient": r"\b(patient|caregiver)\b",
-    "regulatory": r"\b(regulatory|compliance|sop|policy)\b",
-    "finance": r"\b(p&l|variance|forecast|budget|kpi|quarter)\b",
-    "ops": r"\b(monitoring|deployment|incident|runbook|oncall|slo|sla|kubernetes|cluster)\b",
-    "dev": r"\b(api|cli|sdk|endpoint|json|yaml|code|pipeline|ci/cd)\b",
+    "hcp": r"\b(hcp|physician|prescriber|clinical|doctor|nurse|clinician|healthcare provider)\b",
+    "executive": r"\b(executive|vp|vice president|steerco|cxo|ceo|cto|cfo|board|director|leadership|management)\b",
+    "patient": r"\b(patient|caregiver|consumer|user)\b",
+    "regulatory": r"\b(regulatory|compliance|sop|policy|regulation|fda|ema|regulatory authority)\b",
+    "finance": r"\b(p&l|profit.*loss|variance|forecast|budget|kpi|quarter|quarterly|financial|revenue|earnings|income statement)\b",
+    "ops": r"\b(monitoring|deployment|incident|runbook|oncall|slo|sla|kubernetes|cluster|operations|infrastructure)\b",
+    "dev": r"\b(api|cli|sdk|endpoint|json|yaml|code|pipeline|ci/cd|developer|engineer|programmer)\b",
+    "general": r"\b(overview|introduction|getting started|guide|tutorial|documentation|help|support)\b",
 }
 
 
-def _audience_for(text: str, default: str = "unknown") -> str:
-    """Detect audience from text using patterns."""
+def _audience_for(text: str, section: str = "", default: str = "general") -> str:
+    """Detect audience from text and section using patterns."""
+    # Combine text and section for better detection
+    search_text = f"{section} {text}".lower()
+    
+    # Score each audience pattern
+    scores = {}
     for name, pat in AUDIENCE_PATTERNS.items():
-        if re.search(pat, text, flags=re.IGNORECASE):
-            return name
+        matches = len(re.findall(pat, search_text, flags=re.IGNORECASE))
+        if matches > 0:
+            scores[name] = matches
+    
+    if scores:
+        # Return the audience with the highest score (most matches)
+        return max(scores.items(), key=lambda x: x[1])[0]
+    
     return default
 
 
@@ -79,7 +92,7 @@ def _build_record(
         "chunk_index": chunk_idx,
         "chunk_of": chunk_of,
         "source": "internal",
-        "audience": _audience_for(text, "unknown"),
+        "audience": _audience_for(text, section=title_raw or canon_section, default="general"),
         "timestamp": datetime.utcnow().isoformat(timespec="seconds") + "Z",
         "product_id": str(product_id),
         "index_scope": None,
@@ -115,6 +128,13 @@ class PreprocessStage(AirdStage):
             StageResult with preprocessing metrics
         """
         started_at = datetime.utcnow()
+        
+        # Cache context for use in _process_document (for workspace settings lookup)
+        self._context_cache = {
+            "workspace_id": context.get("workspace_id"),
+            "db": context.get("db"),
+        }
+        
         storage = context.get("storage")
         raw_files = context.get("raw_files", [])
         initial_playbook_id = context.get("playbook_id") or self.config.get("playbook_id")
@@ -143,6 +163,8 @@ class PreprocessStage(AirdStage):
                 started_at=started_at,
             )
         
+        # Initialize playbook_id for logging (will be reassigned per file in loop)
+        playbook_id = initial_playbook_id
         self.logger.info(f"Starting preprocessing for {len(raw_files)} files, playbook={playbook_id}")
         
         # Get file_stem to minio_key mapping if provided (for accurate file retrieval)
@@ -201,18 +223,32 @@ class PreprocessStage(AirdStage):
                         raw_text = None
                 
                 if not raw_text:
-                    error_msg = (
-                        f"[PreprocessStage] ❌ Raw text extraction FAILED for {file_stem}. "
-                        f"MinIO key: {minio_key if minio_key else 'constructed path'}, "
-                        f"Bucket: {minio_bucket or 'primedata-raw'}, "
-                        f"Filename: {filename}. "
-                        f"File may be missing from MinIO, corrupted, or in unsupported format."
-                    )
-                    # Use both loguru and std logging for Airflow visibility
-                    self.logger.error(error_msg)
-                    std_logger.error(error_msg)
-                    failed_files.append(file_stem)
-                    continue
+                    # Check if it's an image file (expected to fail)
+                    is_image_file = filename.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp', '.svg'))
+                    if is_image_file:
+                        warn_msg = (
+                            f"[PreprocessStage] ⚠️ Skipping image file {file_stem} (filename: {filename}). "
+                            f"Image files cannot be extracted as text. "
+                            f"Only PDF, text, and HTML files are supported for text extraction."
+                        )
+                        self.logger.warning(warn_msg)
+                        std_logger.warning(warn_msg)
+                        failed_files.append(file_stem)
+                        continue
+                    else:
+                        error_msg = (
+                            f"[PreprocessStage] ❌ Raw text extraction FAILED for {file_stem}. "
+                            f"MinIO key: {minio_key if minio_key else 'constructed path'}, "
+                            f"Bucket: {minio_bucket or 'primedata-raw'}, "
+                            f"Filename: {filename}. "
+                            f"File may be missing from MinIO, corrupted, or in unsupported format. "
+                            f"Supported formats: PDF, TXT, HTML, JSON, CSV"
+                        )
+                        # Use both loguru and std logging for Airflow visibility
+                        self.logger.error(error_msg)
+                        std_logger.error(error_msg)
+                        failed_files.append(file_stem)
+                        continue
                 
                 self.logger.info(f"[PreprocessStage] ✓ Successfully loaded raw text for {file_stem}: {len(raw_text)} characters")
                 
@@ -234,9 +270,15 @@ class PreprocessStage(AirdStage):
                 # Use file_playbook_id for this file's processing
                 playbook_id = file_playbook_id
                 
-                # Load playbook
+                # Load playbook (support custom playbooks from database)
                 try:
-                    playbook = load_playbook_yaml(playbook_id)
+                    workspace_id = context.get("workspace_id")
+                    db_session = context.get("db")
+                    playbook = load_playbook_yaml(
+                        playbook_id,
+                        workspace_id=str(workspace_id) if workspace_id else None,
+                        db_session=db_session
+                    )
                 except Exception as e:
                     self.logger.error(f"Failed to load playbook {playbook_id}: {e}, using empty config")
                     playbook = {}
@@ -356,13 +398,251 @@ class PreprocessStage(AirdStage):
         Returns:
             Tuple of (records_list, stats_dict)
         """
-        # 1) Normalize (unwrap + PII redaction + rule-based normalizers)
+        # 1) Basic normalization (unwrap + PII redaction) - but NOT line-joining normalizers yet
+        # We need to preserve page markers for page splitting
         unwrapped = normalize_wrapped_lines(raw_text)
         redacted = redact_pii(unwrapped)
-        cleaned = apply_normalizers(redacted, playbook.get("pre_normalizers", []))
         
-        # 2) Split into pages
-        pages = split_pages_by_config(cleaned, playbook.get("page_fences", []))
+        # 2) Split into pages FIRST (before applying normalizers that join lines)
+        # This preserves page markers which are needed for correct page detection
+        pages = split_pages_by_config(redacted, playbook.get("page_fences", []))
+        
+        # Log page splitting results
+        if len(pages) > 1:
+            self.logger.info(f"✅ Split text into {len(pages)} pages (page numbers: {[p['page'] for p in pages]})")
+            std_logger.info(f"✅ Split text into {len(pages)} pages (page numbers: {[p['page'] for p in pages]})")
+        else:
+            self.logger.warning(f"⚠️ Page splitting found only {len(pages)} page(s). Page markers may be missing or not matching patterns.")
+            std_logger.warning(f"⚠️ Page splitting found only {len(pages)} page(s). Page markers may be missing or not matching patterns.")
+        
+        # 3) Now apply normalizers to each page separately (after page markers have been used)
+        # Filter out normalizers that join lines across page boundaries (we'll apply those per-page)
+        line_joining_patterns = [
+            r'(?m)(?<![.!?])\r?\n(?!\r?\n)',  # Join continuation lines
+            r'(?m)\r?\n(?=[a-z])',  # Join lowercase-leading lines
+        ]
+        pre_normalizers = playbook.get("pre_normalizers", [])
+        safe_normalizers = []
+        line_joining_normalizers = []
+        
+        for norm in pre_normalizers:
+            pattern = norm.get("pattern", "")
+            # Check if this normalizer joins lines (could affect page markers)
+            is_line_joiner = any(re.search(pat, pattern) for pat in line_joining_patterns)
+            if is_line_joiner:
+                line_joining_normalizers.append(norm)
+            else:
+                safe_normalizers.append(norm)
+        
+        # Apply safe normalizers to the full text (before page splitting, but they're safe)
+        # Actually, we already split pages, so apply safe normalizers per-page
+        # But first, let's apply them to the original redacted text for consistency
+        # Actually, let's apply normalizers per-page after splitting
+        
+        # 4) Apply normalizers to each page
+        normalized_pages = []
+        for page_data in pages:
+            page_text = page_data["text"]
+            page_num = page_data["page"]
+            
+            # Apply all normalizers to this page
+            normalized_text = apply_normalizers(page_text, pre_normalizers)
+            normalized_pages.append({"page": page_num, "text": normalized_text})
+        
+        # 5) Fix PDF extraction corruption: spaces between characters (e.g., "B e z o s" -> "Bezos")
+        # This is a common issue with certain PDF extraction libraries
+        cleaned_pages = []
+        for page_data in normalized_pages:
+            page_text = page_data["text"]
+            page_num = page_data["page"]
+            
+            if len(page_text) > 100:
+                sample = page_text[:1000]
+                space_ratio = sample.count(' ') / len(sample) if len(sample) > 0 else 0
+                if space_ratio > 0.3:  # More than 30% spaces suggests corruption
+                    self.logger.warning(f"Detected PDF extraction corruption on page {page_num} (space ratio: {space_ratio:.2%}), attempting to fix...")
+                    std_logger.warning(f"Detected PDF extraction corruption on page {page_num} (space ratio: {space_ratio:.2%}), attempting to fix...")
+                    # Remove spaces between alphanumeric characters that are part of words
+                    # Pattern: space between single alphanumeric characters -> remove space
+                    # This fixes "B e z o s" -> "Bezos" by removing spaces between single chars
+                    # Multiple passes needed: "B e z" -> "Be z" -> "Bez" (each pass fixes one space)
+                    for _ in range(10):  # Multiple passes to catch all cases (10 should be enough for long corrupted words)
+                        old_page_text = page_text
+                        # Match: single alphanumeric, space, single alphanumeric
+                        page_text = re.sub(r'([A-Za-z0-9]) ([A-Za-z0-9])', r'\1\2', page_text)
+                        if page_text == old_page_text:
+                            break
+                    self.logger.info(f"Applied fix for PDF extraction corruption on page {page_num}")
+                    std_logger.info(f"Applied fix for PDF extraction corruption on page {page_num}")
+            
+            cleaned_pages.append({"page": page_num, "text": page_text})
+        
+        # Combine pages back into single text for optimization (which works at document level)
+        # Add page markers back so they can be detected during re-splitting after optimization
+        # This preserves page information through the optimization step
+        cleaned = "\n".join([f"\n=== PAGE {p['page']} ===\n{p['text']}" for p in cleaned_pages])
+        
+        # Store page mapping for later use in chunk creation
+        # We'll need to map chunk positions back to page numbers
+        self._page_boundaries = []
+        offset = 0
+        for p in cleaned_pages:
+            self._page_boundaries.append({
+                "page": p["page"],
+                "start": offset,
+                "end": offset + len(p["text"])
+            })
+            offset += len(p["text"]) + 2  # +2 for "\n\n" separator
+        
+        # Apply pattern-based optimization at document level (fast, free)
+        # LLM/hybrid optimization will be applied per-chunk after chunking
+        preprocessing_flags = {}
+        optimization_mode = "pattern"  # Default to pattern-based
+        llm_config = None
+        quality_threshold = 75
+        
+        if chunking_config:
+            preprocessing_flags = chunking_config.get("preprocessing_flags", {})
+            optimization_mode = chunking_config.get("optimization_mode", "pattern")
+            quality_threshold = preprocessing_flags.get("llm_quality_threshold", 75)
+            
+            # Prepare LLM config if LLM or hybrid mode is enabled (for per-chunk optimization)
+            if optimization_mode in ["llm", "hybrid"]:
+                # Try to get LLM API key from workspace settings first, then environment
+                llm_api_key = None
+                
+                # Get workspace_id and db from cached context (set in execute method)
+                workspace_id = None
+                db_session = None
+                
+                if hasattr(self, '_context_cache'):
+                    workspace_id = self._context_cache.get("workspace_id")
+                    db_session = self._context_cache.get("db")
+                
+                # Try to get from workspace settings
+                if workspace_id and db_session:
+                    try:
+                        from primedata.db.models import Workspace
+                        from uuid import UUID as UUIDType
+                        
+                        # Convert string UUID to UUID object if needed
+                        if isinstance(workspace_id, str):
+                            workspace_id = UUIDType(workspace_id)
+                        
+                        workspace = db_session.query(Workspace).filter(
+                            Workspace.id == workspace_id
+                        ).first()
+                        
+                        if workspace and workspace.settings:
+                            llm_api_key = workspace.settings.get("openai_api_key")
+                            if llm_api_key:
+                                self.logger.info(f"✅ Using OpenAI API key from workspace settings for {optimization_mode} optimization (per-chunk)")
+                                std_logger.info(f"✅ Using OpenAI API key from workspace settings for {optimization_mode} optimization (per-chunk)")
+                    except Exception as e:
+                        self.logger.warning(f"Failed to fetch API key from workspace settings: {e}")
+                        std_logger.warning(f"Failed to fetch API key from workspace settings: {e}")
+                
+                # Fallback to environment variable if not found in workspace settings
+                if not llm_api_key:
+                    import os
+                    llm_api_key = os.getenv("OPENAI_API_KEY")
+                    if llm_api_key:
+                        self.logger.info(f"✅ Using OPENAI_API_KEY from environment variable for {optimization_mode} optimization (per-chunk)")
+                        std_logger.info(f"✅ Using OPENAI_API_KEY from environment variable for {optimization_mode} optimization (per-chunk)")
+                
+                if llm_api_key:
+                    llm_config = {
+                        "api_key": llm_api_key,
+                        "model": preprocessing_flags.get("llm_model", "gpt-4-turbo-preview"),
+                        "base_url": preprocessing_flags.get("llm_base_url"),  # Optional
+                    }
+                else:
+                    self.logger.warning(
+                        f"⚠️ Optimization mode is '{optimization_mode}' but OPENAI_API_KEY not found in workspace settings or environment. "
+                        "Falling back to pattern-based optimization."
+                    )
+                    std_logger.warning(
+                        f"⚠️ Optimization mode is '{optimization_mode}' but OPENAI_API_KEY not found in workspace settings or environment. "
+                        "Falling back to pattern-based optimization."
+                    )
+                    optimization_mode = "pattern"  # Fallback to pattern-based
+        
+        # Apply pattern-based optimization at document level (fast, free, handles most issues)
+        # This improves the base text quality before chunking
+        if optimization_mode in ["pattern", "llm", "hybrid"]:
+            try:
+                from primedata.ingestion_pipeline.aird_stages.optimization.pattern_based import PatternBasedOptimizer
+                
+                pattern_optimizer = PatternBasedOptimizer()
+                cleaned = pattern_optimizer.optimize(cleaned, preprocessing_flags)
+                
+                self.logger.info(f"✅ Pattern-based optimization applied at document level")
+                std_logger.info(f"✅ Pattern-based optimization applied at document level")
+                
+            except ImportError as e:
+                self.logger.warning(
+                    f"Pattern optimizer not available ({e}). Using legacy pattern-based optimization."
+                )
+                std_logger.warning(
+                    f"Pattern optimizer not available ({e}). Using legacy pattern-based optimization."
+                )
+                # Fallback to legacy pattern-based optimization
+                if preprocessing_flags.get("enhanced_normalization"):
+                    from primedata.ingestion_pipeline.aird_stages.utils.text_processing import apply_enhanced_normalization
+                    self.logger.info("Applying enhanced normalization (legacy method)")
+                    std_logger.info("Applying enhanced normalization (legacy method)")
+                    cleaned = apply_enhanced_normalization(cleaned)
+                
+                if preprocessing_flags.get("error_correction"):
+                    from primedata.ingestion_pipeline.aird_stages.utils.text_processing import apply_error_correction
+                    self.logger.info("Applying error correction (legacy method)")
+                    std_logger.info("Applying error correction (legacy method)")
+                    cleaned = apply_error_correction(cleaned)
+            except Exception as e:
+                self.logger.error(
+                    f"Pattern-based optimization failed: {e}. Using original text.",
+                    exc_info=True
+                )
+                std_logger.error(
+                    f"Pattern-based optimization failed: {e}. Using original text.",
+                    exc_info=True
+                )
+                # Continue with original cleaned text
+        
+        # Store optimization config for per-chunk LLM optimization (if needed)
+        self._optimization_config = {
+            "mode": optimization_mode,
+            "llm_config": llm_config,
+            "quality_threshold": quality_threshold,
+            "preprocessing_flags": preprocessing_flags,
+        }
+        
+        # Re-split into pages after optimization (text structure should be preserved)
+        # Use the page boundaries we stored earlier, or re-detect if markers are still present
+        # Since we combined pages earlier, we need to re-split the optimized text
+        # If page markers were preserved in optimization, they'll be detected; otherwise we'll use stored boundaries
+        if hasattr(self, '_page_boundaries') and self._page_boundaries:
+            # Use stored page boundaries to map back to page numbers
+            # For now, re-split and hope markers are still there, or use stored page info
+            pages = split_pages_by_config(cleaned, playbook.get("page_fences", []))
+            # If re-split only found 1 page, use stored page boundaries
+            if len(pages) == 1 and len(self._page_boundaries) > 1:
+                # Fall back to stored page info - split by stored boundaries
+                pages = []
+                text_offset = 0
+                for boundary in self._page_boundaries:
+                    page_text = cleaned[boundary["start"]:min(boundary["end"], len(cleaned))]
+                    if page_text.strip():
+                        pages.append({"page": boundary["page"], "text": page_text})
+                    text_offset = boundary["end"]
+        else:
+            # No stored boundaries, just re-split normally
+            pages = split_pages_by_config(cleaned, playbook.get("page_fences", []))
+        
+        # Check for enhanced metadata extraction flag from chunking_config
+        preprocessing_flags = {}
+        if chunking_config:
+            preprocessing_flags = chunking_config.get("preprocessing_flags", {})
         
         # 3) Get chunking config (product config overrides playbook defaults)
         playbook_chunking = playbook.get("chunking", {})
@@ -376,41 +656,153 @@ class PreprocessStage(AirdStage):
         # Priority: Product manual settings > Product auto settings > Playbook defaults
         if chunking_config and chunking_config.get("mode") == "manual":
             manual_settings = chunking_config.get("manual_settings", {})
-            # Convert chunk_size (tokens) to max_tokens
+            # Get original strategy from manual_settings (preserve UI value)
+            original_strategy = manual_settings.get("chunking_strategy", playbook_chunking.get("strategy", "sentence"))
+            
+            # chunk_size is already in tokens, use it directly as max_tokens
             max_tokens = int(manual_settings.get("chunk_size", playbook_chunking.get("max_tokens", 900)))
-            # Convert chunk_overlap (tokens) to overlap_sentences and hard_overlap_chars
+            # chunk_overlap is already in tokens
             chunk_overlap = int(manual_settings.get("chunk_overlap", 200))
             # Estimate: 1 sentence ≈ 20 tokens, so overlap_sentences = chunk_overlap / 20
             overlap_sents = max(1, int(chunk_overlap / 20))
-            hard_overlap = chunk_overlap * 4  # Convert tokens to chars (approx 4 chars per token)
-            strategy = manual_settings.get("chunking_strategy", playbook_chunking.get("strategy", "sentence")).lower()
-            # Map fixed_size to char_chunk, semantic/sentence to sentence
+            # Convert tokens to chars for hard_overlap: 1 token ≈ 4 chars
+            hard_overlap = chunk_overlap * 4
+            
+            # Convert strategy for playbook processing (internal use only)
+            strategy = original_strategy.lower()
+            # Map fixed_size to char_chunk, semantic/sentence to sentence for playbook
             if strategy == "fixed_size":
-                strategy = "char"
-            elif strategy in ["semantic", "sentence"]:
-                strategy = "sentence"
+                playbook_strategy = "char"
+            elif strategy == "semantic":
+                # Use paragraph chunking for semantic to better preserve context
+                playbook_strategy = "paragraph"
+            elif strategy == "paragraph_boundary":
+                playbook_strategy = "paragraph"
+            elif strategy in ["sentence", "sentence_boundary"]:
+                playbook_strategy = "sentence"
+            elif strategy == "recursive":
+                playbook_strategy = "sentence"  # Recursive not directly supported, use sentence
+            else:
+                playbook_strategy = playbook_chunking.get("strategy", "sentence")
+            
+            # Store resolved config with ORIGINAL strategy from UI (not converted playbook strategy)
             resolved_chunking_config.update({
                 "source": "manual",
                 "chunk_size": max_tokens,
                 "chunk_overlap": chunk_overlap,
                 "min_chunk_size": int(manual_settings.get("min_chunk_size", playbook_chunking.get("min_chunk_size", 100))),
                 "max_chunk_size": int(manual_settings.get("max_chunk_size", playbook_chunking.get("max_chunk_size", 2000))),
-                "chunking_strategy": manual_settings.get("chunking_strategy", "sentence"),
+                "chunking_strategy": original_strategy,  # Preserve original UI value (semantic, fixed_size, etc.)
             })
+            
+            # Use playbook_strategy for actual chunking processing
+            strategy = playbook_strategy
         elif chunking_config and chunking_config.get("mode") == "auto":
-            # Use playbook settings but respect product content_type recommendations if available
-            max_tokens = int(playbook_chunking.get("max_tokens", 900))
-            overlap_sents = int(playbook_chunking.get("overlap_sentences", 2))
-            hard_overlap = int(playbook_chunking.get("hard_overlap_chars", 300))
-            strategy = (playbook_chunking.get("strategy", "sentence") or "sentence").lower()
+            # Use auto_settings if available, otherwise fallback to playbook defaults
+            auto_settings = chunking_config.get("auto_settings", {})
+            content_type = auto_settings.get("content_type", "general")
+            
+            # Get optimal configuration based on content type
+            optimal_configs = {
+                "legal": {
+                    "chunk_size": 2000,
+                    "chunk_overlap": 400,
+                    "min_chunk_size": 200,
+                    "max_chunk_size": 3000,
+                    "strategy": "semantic"
+                },
+                "code": {
+                    "chunk_size": 1500,
+                    "chunk_overlap": 300,
+                    "min_chunk_size": 100,
+                    "max_chunk_size": 2500,
+                    "strategy": "recursive"
+                },
+                "documentation": {
+                    "chunk_size": 1200,
+                    "chunk_overlap": 200,
+                    "min_chunk_size": 100,
+                    "max_chunk_size": 2000,
+                    "strategy": "semantic"
+                },
+                "conversation": {
+                    "chunk_size": 800,
+                    "chunk_overlap": 100,
+                    "min_chunk_size": 50,
+                    "max_chunk_size": 1500,
+                    "strategy": "semantic"
+                },
+                "academic": {
+                    "chunk_size": 1800,
+                    "chunk_overlap": 350,
+                    "min_chunk_size": 150,
+                    "max_chunk_size": 2500,
+                    "strategy": "semantic"
+                },
+                "technical": {
+                    "chunk_size": 1400,
+                    "chunk_overlap": 250,
+                    "min_chunk_size": 100,
+                    "max_chunk_size": 2200,
+                    "strategy": "semantic"
+                },
+                "general": {
+                    "chunk_size": 1000,
+                    "chunk_overlap": 200,
+                    "min_chunk_size": 100,
+                    "max_chunk_size": 2000,
+                    "strategy": "fixed_size"
+                }
+            }
+            
+            # Get optimal config for content type, fallback to general
+            optimal = optimal_configs.get(content_type, optimal_configs["general"])
+            
+            # Use optimal config, but allow manual_settings to override if provided
+            manual_settings = chunking_config.get("manual_settings", {})
+            chunk_size = manual_settings.get("chunk_size") or optimal["chunk_size"]
+            chunk_overlap = manual_settings.get("chunk_overlap") or optimal["chunk_overlap"]
+            min_chunk_size = manual_settings.get("min_chunk_size") or optimal["min_chunk_size"]
+            max_chunk_size = manual_settings.get("max_chunk_size") or optimal["max_chunk_size"]
+            strategy = manual_settings.get("chunking_strategy") or optimal["strategy"]
+            
+            # Convert strategy to playbook format
+            strategy_lower = strategy.lower()
+            if strategy_lower == "fixed_size":
+                playbook_strategy = "char"
+            elif strategy_lower == "semantic":
+                # Use paragraph chunking for semantic to better preserve context
+                playbook_strategy = "paragraph"
+            elif strategy_lower == "paragraph_boundary":
+                playbook_strategy = "paragraph"
+            elif strategy_lower in ["sentence", "sentence_boundary"]:
+                playbook_strategy = "sentence"
+            elif strategy_lower == "recursive":
+                playbook_strategy = "sentence"  # Recursive not directly supported, use sentence
+            else:
+                playbook_strategy = playbook_chunking.get("strategy", "sentence")
+            
+            # chunk_size is already in tokens, use it directly as max_tokens
+            max_tokens = int(chunk_size) if chunk_size else int(playbook_chunking.get("max_tokens", 900))
+            # Estimate: 1 sentence ≈ 20 tokens, so overlap_sentences = chunk_overlap / 20
+            overlap_sents = max(1, int(chunk_overlap / 20))  # 1 sentence ≈ 20 tokens
+            # Convert tokens to chars for hard_overlap: 1 token ≈ 4 chars
+            hard_overlap = chunk_overlap * 4
+            
+            # Store original strategy (before playbook conversion) in resolved config
+            original_strategy = manual_settings.get("chunking_strategy") or optimal["strategy"]
             resolved_chunking_config.update({
                 "source": "product_auto",
-                "chunk_size": max_tokens,
-                "chunk_overlap": overlap_sents * 20,  # approximate tokens
-                "min_chunk_size": int(playbook_chunking.get("min_chunk_size", 100)),
-                "max_chunk_size": int(playbook_chunking.get("max_chunk_size", 2000)),
-                "chunking_strategy": "fixed_size" if strategy == "char" else "semantic",
+                "chunk_size": chunk_size,
+                "chunk_overlap": chunk_overlap,
+                "min_chunk_size": min_chunk_size,
+                "max_chunk_size": max_chunk_size,
+                "chunking_strategy": original_strategy,  # Preserve original UI value
+                "content_type": content_type,  # Store content type for reference
             })
+            
+            # Use playbook_strategy for actual chunking processing
+            strategy = playbook_strategy
         else:
             # Fallback to playbook defaults
             max_tokens = int(playbook_chunking.get("max_tokens", 900))
@@ -431,6 +823,42 @@ class PreprocessStage(AirdStage):
         sections_detected = 0
         mid_sentence_ends = 0
         
+        # First, estimate total chunks for progress tracking
+        estimated_chunks = 0
+        total_text_length = 0
+        for page_data in pages:
+            page_text = page_data["text"]
+            total_text_length += len(page_text)
+            sections = detect_sections_configured(
+                page_text,
+                playbook.get("headers", []),
+                playbook.get("section_aliases", {}),
+            )
+            for title_raw, canon_section, body_text in sections:
+                if strategy == "paragraph":
+                    para_overlap = max(1, int(overlap_sents / 2))
+                    chunks = paragraph_chunk(body_text, max_tokens, para_overlap, hard_overlap)
+                elif strategy == "sentence":
+                    chunks = sentence_chunk(body_text, max_tokens, overlap_sents, hard_overlap)
+                elif strategy == "char":
+                    chunks = char_chunk(body_text, max_tokens, hard_overlap)
+                else:
+                    chunks = sentence_chunk(body_text, max_tokens, overlap_sents, hard_overlap)
+                estimated_chunks += len(chunks)
+        
+        # Log initial progress info
+        opt_config = getattr(self, '_optimization_config', None)
+        opt_mode = opt_config.get("mode", "pattern") if opt_config else "pattern"
+        if opt_mode in ["llm", "hybrid"]:
+            self.logger.info(f"📊 Starting chunk processing: ~{estimated_chunks} chunks, ~{total_text_length:,} characters, mode={opt_mode}")
+            std_logger.info(f"📊 Starting chunk processing: ~{estimated_chunks} chunks, ~{total_text_length:,} characters, mode={opt_mode}")
+        
+        # Track progress for periodic logging
+        chunks_processed = 0
+        chars_processed = 0
+        last_progress_log_time = datetime.utcnow()
+        PROGRESS_LOG_INTERVAL = 20  # Log progress every N chunks
+        
         for page_data in pages:
             page_text = page_data["text"]
             page_num = page_data["page"]
@@ -445,14 +873,19 @@ class PreprocessStage(AirdStage):
             
             # Process each section
             for title_raw, canon_section, body_text in sections:
-                # Chunk the section
-                if strategy == "sentence":
+                # Chunk the section based on strategy
+                if strategy == "paragraph":
+                    # Use paragraph overlap (approximately 1 paragraph for overlap)
+                    para_overlap = max(1, int(overlap_sents / 2))  # Convert sentence overlap to paragraph overlap
+                    chunks = paragraph_chunk(body_text, max_tokens, para_overlap, hard_overlap)
+                elif strategy == "sentence":
                     chunks = sentence_chunk(body_text, max_tokens, overlap_sents, hard_overlap)
                 elif strategy == "char":
                     # Use character-based chunking for fixed_size strategy
                     chunks = char_chunk(body_text, max_tokens, hard_overlap)
                 else:
-                    chunks = char_chunk(body_text, max_tokens, hard_overlap)
+                    # Default to sentence chunking for unknown strategies
+                    chunks = sentence_chunk(body_text, max_tokens, overlap_sents, hard_overlap)
                 
                 # Build records for each chunk
                 for idx, chunk_text in enumerate(chunks):
@@ -460,7 +893,118 @@ class PreprocessStage(AirdStage):
                     if not re.search(r"[.!?]['\")\]]*\s*$", chunk_text):
                         mid_sentence_ends += 1
                     
-                    # Build record
+                    # Track progress
+                    chunks_processed += 1
+                    chars_processed += len(chunk_text)
+                    
+                    # Log progress periodically
+                    if opt_mode in ["llm", "hybrid"] and chunks_processed % PROGRESS_LOG_INTERVAL == 0:
+                        elapsed_time = (datetime.utcnow() - last_progress_log_time).total_seconds()
+                        chunks_per_sec = PROGRESS_LOG_INTERVAL / max(elapsed_time, 0.1)
+                        remaining_chunks = estimated_chunks - chunks_processed
+                        estimated_remaining_sec = remaining_chunks / max(chunks_per_sec, 0.1)
+                        estimated_remaining_min = estimated_remaining_sec / 60
+                        
+                        progress_msg = (
+                            f"📈 Progress: {chunks_processed}/{estimated_chunks} chunks processed "
+                            f"({chunks_processed*100//max(estimated_chunks, 1)}%), "
+                            f"{chars_processed:,}/{total_text_length:,} chars ({chars_processed*100//max(total_text_length, 1)}%), "
+                            f"~{estimated_remaining_min:.1f} min remaining"
+                        )
+                        self.logger.info(progress_msg)
+                        std_logger.info(progress_msg)
+                        last_progress_log_time = datetime.utcnow()
+                    
+                    # Apply per-chunk LLM/hybrid optimization if needed
+                    optimized_chunk_text = chunk_text
+                    if hasattr(self, '_optimization_config'):
+                        opt_config = self._optimization_config
+                        opt_mode = opt_config.get("mode", "pattern")
+                        
+                        # Apply LLM/hybrid optimization per-chunk if mode is llm or hybrid
+                        # BUT: Only optimize chunks that need it (quality threshold) and limit total chunks
+                        if opt_mode in ["llm", "hybrid"] and opt_config.get("llm_config"):
+                            # Initialize stats if not already done
+                            if not hasattr(self, '_chunk_optimization_stats'):
+                                self._chunk_optimization_stats = {
+                                    "total_chunks": 0,
+                                    "llm_optimized": 0,
+                                    "skipped_high_quality": 0,
+                                    "failed": 0,
+                                    "pattern_only": 0,
+                                    "total_cost": 0.0,
+                                }
+                            
+                            self._chunk_optimization_stats["total_chunks"] += 1
+                            
+                            # Quick quality check first - skip if already high quality
+                            # This avoids unnecessary API calls
+                            quality_threshold = opt_config.get("quality_threshold", 75)
+                            try:
+                                from primedata.ingestion_pipeline.aird_stages.optimization.pattern_based import PatternBasedOptimizer
+                                quick_quality_check = PatternBasedOptimizer()
+                                current_quality = quick_quality_check.estimate_quality(chunk_text)
+                                
+                                # Skip LLM optimization if quality is already above threshold
+                                # This significantly speeds up processing for good-quality chunks
+                                if current_quality >= quality_threshold:
+                                    self._chunk_optimization_stats["skipped_high_quality"] += 1
+                                    optimized_chunk_text = chunk_text  # Use as-is
+                                else:
+                                    # Only optimize chunks that need improvement
+                                    try:
+                                        from primedata.ingestion_pipeline.aird_stages.optimization.hybrid import HybridOptimizer
+                                        
+                                        optimizer = HybridOptimizer()
+                                        # Note: pattern_flags is empty because pattern-based optimization
+                                        # was already applied at document level. We only need LLM optimization here.
+                                        chunk_result = optimizer.optimize(
+                                            text=chunk_text,
+                                            mode=opt_mode,
+                                            pattern_flags={},  # Pattern-based already applied at document level
+                                            llm_config=opt_config.get("llm_config"),
+                                            quality_threshold=quality_threshold
+                                        )
+                                        
+                                        optimized_chunk_text = chunk_result["optimized_text"]
+                                        
+                                        if chunk_result["method_used"] in ["llm", "hybrid"]:
+                                            self._chunk_optimization_stats["llm_optimized"] += 1
+                                            self._chunk_optimization_stats["total_cost"] += chunk_result.get("cost", 0.0)
+                                        else:
+                                            self._chunk_optimization_stats["pattern_only"] += 1
+                                        
+                                    except Exception as e:
+                                        self._chunk_optimization_stats["failed"] += 1
+                                        self.logger.warning(f"Per-chunk LLM optimization failed for chunk {idx}: {e}")
+                                        std_logger.warning(f"Per-chunk LLM optimization failed for chunk {idx}: {e}")
+                                        # Use original chunk text on error
+                                        optimized_chunk_text = chunk_text
+                            except Exception as e:
+                                # If quality check fails, try optimization anyway but log warning
+                                self.logger.warning(f"Quality check failed for chunk {idx}, attempting optimization: {e}")
+                                try:
+                                    from primedata.ingestion_pipeline.aird_stages.optimization.hybrid import HybridOptimizer
+                                    optimizer = HybridOptimizer()
+                                    chunk_result = optimizer.optimize(
+                                        text=chunk_text,
+                                        mode=opt_mode,
+                                        pattern_flags={},
+                                        llm_config=opt_config.get("llm_config"),
+                                        quality_threshold=quality_threshold
+                                    )
+                                    optimized_chunk_text = chunk_result["optimized_text"]
+                                    if chunk_result["method_used"] in ["llm", "hybrid"]:
+                                        self._chunk_optimization_stats["llm_optimized"] += 1
+                                        self._chunk_optimization_stats["total_cost"] += chunk_result.get("cost", 0.0)
+                                    else:
+                                        self._chunk_optimization_stats["pattern_only"] += 1
+                                except Exception as opt_error:
+                                    self._chunk_optimization_stats["failed"] += 1
+                                    self.logger.warning(f"Per-chunk LLM optimization failed for chunk {idx}: {opt_error}")
+                                    optimized_chunk_text = chunk_text
+                    
+                    # Build record with optimized chunk text
                     rec = _build_record(
                         stem=file_stem,
                         filename=filename,
@@ -468,11 +1012,62 @@ class PreprocessStage(AirdStage):
                         page=page_num,
                         canon_section=canon_section,
                         title_raw=title_raw,
-                        text=chunk_text,
+                        text=optimized_chunk_text,
                         chunk_idx=idx,
                         chunk_of=len(chunks),
                         product_id=self.product_id,
                     )
+                    
+                    # Enhanced metadata extraction if flag is set
+                    if preprocessing_flags.get("force_metadata_extraction") or preprocessing_flags.get("additional_metadata_fields"):
+                        # Extract additional metadata fields
+                        import re as regex_module
+                        
+                        # Try to extract dates from text
+                        date_patterns = [
+                            r'\b(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\b',  # MM/DD/YYYY or DD/MM/YYYY
+                            r'\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}\b',  # Month DD, YYYY
+                            r'\b\d{4}-\d{2}-\d{2}\b',  # ISO format YYYY-MM-DD
+                        ]
+                        
+                        dates_found = []
+                        for pattern in date_patterns:
+                            matches = regex_module.findall(pattern, chunk_text, regex_module.IGNORECASE)
+                            dates_found.extend(matches[:3])  # Limit to 3 dates per chunk
+                        
+                        if dates_found:
+                            rec["doc_date"] = dates_found[0]  # Use first date found
+                            # Store all dates in tags if additional fields requested
+                            if preprocessing_flags.get("additional_metadata_fields"):
+                                existing_tags = rec.get("tags", "")
+                                if existing_tags:
+                                    rec["tags"] = f"{existing_tags}; dates:{','.join(dates_found[:3])}"
+                                else:
+                                    rec["tags"] = f"dates:{','.join(dates_found[:3])}"
+                        
+                        # Extract additional metadata if additional_fields flag is set
+                        if preprocessing_flags.get("additional_metadata_fields"):
+                            # Extract potential author names (simple pattern: "By Author Name" or "Author: Name")
+                            author_pattern = r'(?:By|Author|Written by|Created by):\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)'
+                            author_match = regex_module.search(author_pattern, chunk_text, regex_module.IGNORECASE)
+                            if author_match:
+                                author = author_match.group(1)
+                                existing_tags = rec.get("tags", "")
+                                if existing_tags:
+                                    rec["tags"] = f"{existing_tags}; author:{author}"
+                                else:
+                                    rec["tags"] = f"author:{author}"
+                            
+                            # Extract version numbers
+                            version_pattern = r'\b(v|version|ver|v\.)\s*(\d+(?:\.\d+)+)\b'
+                            version_matches = regex_module.findall(version_pattern, chunk_text, regex_module.IGNORECASE)
+                            if version_matches:
+                                versions = [m[1] for m in version_matches[:2]]  # Limit to 2 versions
+                                existing_tags = rec.get("tags", "")
+                                if existing_tags:
+                                    rec["tags"] = f"{existing_tags}; versions:{','.join(versions)}"
+                                else:
+                                    rec["tags"] = f"versions:{','.join(versions)}"
                     
                     # Apply audience rules from playbook
                     aud = rec["audience"]
@@ -490,6 +1085,36 @@ class PreprocessStage(AirdStage):
                     rec["audience"] = aud
                     
                     records.append(rec)
+        
+        # Log final progress
+        if opt_mode in ["llm", "hybrid"]:
+            final_progress_msg = (
+                f"✅ Chunk processing complete: {chunks_processed} chunks processed, "
+                f"{chars_processed:,} characters processed"
+            )
+            self.logger.info(final_progress_msg)
+            std_logger.info(final_progress_msg)
+        
+        # Log per-chunk optimization summary if LLM/hybrid mode was used
+        if hasattr(self, '_chunk_optimization_stats'):
+            stats_data = self._chunk_optimization_stats
+            opt_config = self._optimization_config
+            opt_mode = opt_config.get("mode", "pattern")
+            
+            if opt_mode in ["llm", "hybrid"]:
+                summary_msg = (
+                    f"✅ Per-chunk optimization summary: "
+                    f"{stats_data['llm_optimized']}/{stats_data['total_chunks']} chunks optimized with LLM, "
+                    f"{stats_data['skipped_high_quality']} skipped (already high quality ≥75%), "
+                    f"{stats_data['pattern_only']} pattern-only, "
+                    f"{stats_data['failed']} failed, "
+                    f"total cost=${stats_data['total_cost']:.4f}"
+                )
+                self.logger.info(summary_msg)
+                std_logger.info(summary_msg)
+            
+            # Reset stats for next document
+            delattr(self, '_chunk_optimization_stats')
         
         # Calculate stats
         total_chunks = len(records)

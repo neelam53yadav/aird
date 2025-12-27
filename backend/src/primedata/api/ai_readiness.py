@@ -117,10 +117,11 @@ async def assess_ai_readiness(
                 )
             
             # Use production alias
-            from ..indexing.qdrant_client import qdrant_client
-            collection_name = qdrant_client.get_prod_alias_collection(
+            from ..indexing.qdrant_client import qdrant_client as qdrant_client_instance
+            collection_name = qdrant_client_instance.get_prod_alias_collection(
                 workspace_id=str(product.workspace_id),
-                product_id=str(product.id)
+                product_id=str(product.id),
+                product_name=product.name
             )
             
             if not collection_name:
@@ -138,24 +139,28 @@ async def assess_ai_readiness(
                     detail="No data available. Please run a pipeline first."
                 )
             
-            # Construct collection name for current version
-            collection_name = f"ws_{product.workspace_id}__prod_{product.id}__v_{product.current_version}"
+            # Initialize clients first
+            qdrant_client = QdrantClient()
+            if not qdrant_client.is_connected():
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Vector database connection failed"
+                )
+            
+            # Find collection name (checks both product name and product_id formats for backward compatibility)
+            collection_name = qdrant_client.find_collection_name(
+                workspace_id=str(product.workspace_id),
+                product_id=str(product.id),
+                version=product.current_version,
+                product_name=product.name
+            )
             version = product.current_version
         
-        # Initialize clients
-        qdrant_client = QdrantClient()
-        if not qdrant_client.is_connected():
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Vector database connection failed"
-            )
-        
         # Check if collection exists
-        collections = qdrant_client.list_collections()
-        if collection_name not in collections:
+        if not collection_name:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Collection {collection_name} not found. Please run a pipeline first."
+                detail=f"Collection not found. Please run a pipeline first."
             )
         
         # Get collection info
@@ -470,7 +475,16 @@ def _identify_quality_issues(text: str) -> List[str]:
 async def _improve_data_quality(product: Product, qdrant_client: QdrantClient, config: QualityControlConfig) -> Dict[str, Any]:
     """Improve data quality by re-processing chunks with quality controls."""
     try:
-        collection_name = f"ws_{product.workspace_id}__prod_{product.id}__v_{product.current_version}"
+        # Find collection name (checks both product name and product_id formats for backward compatibility)
+        collection_name = qdrant_client.find_collection_name(
+            workspace_id=str(product.workspace_id),
+            product_id=str(product.id),
+            version=product.current_version,
+            product_name=product.name
+        )
+        
+        if not collection_name:
+            raise ValueError(f"Collection not found for product {product.id} version {product.current_version}")
         
         # Get all current chunks by using a simple search
         # First, let's try to get some chunks to see what we have

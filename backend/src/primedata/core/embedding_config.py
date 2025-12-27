@@ -141,6 +141,252 @@ class EmbeddingModelRegistry:
                 "performance": "medium",
                 "quality": "excellent"
             }
+        ),
+        # Open-source models with 768 dimensions
+        "e5-base": EmbeddingModelConfig(
+            id="e5-base",
+            name="E5 Base",
+            description="Microsoft E5 base model for general-purpose embeddings",
+            model_type=EmbeddingModelType.SENTENCE_TRANSFORMERS,
+            dimension=768,
+            model_path="intfloat/e5-base",
+            is_available=True,
+            requires_api_key=False,
+            metadata={
+                "provider": "microsoft",
+                "license": "mit",
+                "performance": "medium",
+                "quality": "excellent",
+                "multilingual": False
+            }
+        ),
+        "bge-base-en": EmbeddingModelConfig(
+            id="bge-base-en",
+            name="BGE Base (English)",
+            description="BAAI General Embedding base model optimized for English",
+            model_type=EmbeddingModelType.SENTENCE_TRANSFORMERS,
+            dimension=768,
+            model_path="BAAI/bge-base-en-v1.5",
+            is_available=True,
+            requires_api_key=False,
+            metadata={
+                "provider": "baai",
+                "license": "mit",
+                "performance": "medium",
+                "quality": "excellent",
+                "multilingual": False
+            }
+        ),
+        "instructor-base": EmbeddingModelConfig(
+            id="instructor-base",
+            name="Instructor Base",
+            description="Instructor model for instruction-following embeddings",
+            model_type=EmbeddingModelType.SENTENCE_TRANSFORMERS,
+            dimension=768,
+            model_path="hkunlp/instructor-base",
+            is_available=True,
+            requires_api_key=False,
+            metadata={
+                "provider": "hkunlp",
+                "license": "apache-2.0",
+                "performance": "medium",
+                "quality": "excellent",
+                "instruction_tuned": True
+            }
+        ),
+        # Open-source models with 1024 dimensions
+        "e5-large": EmbeddingModelConfig(
+            id="e5-large",
+            name="E5 Large",
+            description="Microsoft E5 large model with 1024 dimensions for high-quality embeddings",
+            model_type=EmbeddingModelType.SENTENCE_TRANSFORMERS,
+            dimension=1024,
+            model_path="intfloat/e5-large",
+            is_available=True,
+            requires_api_key=False,
+            metadata={
+                "provider": "microsoft",
+                "license": "mit",
+                "performance": "slower",
+                "quality": "excellent",
+                "multilingual": False
+            }
+        ),
+        "bge-large-en": EmbeddingModelConfig(
+            id="bge-large-en",
+            name="BGE Large (English)",
+            description="BAAI General Embedding large model with 1024 dimensions for English",
+            model_type=EmbeddingModelType.SENTENCE_TRANSFORMERS,
+            dimension=1024,
+            model_path="BAAI/bge-large-en-v1.5",
+            is_available=True,
+            requires_api_key=False,
+            metadata={
+                "provider": "baai",
+                "license": "mit",
+                "performance": "slower",
+                "quality": "excellent",
+                "multilingual": False
+            }
+        ),
+        "gte-large": EmbeddingModelConfig(
+            id="gte-large",
+            name="GTE Large",
+            description="General Text Embeddings large model with 1024 dimensions",
+            model_type=EmbeddingModelType.SENTENCE_TRANSFORMERS,
+            dimension=1024,
+            model_path="thenlper/gte-large",
+            is_available=True,
+            requires_api_key=False,
+            metadata={
+                "provider": "thenlper",
+                "license": "apache-2.0",
+                "performance": "slower",
+                "quality": "excellent",
+                "multilingual": False
+            }
+        ),
+        "instructor-large": EmbeddingModelConfig(
+            id="instructor-large",
+            name="Instructor Large",
+            description="Instructor large model with 1024 dimensions for instruction-following",
+            model_type=EmbeddingModelType.SENTENCE_TRANSFORMERS,
+            dimension=1024,
+            model_path="hkunlp/instructor-large",
+            is_available=True,
+            requires_api_key=False,
+            metadata={
+                "provider": "hkunlp",
+                "license": "apache-2.0",
+                "performance": "slower",
+                "quality": "excellent",
+                "instruction_tuned": True
+            }
+        ),
+        # Additional open-source models with other dimensions
+        "e5-small": EmbeddingModelConfig(
+            id="e5-small",
+            name="E5 Small",
+            description="Microsoft E5 small model optimized for speed",
+            model_type=EmbeddingModelType.SENTENCE_TRANSFORMERS,
+            dimension=384,
+            model_path="intfloat/e5-small",
+            is_available=True,
+            requires_api_key=False,
+            metadata={
+                "provider": "microsoft",
+                "license": "mit",
+                "performance": "fast",
+                "quality": "good",
+                "multilingual": False
+            }
+        ),
+        "bge-small-en": EmbeddingModelConfig(
+            id="bge-small-en",
+            name="BGE Small (English)",
+            description="BAAI General Embedding small model for fast embeddings",
+            model_type=EmbeddingModelType.SENTENCE_TRANSFORMERS,
+            dimension=384,
+            model_path="BAAI/bge-small-en-v1.5",
+            is_available=True,
+            requires_api_key=False,
+            metadata={
+                "provider": "baai",
+                "license": "mit",
+                "performance": "fast",
+                "quality": "good",
+                "multilingual": False
+            }
+        ),
+        "gte-base": EmbeddingModelConfig(
+            id="gte-base",
+            name="GTE Base",
+            description="General Text Embeddings base model with 768 dimensions",
+            model_type=EmbeddingModelType.SENTENCE_TRANSFORMERS,
+            dimension=768,
+            model_path="thenlper/gte-base",
+            is_available=True,
+            requires_api_key=False,
+            metadata={
+                "provider": "thenlper",
+                "license": "apache-2.0",
+                "performance": "medium",
+                "quality": "excellent",
+                "multilingual": False
+            }
+        ),
+        # Multilingual models
+        "multilingual-e5-base": EmbeddingModelConfig(
+            id="multilingual-e5-base",
+            name="Multilingual E5 Base",
+            description="Microsoft E5 base model supporting 100+ languages",
+            model_type=EmbeddingModelType.SENTENCE_TRANSFORMERS,
+            dimension=768,
+            model_path="intfloat/multilingual-e5-base",
+            is_available=True,
+            requires_api_key=False,
+            metadata={
+                "provider": "microsoft",
+                "license": "mit",
+                "performance": "medium",
+                "quality": "excellent",
+                "multilingual": True,
+                "languages": "100+"
+            }
+        ),
+        "multilingual-e5-large": EmbeddingModelConfig(
+            id="multilingual-e5-large",
+            name="Multilingual E5 Large",
+            description="Microsoft E5 large model with 1024 dimensions supporting 100+ languages",
+            model_type=EmbeddingModelType.SENTENCE_TRANSFORMERS,
+            dimension=1024,
+            model_path="intfloat/multilingual-e5-large",
+            is_available=True,
+            requires_api_key=False,
+            metadata={
+                "provider": "microsoft",
+                "license": "mit",
+                "performance": "slower",
+                "quality": "excellent",
+                "multilingual": True,
+                "languages": "100+"
+            }
+        ),
+        "bge-m3": EmbeddingModelConfig(
+            id="bge-m3",
+            name="BGE M3",
+            description="BAAI Multilingual Embedding model supporting 100+ languages with 1024 dimensions",
+            model_type=EmbeddingModelType.SENTENCE_TRANSFORMERS,
+            dimension=1024,
+            model_path="BAAI/bge-m3",
+            is_available=True,
+            requires_api_key=False,
+            metadata={
+                "provider": "baai",
+                "license": "mit",
+                "performance": "slower",
+                "quality": "excellent",
+                "multilingual": True,
+                "languages": "100+"
+            }
+        ),
+        "paraphrase-multilingual": EmbeddingModelConfig(
+            id="paraphrase-multilingual",
+            name="Paraphrase Multilingual",
+            description="Multilingual paraphrase model with 768 dimensions supporting 50+ languages",
+            model_type=EmbeddingModelType.SENTENCE_TRANSFORMERS,
+            dimension=768,
+            model_path="paraphrase-multilingual-mpnet-base-v2",
+            is_available=True,
+            requires_api_key=False,
+            metadata={
+                "provider": "sentence-transformers",
+                "license": "apache-2.0",
+                "performance": "medium",
+                "quality": "good",
+                "multilingual": True,
+                "languages": "50+"
+            }
         )
     }
     

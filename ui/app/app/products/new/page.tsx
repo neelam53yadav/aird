@@ -138,9 +138,9 @@ export default function NewProductPage() {
       const chunkingConfig = chunkingMode === 'manual' ? {
         mode: 'manual',
         manual_settings: {
-          chunking_strategy: chunkingStrategy,
-          chunk_size: chunkSize,
-          chunk_overlap: chunkOverlap,
+          chunking_strategy: chunkingStrategy, // Preserve: 'semantic', 'fixed_size', or 'sentence'
+          chunk_size: typeof chunkSize === 'number' ? chunkSize : parseInt(String(chunkSize || 1000), 10),
+          chunk_overlap: typeof chunkOverlap === 'number' ? chunkOverlap : parseInt(String(chunkOverlap || 200), 10),
           min_chunk_size: 100,
           max_chunk_size: 2000
         }
@@ -152,6 +152,8 @@ export default function NewProductPage() {
           confidence_threshold: 0.7
         }
       }
+      
+      console.log('Creating product with chunking config:', chunkingConfig)
       
       const response = await apiClient.createProductWithPlaybook(
         workspaceId,
@@ -176,7 +178,12 @@ export default function NewProductPage() {
         router.push(`/app/products/${product?.id}`)
       }
     } catch (err) {
-      setError('Failed to create product')
+      const errorMessage = err instanceof Error ? err.message : 'Failed to create product'
+      setError(errorMessage)
+      addToast({
+        type: 'error',
+        message: `Failed to create product: ${errorMessage}`,
+      })
     } finally {
       setLoading(false)
     }
@@ -370,13 +377,28 @@ export default function NewProductPage() {
                       <Label htmlFor="chunk-size">Chunk Size (tokens)</Label>
                       <Input
                         id="chunk-size"
-                        type="number"
-                        value={chunkSize}
-                        onChange={(e) => setChunkSize(parseInt(e.target.value) || 1000)}
-                        min={100}
-                        max={3000}
+                        type="text"
+                        inputMode="numeric"
+                        value={chunkSize || ''}
+                        onChange={(e) => {
+                          const cleaned = e.target.value.replace(/[^0-9]/g, '')
+                          if (cleaned === '') {
+                            setChunkSize('' as any)
+                          } else {
+                            const numValue = parseInt(cleaned, 10)
+                            if (!isNaN(numValue) && numValue >= 0) {
+                              setChunkSize(numValue)
+                            }
+                          }
+                        }}
+                        onBlur={(e) => {
+                          if (e.target.value === '' || parseInt(e.target.value) < 100) {
+                            setChunkSize(1000)
+                          }
+                        }}
                         className="mt-1"
                         disabled={loading}
+                        placeholder="1000"
                       />
                       <p className="mt-1 text-sm text-gray-500">
                         Recommended: 800-1200 for most documents
@@ -387,9 +409,25 @@ export default function NewProductPage() {
                       <Label htmlFor="chunk-overlap">Overlap (tokens)</Label>
                       <Input
                         id="chunk-overlap"
-                        type="number"
-                        value={chunkOverlap}
-                        onChange={(e) => setChunkOverlap(parseInt(e.target.value) || 200)}
+                        type="text"
+                        inputMode="numeric"
+                        value={chunkOverlap || ''}
+                        onChange={(e) => {
+                          const cleaned = e.target.value.replace(/[^0-9]/g, '')
+                          if (cleaned === '') {
+                            setChunkOverlap('' as any)
+                          } else {
+                            const numValue = parseInt(cleaned, 10)
+                            if (!isNaN(numValue) && numValue >= 0) {
+                              setChunkOverlap(numValue)
+                            }
+                          }
+                        }}
+                        onBlur={(e) => {
+                          if (e.target.value === '' || parseInt(e.target.value) < 0) {
+                            setChunkOverlap(200)
+                          }
+                        }}
                         min={0}
                         max={500}
                         className="mt-1"
