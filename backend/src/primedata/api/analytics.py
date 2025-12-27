@@ -178,8 +178,9 @@ async def get_product_insights(
     
     product = ensure_product_access(db, request, product_id)
     
-    # Get fingerprint
-    fingerprint_data = product.readiness_fingerprint
+    # Get fingerprint (lazy load from S3 if needed)
+    from primedata.services.lazy_json_loader import load_product_json_field
+    fingerprint_data = load_product_json_field(product, "readiness_fingerprint")
     fingerprint = None
     
     if fingerprint_data:

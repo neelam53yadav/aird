@@ -204,14 +204,17 @@ class Product(Base):
     playbook_id = Column(String(50), nullable=True, default=None)  # e.g., "TECH", "SCANNED", "REGULATORY"
     # Playbook selection metadata (for auto-detection verification)
     playbook_selection = Column(JSON, nullable=True, default=None)  # Stores: method, reason, detected_at, confidence
-    # Preprocessing statistics (M1)
-    preprocessing_stats = Column(JSON, nullable=True, default=None)  # sections, chunks, mid_sentence_boundary_rate
-    # Trust scoring and policy (M2)
+    # Preprocessing statistics (M1) - Hybrid storage: small JSON in DB, large JSON in S3
+    preprocessing_stats = Column(JSON, nullable=True, default=None)  # sections, chunks, mid_sentence_boundary_rate (small JSON only)
+    preprocessing_stats_path = Column(String(1000), nullable=True, default=None)  # S3 path for large JSON
+    # Trust scoring and policy (M2) - Hybrid storage: small JSON in DB, large JSON in S3
     trust_score = Column(Float, nullable=True, default=None)  # Aggregated AI Trust Score
-    readiness_fingerprint = Column(JSON, nullable=True, default=None)  # Readiness fingerprint (all 13 metrics)
+    readiness_fingerprint = Column(JSON, nullable=True, default=None)  # Readiness fingerprint (all 13 metrics) - small JSON only
+    readiness_fingerprint_path = Column(String(1000), nullable=True, default=None)  # S3 path for large JSON
     policy_status = Column(SQLEnum(PolicyStatus), nullable=True, default=PolicyStatus.UNKNOWN)  # M2: Policy evaluation status
     policy_violations = Column(JSON, nullable=True, default=list)  # List of violation strings
-    chunk_metrics = Column(JSON, nullable=True, default=list)  # Per-chunk metrics (optional, can use metrics.json instead)
+    chunk_metrics = Column(JSON, nullable=True, default=list)  # Per-chunk metrics (small JSON only)
+    chunk_metrics_path = Column(String(1000), nullable=True, default=None)  # S3 path for large JSON
     # Artifacts and reports (M3)
     validation_summary_path = Column(String(500), nullable=True, default=None)  # MinIO path to validation CSV
     trust_report_path = Column(String(500), nullable=True, default=None)  # MinIO path to trust report PDF
@@ -256,6 +259,8 @@ class Product(Base):
         UniqueConstraint('workspace_id', 'name', name='unique_workspace_product_name'),
         Index('idx_products_workspace_id', 'workspace_id'),
         Index('idx_products_owner_user_id', 'owner_user_id'),
+        Index('idx_products_status', 'status'),  # For filtering by status
+        Index('idx_products_created_at', 'created_at'),  # For time-based queries
     )
 
 
@@ -311,9 +316,9 @@ class RawFile(Base):
     minio_key = Column(String(1000), nullable=False, unique=True)  # Full MinIO object key
     minio_bucket = Column(String(255), nullable=False, default="primedata-raw")
     file_size = Column(Integer, nullable=False)  # Size in bytes
-    content_type = Column(String(255), nullable=True)  # MIME type
+    content_type = Column(String(255), nullable=False, default='application/octet-stream')  # MIME type
     status = Column(SQLEnum(RawFileStatus), nullable=False, default=RawFileStatus.INGESTED)  # Processing status
-    file_checksum = Column(String(64), nullable=True)  # MD5 or SHA256 checksum for integrity validation
+    file_checksum = Column(String(64), nullable=False)  # MD5 or SHA256 checksum for integrity validation
     minio_etag = Column(String(255), nullable=True)  # MinIO ETag for validation
     ingested_at = Column(DateTime(timezone=True), server_default=func.now())
     processed_at = Column(DateTime(timezone=True), nullable=True)  # When processing completed
@@ -373,10 +378,12 @@ class PipelineRun(Base):
     product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False, index=True)
     version = Column(Integer, nullable=False)
     status = Column(SQLEnum(PipelineRunStatus), nullable=False, default=PipelineRunStatus.QUEUED)
-    started_at = Column(DateTime(timezone=True), nullable=True)
+    started_at = Column(DateTime(timezone=True), nullable=False)  # Always has start time
     finished_at = Column(DateTime(timezone=True), nullable=True)
-    dag_run_id = Column(String(255), nullable=True, index=True)
-    metrics = Column(JSON, nullable=False, default=dict)
+    dag_run_id = Column(String(255), nullable=False, index=True)  # Required for Airflow tracking
+    metrics = Column(JSON, nullable=False, default=dict)  # Recent runs only (<90 days)
+    metrics_path = Column(String(1000), nullable=True, default=None)  # S3 path for archived metrics
+    archived_at = Column(DateTime(timezone=True), nullable=True)  # When metrics were moved to S3
     # AIRD stage tracking fields (M0)
     stage_metrics = Column(JSON, nullable=True, default=None)  # Per-stage metrics (deprecated, use metrics.aird_stages)
     aird_stages_completed = Column(JSON, nullable=True, default=None)  # List of completed stage names (deprecated, use metrics.aird_stages_completed)
@@ -393,6 +400,8 @@ class PipelineRun(Base):
         Index('idx_pipeline_runs_product_version', 'product_id', 'version'),
         Index('idx_pipeline_runs_workspace_id', 'workspace_id'),
         Index('idx_pipeline_runs_dag_run_id', 'dag_run_id'),
+        Index('idx_pipeline_runs_product_status_created', 'product_id', 'status', 'created_at'),  # Composite index for common queries
+        Index('idx_pipeline_runs_created_at', 'created_at'),  # For archiving queries
     )
 
 
@@ -455,8 +464,8 @@ class PipelineArtifact(Base):
     minio_bucket = Column(String(255), nullable=False)  # "primedata-clean", "primedata-embed", etc.
     minio_key = Column(String(1000), nullable=False, index=True)  # Full MinIO object key
     file_size = Column(BigInteger, nullable=False)  # Size in bytes
-    checksum = Column(String(64), nullable=True)  # MD5 or SHA256 for integrity verification
-    minio_etag = Column(String(255), nullable=True)  # MinIO ETag for validation
+    checksum = Column(String(64), nullable=False)  # MD5 or SHA256 for integrity verification
+    minio_etag = Column(String(255), nullable=False)  # MinIO ETag for validation
     
     # Data lineage (Phase 2)
     input_artifacts = Column(JSON, nullable=True, default=list)  # List of artifact IDs this depends on
@@ -535,6 +544,10 @@ class DqViolation(Base):
     total_count = Column(Integer, default=0)
     violation_rate = Column(Float, default=0.0)
     
+    # Archiving fields for cost optimization
+    archived_at = Column(DateTime(timezone=True), nullable=True)  # When violation was archived
+    archived_to_s3 = Column(Boolean, nullable=False, default=False)  # Whether archived to S3
+    
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
@@ -546,6 +559,7 @@ class DqViolation(Base):
         Index('idx_dq_violations_product_version', 'product_id', 'version'),
         Index('idx_dq_violations_severity', 'severity'),
         Index('idx_dq_violations_created_at', 'created_at'),
+        Index('idx_dq_violations_product_version_severity', 'product_id', 'version', 'severity'),  # Composite index for filtering
     )
 
 
