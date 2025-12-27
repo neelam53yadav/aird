@@ -55,6 +55,97 @@ jobs:
           service_account: github-actions@project-f3c8a334-a3f2-4f66-a06.iam.gserviceaccount.com
           create_credentials_file: true
 
+      - name: Verify GCP Permissions
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Verifying GitHub Actions service account permissions..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          
+          GITHUB_SA="github-actions@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com"
+          PROJECT_ID="${{ env.GCP_PROJECT_ID }}"
+          
+          echo "Service Account: ${GITHUB_SA}"
+          echo "Project: ${PROJECT_ID}"
+          echo ""
+          
+          # Get current roles
+          echo "Current project-level IAM roles:"
+          CURRENT_ROLES=$(gcloud projects get-iam-policy ${PROJECT_ID} \
+            --flatten="bindings[].members" \
+            --filter="bindings.members:serviceAccount:${GITHUB_SA}" \
+            --format="value(bindings.role)" 2>/dev/null || echo "")
+          
+          if [ -z "$CURRENT_ROLES" ]; then
+            echo "  ⚠️  Could not retrieve roles (may need permissions to view)"
+          else
+            echo "$CURRENT_ROLES" | while read -r role; do
+              echo "  ✅ $role"
+            done
+          fi
+          
+          echo ""
+          echo "Required roles for Terraform operations:"
+          echo ""
+          
+          # Check each required role
+          MISSING_ROLES=()
+          
+          if echo "$CURRENT_ROLES" | grep -q "roles/iam.serviceAccountAdmin"; then
+            echo "  ✅ roles/iam.serviceAccountAdmin (create service accounts)"
+          else
+            echo "  ❌ roles/iam.serviceAccountAdmin (MISSING - needed to create service accounts)"
+            MISSING_ROLES+=("roles/iam.serviceAccountAdmin")
+          fi
+          
+          if echo "$CURRENT_ROLES" | grep -q "roles/resourcemanager.projectIamAdmin"; then
+            echo "  ✅ roles/resourcemanager.projectIamAdmin (create IAM bindings)"
+          else
+            echo "  ❌ roles/resourcemanager.projectIamAdmin (MISSING - needed to create IAM bindings)"
+            MISSING_ROLES+=("roles/resourcemanager.projectIamAdmin")
+          fi
+          
+          if echo "$CURRENT_ROLES" | grep -q "roles/compute.admin"; then
+            echo "  ✅ roles/compute.admin (create VMs and firewall rules)"
+          else
+            echo "  ❌ roles/compute.admin (MISSING - needed to create VMs and firewall rules)"
+            MISSING_ROLES+=("roles/compute.admin")
+          fi
+          
+          if echo "$CURRENT_ROLES" | grep -q "roles/iam.serviceAccountTokenCreator"; then
+            echo "  ✅ roles/iam.serviceAccountTokenCreator (use service accounts)"
+          else
+            echo "  ⚠️  roles/iam.serviceAccountTokenCreator (may be needed)"
+          fi
+          
+          echo ""
+          
+          # If roles are missing, show instructions
+          if [ ${#MISSING_ROLES[@]} -gt 0 ]; then
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "❌ MISSING REQUIRED PERMISSIONS"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo ""
+            echo "The GitHub Actions service account is missing required permissions."
+            echo "Please run these commands in GCP Cloud Shell:"
+            echo ""
+            echo "PROJECT_ID=\"${PROJECT_ID}\""
+            echo "GITHUB_SA=\"${GITHUB_SA}\""
+            echo ""
+            for role in "${MISSING_ROLES[@]}"; do
+              echo "gcloud projects add-iam-policy-binding \${PROJECT_ID} \\"
+              echo "  --member=\"serviceAccount:\${GITHUB_SA}\" \\"
+              echo "  --role=\"${role}\""
+              echo ""
+            done
+            echo "After granting permissions, wait 1-2 minutes for propagation, then re-run this workflow."
+            echo ""
+            exit 1
+          else
+            echo "✅ All required permissions are present!"
+            echo ""
+          fi
+
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
         # Note: Project is already set via CLOUDSDK_CORE_PROJECT environment variable
@@ -191,11 +282,23 @@ jobs:
           fi
           echo ""
           
-          # Import IAM bindings (try to import, but don't fail if they don't exist in state format)
-          echo "🔐 Attempting to import IAM bindings..."
-          terraform import google_project_iam_member.storage_admin "${PROJECT_ID} roles/storage.admin serviceAccount:${SA_EMAIL}" 2>&1 | grep -v "already in state" || echo "  Storage admin binding handled"
-          terraform import google_project_iam_member.cloudsql_client "${PROJECT_ID} roles/cloudsql.client serviceAccount:${SA_EMAIL}" 2>&1 | grep -v "already in state" || echo "  CloudSQL client binding handled"
-          terraform import google_project_iam_member.compute_instance_admin "${PROJECT_ID} roles/compute.instanceAdmin.v1 serviceAccount:${SA_EMAIL}" 2>&1 | grep -v "already in state" || echo "  Compute admin binding handled"
+          # Import IAM bindings (skip if service account doesn't exist yet)
+          # IAM bindings can't be imported if the service account doesn't exist
+          if gcloud iam service-accounts describe ${SA_EMAIL} --project=${PROJECT_ID} &>/dev/null; then
+            echo "🔐 Attempting to import IAM bindings..."
+            echo "  Note: IAM binding imports may fail due to permission requirements."
+            echo "  This is OK - Terraform will create them if they don't exist."
+            echo ""
+            
+            # Try to import, but don't fail the step if it errors
+            set +e
+            terraform import google_project_iam_member.storage_admin "${PROJECT_ID} roles/storage.admin serviceAccount:${SA_EMAIL}" 2>&1 | grep -E "(Import|Error|already)" || echo "  Storage admin binding: will be created if needed"
+            terraform import google_project_iam_member.cloudsql_client "${PROJECT_ID} roles/cloudsql.client serviceAccount:${SA_EMAIL}" 2>&1 | grep -E "(Import|Error|already)" || echo "  CloudSQL client binding: will be created if needed"
+            terraform import google_project_iam_member.compute_instance_admin "${PROJECT_ID} roles/compute.instanceAdmin.v1 serviceAccount:${SA_EMAIL}" 2>&1 | grep -E "(Import|Error|already)" || echo "  Compute admin binding: will be created if needed"
+            set -e
+          else
+            echo "🔐 Skipping IAM binding imports (service account doesn't exist yet)"
+          fi
           echo ""
           
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
