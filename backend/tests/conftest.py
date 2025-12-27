@@ -71,11 +71,21 @@ def test_user(db_session: Session):
 @pytest.fixture
 def test_workspace(db_session: Session, test_user):
     """Create a test workspace."""
+    from primedata.db.models import WorkspaceMember, WorkspaceRole
+    
     workspace = Workspace(
         name="Test Workspace",
-        owner_user_id=test_user.id,
     )
     db_session.add(workspace)
+    db_session.flush()  # Flush to get workspace.id
+    
+    # Add user as workspace owner
+    member = WorkspaceMember(
+        workspace_id=workspace.id,
+        user_id=test_user.id,
+        role=WorkspaceRole.OWNER,
+    )
+    db_session.add(member)
     db_session.commit()
     db_session.refresh(workspace)
     return workspace
