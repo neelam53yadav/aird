@@ -37,9 +37,8 @@ jobs:
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
-
-      - name: Set GCP Project
-        run: gcloud config set project ${{ env.GCP_PROJECT_ID }}
+        # Note: Project is already set via CLOUDSDK_CORE_PROJECT environment variable
+        # Skipping explicit project setting to avoid token refresh issues
 
       - name: Get VM IP
         id: get-vm-ip
