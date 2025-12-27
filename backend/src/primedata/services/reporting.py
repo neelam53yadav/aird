@@ -55,6 +55,11 @@ def generate_validation_summary(
 
     df = pd.DataFrame(metrics)
 
+    # Check if AI_Trust_Score exists (required for categorization)
+    if "AI_Trust_Score" not in df.columns:
+        logger.warning("AI_Trust_Score column not found in metrics, cannot generate validation summary")
+        return ""
+
     # Categorize: AI Ready if score >= threshold
     df["Category"] = df["AI_Trust_Score"].apply(lambda x: "AI Ready" if x >= threshold else "Non-AI Ready")
 
@@ -75,7 +80,8 @@ def generate_validation_summary(
         "KnowledgeBase_Ready": "Avg KB Readiness",
     }
 
-    # Only aggregate columns that actually exist in the DataFrame
+    # Only aggregate columns that actually exist in the DataFrame (excluding AI_Trust_Score from aggregation)
+    # AI_Trust_Score is used for categorization but should still be included in summary
     agg_dict = {}
     rename_dict = {}
     for col_name, display_name in expected_columns.items():
