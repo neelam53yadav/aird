@@ -15,7 +15,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 
 # Copy all source files needed for build
-# Using COPY . . ensures all files are included (lib, app, components, etc.)
+# Copy everything (tsconfig.json, lib/, app/, components/, etc. are all included)
 COPY . .
 
 # Build Next.js

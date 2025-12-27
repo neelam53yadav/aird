@@ -253,6 +253,7 @@ def verify_nextauth_token(token: str) -> Optional[Dict[str, Any]]:
                                     logger.warning(f"Method 2 failed: {str(e2)}")
                                     
                                     # Method 3: Try using secret directly if it's 32 bytes
+                                    e3 = None
                                     if len(secret_bytes) == 32:
                                         try:
                                             logger.info("=" * 60)
@@ -267,7 +268,8 @@ def verify_nextauth_token(token: str) -> Optional[Dict[str, Any]]:
                                             logger.info("✅ SUCCESS: JWE decrypted using Method 3")
                                             token_parts = token.split('.')
                                             num_parts = len(token_parts)
-                                        except Exception as e3:
+                                        except Exception as e3_exc:
+                                            e3 = e3_exc
                                             logger.warning(f"Method 3 failed: {str(e3)}")
                                             last_error = e3
                                     
@@ -320,7 +322,7 @@ def verify_nextauth_token(token: str) -> Optional[Dict[str, Any]]:
                                                 logger.error(f"  1. SHA-256(bytes): {decrypt_error}")
                                                 logger.error(f"  2. SHA-256(string): {e2}")
                                                 if len(secret_bytes) == 32:
-                                                    e3_str = str(e3) if 'e3' in locals() else "N/A"
+                                                    e3_str = str(e3) if e3 is not None else "N/A"
                                                     logger.error(f"  3. Direct 32-byte: {e3_str}")
                                                 logger.error(f"  4. Base64URL decode: {e4}")
                                                 logger.error(f"  5. Base64 decode: {e5}")
