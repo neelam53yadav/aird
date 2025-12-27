@@ -372,17 +372,50 @@ jobs:
           echo "  Airflow: $REBUILD_AIRFLOW"
           echo "  Skip build: $SKIP_BUILD"
 
+      - name: Prepare VM directory
+        id: prepare-vm-dir
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Preparing deployment directory on VM..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          
+          # Try to create /opt/primedata with sudo (if user has sudo access)
+          echo "Attempting to create /opt/primedata with proper permissions..."
+          if ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+            "sudo mkdir -p /opt/primedata/data /opt/primedata/logs && \
+             sudo chown -R ${{ secrets.VM_USERNAME }}:${{ secrets.VM_USERNAME }} /opt/primedata && \
+             sudo chmod -R 755 /opt/primedata" 2>/dev/null; then
+            echo "✅ Successfully created /opt/primedata with sudo"
+            echo "deploy_path=/opt/primedata" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️  Could not create /opt/primedata (may need sudo access)"
+            echo "Using user's home directory instead..."
+            # Use home directory as fallback
+            ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+              "mkdir -p ~/primedata/data ~/primedata/logs"
+            echo "✅ Created ~/primedata directory"
+            echo "deploy_path=~/primedata" >> $GITHUB_OUTPUT
+          fi
+
       - name: Copy files to VM
         run: |
+          DEPLOY_PATH="${{ steps.prepare-vm-dir.outputs.deploy_path }}"
+          echo "Copying files to: ${DEPLOY_PATH}"
           rsync -avz --exclude='.git' --exclude='node_modules' --exclude='venv' \
             -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
-            ./ ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }}:/opt/primedata/
+            ./ ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }}:${DEPLOY_PATH}/
 
       - name: Deploy on VM
         run: |
-          cat > /tmp/deploy_script.sh << 'SCRIPT_EOF'
+          DEPLOY_PATH="${{ steps.prepare-vm-dir.outputs.deploy_path }}"
+          # Expand ~ to full path if needed (in case we used home directory fallback)
+          DEPLOY_PATH_EXPANDED=$(ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} "echo ${DEPLOY_PATH}")
+          
+          cat > /tmp/deploy_script.sh << EOF
           set -e
-          cd /opt/primedata
+          DEPLOY_DIR="${DEPLOY_PATH_EXPANDED}"
+          cd \${DEPLOY_DIR}
           
           # Load environment variables
           if [ -f .env.production ]; then
@@ -434,7 +467,7 @@ jobs:
             alembic upgrade head || echo "Migration failed or already up to date"
           
           docker-compose -f infra/docker-compose.prod.yml ps
-          SCRIPT_EOF
+          EOF
           
           scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
             /tmp/deploy_script.sh \
