@@ -222,10 +222,60 @@ jobs:
 
       - name: Setup SSH
         run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Setting up SSH authentication..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          
+          # Validate required secrets
+          if [ -z "${{ secrets.VM_USERNAME }}" ]; then
+            echo "❌ Error: VM_USERNAME secret is not set in GitHub repository secrets"
+            echo ""
+            echo "Please add VM_USERNAME to your repository secrets:"
+            echo "1. Go to: Settings → Secrets and variables → Actions"
+            echo "2. Click 'New repository secret'"
+            echo "3. Name: VM_USERNAME"
+            echo "4. Value: <your-vm-username> (e.g., 'ubuntu' for Ubuntu VMs)"
+            exit 1
+          fi
+          
+          if [ -z "${{ secrets.VM_SSH_KEY }}" ]; then
+            echo "❌ Error: VM_SSH_KEY secret is not set in GitHub repository secrets"
+            echo ""
+            echo "Please add VM_SSH_KEY to your repository secrets:"
+            echo "1. Go to: Settings → Secrets and variables → Actions"
+            echo "2. Click 'New repository secret'"
+            echo "3. Name: VM_SSH_KEY"
+            echo "4. Value: <your-ssh-private-key-content>"
+            echo ""
+            echo "To generate SSH key pair and add to VM:"
+            echo "  ssh-keygen -t rsa -b 4096 -C 'github-actions' -f ~/.ssh/vm_key"
+            echo "  ssh-copy-id -i ~/.ssh/vm_key.pub ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }}"
+            echo "  # Then copy ~/.ssh/vm_key content as VM_SSH_KEY secret"
+            exit 1
+          fi
+          
           mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          
+          # Write SSH private key
           echo "${{ secrets.VM_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ steps.get-vm-ip.outputs.vm_ip }} >> ~/.ssh/known_hosts
+          
+          # Verify key file was created properly
+          if [ ! -s ~/.ssh/id_rsa ]; then
+            echo "❌ Error: SSH key file is empty or not created properly"
+            exit 1
+          fi
+          
+          # Add VM to known_hosts
+          ssh-keyscan -H ${{ steps.get-vm-ip.outputs.vm_ip }} >> ~/.ssh/known_hosts 2>/dev/null
+          chmod 644 ~/.ssh/known_hosts
+          
+          echo "✅ SSH setup complete"
+          echo "  Username: ${{ secrets.VM_USERNAME }}"
+          echo "  VM IP: ${{ steps.get-vm-ip.outputs.vm_ip }}"
+          echo ""
 
       - name: Detect changed files and determine which services to rebuild
         id: detect-changes
