@@ -93,8 +93,8 @@ jobs:
           cd backend
           pytest tests/unit/ -v --cov=primedata --cov-report=xml --cov-report=term-missing -m "unit and aird"
         env:
-          TEST_DATABASE_URL: sqlite:///:memory:
-          DISABLE_AUTH: true
+          TEST_DATABASE_URL: "sqlite:///:memory:"
+          DISABLE_AUTH: "true"
 
   integration-tests:
     name: Integration Tests

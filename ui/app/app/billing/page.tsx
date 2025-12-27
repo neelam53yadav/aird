@@ -27,7 +27,7 @@ export default function BillingPage() {
       setLoading(true)
       const response = await apiClient.get(`/api/v1/billing/limits?workspace_id=${workspaceId}`)
       console.log('Billing limits response:', response.data)
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Failed to load billing limits:', err)
       setError('Failed to load billing information')
     } finally {
