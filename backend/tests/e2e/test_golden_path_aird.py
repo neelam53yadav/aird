@@ -137,6 +137,7 @@ class TestAirdGoldenPath:
         context = {
             "storage": storage,
             "db": db_session,
+            "raw_files": ["test_doc"],  # Provide raw file list for preprocessing
         }
         
         result = preprocess_stage.execute(context)
@@ -175,6 +176,7 @@ class TestAirdGoldenPath:
         context = {
             "storage": storage,
             "db": db_session,
+            "processed_files": ["test_doc"],  # Provide processed file list for scoring
         }
         
         result = scoring_stage.execute(context)
