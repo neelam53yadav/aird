@@ -40,8 +40,8 @@ export default function AccountPage() {
             },
           })
         })
-        .then(res => res.json())
-        .then(data => {
+        .then((res: Response) => res.json())
+        .then((data: any) => {
           setUser(data)
           // Fetch workspaces
           return fetch("/api/v1/workspaces", {
@@ -53,12 +53,12 @@ export default function AccountPage() {
             },
           })
         })
-        .then(res => res.json())
-        .then(data => {
+        .then((res: Response) => res.json())
+        .then((data: any) => {
           setWorkspaces(data)
           setLoading(false)
         })
-        .catch(error => {
+        .catch((error: unknown) => {
           console.error("Error fetching user data:", error)
           setLoading(false)
         })

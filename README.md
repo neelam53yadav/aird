@@ -1706,6 +1706,29 @@ gcloud iam service-accounts add-iam-policy-binding ${GITHUB_SA_EMAIL} \
 
 This allows the service account to create tokens for itself, which is required for Workload Identity Federation.
 
+**If authentication still fails after adding the role:**
+
+1. **Wait 5-10 minutes** - IAM changes can take time to propagate
+2. **Verify the binding**:
+   ```bash
+   gcloud iam service-accounts get-iam-policy ${GITHUB_SA_EMAIL} \
+     --project=${PROJECT_ID}
+   ```
+3. **Remove and re-add** the binding if needed:
+   ```bash
+   # Remove
+   gcloud iam service-accounts remove-iam-policy-binding ${GITHUB_SA_EMAIL} \
+     --project=${PROJECT_ID} \
+     --role="roles/iam.serviceAccountTokenCreator" \
+     --member="serviceAccount:${GITHUB_SA_EMAIL}"
+   
+   # Re-add
+   gcloud iam service-accounts add-iam-policy-binding ${GITHUB_SA_EMAIL} \
+     --project=${PROJECT_ID} \
+     --role="roles/iam.serviceAccountTokenCreator" \
+     --member="serviceAccount:${GITHUB_SA_EMAIL}"
+   ```
+
 #### **CI Workflow Optimizations**
 
 **Lightweight CI Requirements:**

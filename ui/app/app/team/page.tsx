@@ -65,7 +65,7 @@ export default function TeamPage() {
         }
       ]
       setMembers(mockMembers)
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Failed to load team members:', err)
     } finally {
       setLoading(false)
@@ -88,7 +88,7 @@ export default function TeamPage() {
       setInviteRole('viewer')
       // Reload members after successful invite
       loadTeamMembers()
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Failed to invite member:', err)
     }
   }
@@ -109,7 +109,7 @@ export default function TeamPage() {
       setMembers(members.filter(m => m.id !== memberToDelete.id))
       setShowDeleteModal(false)
       setMemberToDelete(null)
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Failed to remove member:', err)
     }
   }
