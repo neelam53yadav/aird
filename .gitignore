@@ -27,6 +27,7 @@ venv/
 ENV/
 env/
 .env
+pyvenv.cfg
 
 # IDE
 .vscode/
@@ -34,6 +35,9 @@ env/
 *.swp
 *.swo
 *~
+
+# Editor config
+.editorconfig
 
 # OS
 .DS_Store
