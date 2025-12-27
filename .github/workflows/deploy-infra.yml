@@ -69,81 +69,92 @@ jobs:
           echo "Project: ${PROJECT_ID}"
           echo ""
           
-          # Get current roles
-          echo "Current project-level IAM roles:"
+          # Try to get current roles, but don't fail if we can't read the policy
+          echo "Checking project-level IAM roles..."
           CURRENT_ROLES=$(gcloud projects get-iam-policy ${PROJECT_ID} \
             --flatten="bindings[].members" \
             --filter="bindings.members:serviceAccount:${GITHUB_SA}" \
             --format="value(bindings.role)" 2>/dev/null || echo "")
           
           if [ -z "$CURRENT_ROLES" ]; then
-            echo "  ⚠️  Could not retrieve roles (may need permissions to view)"
+            echo "  ⚠️  Could not retrieve roles (may need permissions to view or propagation delay)"
+            echo ""
+            echo "Since we can't verify permissions by reading the IAM policy,"
+            echo "we'll proceed and let Terraform operations fail with clear errors if permissions are missing."
+            echo ""
+            echo "If you just granted permissions, wait 1-2 minutes for propagation."
+            echo "Then re-run this workflow if it fails."
+            echo ""
+            # Don't exit - let Terraform try and fail with clear errors
           else
+            echo "Current roles found:"
             echo "$CURRENT_ROLES" | while read -r role; do
               echo "  ✅ $role"
             done
-          fi
-          
-          echo ""
-          echo "Required roles for Terraform operations:"
-          echo ""
-          
-          # Check each required role
-          MISSING_ROLES=()
-          
-          if echo "$CURRENT_ROLES" | grep -q "roles/iam.serviceAccountAdmin"; then
-            echo "  ✅ roles/iam.serviceAccountAdmin (create service accounts)"
-          else
-            echo "  ❌ roles/iam.serviceAccountAdmin (MISSING - needed to create service accounts)"
-            MISSING_ROLES+=("roles/iam.serviceAccountAdmin")
-          fi
-          
-          if echo "$CURRENT_ROLES" | grep -q "roles/resourcemanager.projectIamAdmin"; then
-            echo "  ✅ roles/resourcemanager.projectIamAdmin (create IAM bindings)"
-          else
-            echo "  ❌ roles/resourcemanager.projectIamAdmin (MISSING - needed to create IAM bindings)"
-            MISSING_ROLES+=("roles/resourcemanager.projectIamAdmin")
-          fi
-          
-          if echo "$CURRENT_ROLES" | grep -q "roles/compute.admin"; then
-            echo "  ✅ roles/compute.admin (create VMs and firewall rules)"
-          else
-            echo "  ❌ roles/compute.admin (MISSING - needed to create VMs and firewall rules)"
-            MISSING_ROLES+=("roles/compute.admin")
-          fi
-          
-          if echo "$CURRENT_ROLES" | grep -q "roles/iam.serviceAccountTokenCreator"; then
-            echo "  ✅ roles/iam.serviceAccountTokenCreator (use service accounts)"
-          else
-            echo "  ⚠️  roles/iam.serviceAccountTokenCreator (may be needed)"
-          fi
-          
-          echo ""
-          
-          # If roles are missing, show instructions
-          if [ ${#MISSING_ROLES[@]} -gt 0 ]; then
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "❌ MISSING REQUIRED PERMISSIONS"
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            
             echo ""
-            echo "The GitHub Actions service account is missing required permissions."
-            echo "Please run these commands in GCP Cloud Shell:"
+            echo "Required roles for Terraform operations:"
             echo ""
-            echo "PROJECT_ID=\"${PROJECT_ID}\""
-            echo "GITHUB_SA=\"${GITHUB_SA}\""
+            
+            # Check each required role
+            MISSING_ROLES=()
+            
+            if echo "$CURRENT_ROLES" | grep -q "roles/iam.serviceAccountAdmin"; then
+              echo "  ✅ roles/iam.serviceAccountAdmin (create service accounts)"
+            else
+              echo "  ❌ roles/iam.serviceAccountAdmin (MISSING - needed to create service accounts)"
+              MISSING_ROLES+=("roles/iam.serviceAccountAdmin")
+            fi
+            
+            if echo "$CURRENT_ROLES" | grep -q "roles/resourcemanager.projectIamAdmin"; then
+              echo "  ✅ roles/resourcemanager.projectIamAdmin (create IAM bindings)"
+            else
+              echo "  ❌ roles/resourcemanager.projectIamAdmin (MISSING - needed to create IAM bindings)"
+              MISSING_ROLES+=("roles/resourcemanager.projectIamAdmin")
+            fi
+            
+            if echo "$CURRENT_ROLES" | grep -q "roles/compute.admin"; then
+              echo "  ✅ roles/compute.admin (create VMs and firewall rules)"
+            else
+              echo "  ❌ roles/compute.admin (MISSING - needed to create VMs and firewall rules)"
+              MISSING_ROLES+=("roles/compute.admin")
+            fi
+            
+            if echo "$CURRENT_ROLES" | grep -q "roles/iam.serviceAccountTokenCreator"; then
+              echo "  ✅ roles/iam.serviceAccountTokenCreator (use service accounts)"
+            else
+              echo "  ⚠️  roles/iam.serviceAccountTokenCreator (may be needed)"
+            fi
+            
             echo ""
-            for role in "${MISSING_ROLES[@]}"; do
-              echo "gcloud projects add-iam-policy-binding \${PROJECT_ID} \\"
-              echo "  --member=\"serviceAccount:\${GITHUB_SA}\" \\"
-              echo "  --role=\"${role}\""
+            
+            # If roles are missing, show instructions but don't fail
+            if [ ${#MISSING_ROLES[@]} -gt 0 ]; then
+              echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+              echo "⚠️  MISSING REQUIRED PERMISSIONS DETECTED"
+              echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
               echo ""
-            done
-            echo "After granting permissions, wait 1-2 minutes for propagation, then re-run this workflow."
-            echo ""
-            exit 1
-          else
-            echo "✅ All required permissions are present!"
-            echo ""
+              echo "The GitHub Actions service account appears to be missing required permissions."
+              echo "Please run these commands in GCP Cloud Shell:"
+              echo ""
+              echo "PROJECT_ID=\"${PROJECT_ID}\""
+              echo "GITHUB_SA=\"${GITHUB_SA}\""
+              echo ""
+              for role in "${MISSING_ROLES[@]}"; do
+                echo "gcloud projects add-iam-policy-binding \${PROJECT_ID} \\"
+                echo "  --member=\"serviceAccount:\${GITHUB_SA}\" \\"
+                echo "  --role=\"${role}\""
+                echo ""
+              done
+              echo "After granting permissions, wait 1-2 minutes for propagation, then re-run this workflow."
+              echo ""
+              echo "⚠️  Continuing anyway - Terraform will fail with clear errors if permissions are missing."
+              echo ""
+              # Don't exit - let Terraform try
+            else
+              echo "✅ All required permissions are present!"
+              echo ""
+            fi
           fi
 
       - name: Set up Cloud SDK
