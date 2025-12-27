@@ -4,7 +4,7 @@ resource "google_service_account" "primedata_sa" {
   account_id   = "primedata-compute-sa-${var.environment}"
   display_name = "PrimeData Compute Service Account (${var.environment})"
   description  = "Service account for PrimeData compute resources"
-  
+
   lifecycle {
     # Prevent accidental deletion
     prevent_destroy = false
@@ -38,7 +38,7 @@ resource "google_project_iam_member" "compute_instance_admin" {
 resource "google_service_account_key" "primedata_sa_key" {
   service_account_id = google_service_account.primedata_sa.name
   public_key_type    = "TYPE_X509_PEM_FILE"
-  
+
   lifecycle {
     # Keys are rotated, so allow replacement
     create_before_destroy = true
