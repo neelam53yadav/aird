@@ -116,6 +116,7 @@ export default function ProductDetailPage() {
     type: 'success' | 'error' | 'warning' | 'info'
     title: string
     message: string
+    details?: string
   } | null>(null)
 
   useEffect(() => {
