@@ -234,6 +234,9 @@ jobs:
           ENVIRONMENT: beta
           VM_NAME: primedata-beta
         run: |
+          # Disable exit on error since we handle errors manually in this step
+          set +e
+          
           SA_EMAIL="primedata-compute-sa-${ENVIRONMENT}@${PROJECT_ID}.iam.gserviceaccount.com"
           
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -357,11 +360,9 @@ jobs:
             echo ""
             
             # Try to import, but don't fail the step if it errors
-            set +e
             terraform import google_project_iam_member.storage_admin "${PROJECT_ID} roles/storage.admin serviceAccount:${SA_EMAIL}" 2>&1 | grep -E "(Import|Error|already)" || echo "  Storage admin binding: will be created if needed"
             terraform import google_project_iam_member.cloudsql_client "${PROJECT_ID} roles/cloudsql.client serviceAccount:${SA_EMAIL}" 2>&1 | grep -E "(Import|Error|already)" || echo "  CloudSQL client binding: will be created if needed"
             terraform import google_project_iam_member.compute_instance_admin "${PROJECT_ID} roles/compute.instanceAdmin.v1 serviceAccount:${SA_EMAIL}" 2>&1 | grep -E "(Import|Error|already)" || echo "  Compute admin binding: will be created if needed"
-            set -e
           else
             echo "🔐 Skipping IAM binding imports (service account doesn't exist yet)"
           fi
@@ -378,6 +379,9 @@ jobs:
           # Refresh state to ensure everything is synced
           echo "Refreshing Terraform state..."
           terraform refresh -no-color 2>&1 | head -20 || echo "Refresh completed (warnings are OK)"
+          
+          # Re-enable exit on error for subsequent steps
+          set -e
 
       - name: Terraform Format Check
         working-directory: infra/terraform
