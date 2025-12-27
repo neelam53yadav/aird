@@ -320,7 +320,8 @@ def verify_nextauth_token(token: str) -> Optional[Dict[str, Any]]:
                                                 logger.error(f"  1. SHA-256(bytes): {decrypt_error}")
                                                 logger.error(f"  2. SHA-256(string): {e2}")
                                                 if len(secret_bytes) == 32:
-                                                    logger.error(f"  3. Direct 32-byte: {e3}")
+                                                    e3_str = str(e3) if 'e3' in locals() else "N/A"
+                                                    logger.error(f"  3. Direct 32-byte: {e3_str}")
                                                 logger.error(f"  4. Base64URL decode: {e4}")
                                                 logger.error(f"  5. Base64 decode: {e5}")
                                                 logger.error("")

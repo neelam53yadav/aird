@@ -20,6 +20,7 @@ from primedata.db.models import Product, ProductStatus, PipelineRun, PipelineRun
 from primedata.api.billing import check_billing_limits
 from primedata.analysis.content_analyzer import content_analyzer, ChunkingConfig
 from primedata.core.settings import get_settings
+import numpy as np
 
 router = APIRouter(prefix="/api/v1/products", tags=["Products"])
 logger = logging.getLogger(__name__)

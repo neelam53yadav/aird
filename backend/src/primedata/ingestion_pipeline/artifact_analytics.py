@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from loguru import logger
 
 from primedata.db.models import PipelineArtifact, ArtifactType, ArtifactStatus
-from primedata.ingestion_pipeline.artifact_registry import get_artifact_lineage
+from primedata.ingestion_pipeline.artifact_registry import get_artifact_lineage, RetentionPolicy
 
 
 def compare_artifacts(

@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from uuid import UUID
 
 from ..db.database import get_db
-from ..db.models import Product, Workspace
+from ..db.models import Product, Workspace, DqViolation
 from ..db.models_enterprise import (
     DataQualityRule, DataQualityRuleAudit, DataQualityRuleSet,
     DataQualityRuleAssignment, DataQualityComplianceReport,
