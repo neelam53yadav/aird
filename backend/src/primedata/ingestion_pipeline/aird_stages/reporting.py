@@ -64,8 +64,18 @@ class ReportingStage(AirdStage):
             config = get_aird_config()
             threshold = config.default_scoring_threshold  # Already 0-100 scale
 
-            # Generate PDF report
-            pdf_bytes = generate_trust_report(metrics, threshold)
+            # Generate PDF report (may raise RuntimeError if matplotlib is not available)
+            try:
+                pdf_bytes = generate_trust_report(metrics, threshold)
+            except RuntimeError as e:
+                if "matplotlib is required" in str(e):
+                    self.logger.warning("matplotlib not available, skipping PDF report generation")
+                    return self._create_result(
+                        status=StageStatus.SKIPPED,
+                        metrics={"reason": "matplotlib_not_available"},
+                        started_at=started_at,
+                    )
+                raise  # Re-raise if it's a different RuntimeError
 
             if not pdf_bytes:
                 return self._create_result(
