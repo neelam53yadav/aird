@@ -12,6 +12,8 @@ eggs/
 .eggs/
 lib/
 lib64/
+# Exception: ui/lib/ contains TypeScript source files needed for frontend build
+!ui/lib/
 parts/
 sdist/
 var/
