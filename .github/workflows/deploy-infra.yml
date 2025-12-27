@@ -193,29 +193,24 @@ jobs:
           gcloud auth list
           
           echo ""
-          echo "Testing service account IAM policy (self-impersonation)..."
+          echo "Testing service account IAM policy (Workload Identity binding)..."
           SA_POLICY=$(gcloud iam service-accounts get-iam-policy ${GITHUB_SA} \
             --project=${{ env.GCP_PROJECT_ID }} \
             --flatten="bindings[].members" \
-            --filter="bindings.role:roles/iam.serviceAccountTokenCreator" \
+            --filter="bindings.role:roles/iam.workloadIdentityUser" \
             --format="value(bindings.members)" 2>/dev/null || echo "")
           
-          if echo "$SA_POLICY" | grep -q "serviceAccount:${GITHUB_SA}"; then
-            echo "✅ Service account can impersonate itself"
-          else
-            echo "❌ Service account CANNOT impersonate itself!"
-            echo "   This is required for Workload Identity Federation."
-            echo "   Run: gcloud iam service-accounts add-iam-policy-binding ${GITHUB_SA} \\"
-            echo "     --role=roles/iam.serviceAccountTokenCreator \\"
-            echo "     --member=serviceAccount:${GITHUB_SA}"
-          fi
-          
-          echo ""
-          echo "Testing Workload Identity binding..."
-          if echo "$SA_POLICY" | grep -q "principalSet.*workloadIdentityPools"; then
+          if echo "$SA_POLICY" | grep -q "workloadIdentityPools"; then
             echo "✅ Workload Identity principal can impersonate service account"
           else
-            echo "⚠️  Workload Identity principal binding not found (may be OK if using different auth)"
+            echo "❌ Workload Identity principal CANNOT impersonate service account!"
+            echo "   This is REQUIRED for Workload Identity Federation."
+            echo ""
+            echo "   The WIF principal needs roles/iam.workloadIdentityUser role on the service account."
+            echo "   Run: gcloud iam service-accounts add-iam-policy-binding ${GITHUB_SA} \\"
+            echo "     --project=${{ env.GCP_PROJECT_ID }} \\"
+            echo "     --role=roles/iam.workloadIdentityUser \\"
+            echo "     --member=\"principalSet://iam.googleapis.com/projects/890841479962/locations/global/workloadIdentityPools/github-pool/attribute.repository/neelam53yadav/aird\""
           fi
           
           echo ""
