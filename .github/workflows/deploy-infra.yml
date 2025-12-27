@@ -1,0 +1,100 @@
+name: Deploy Infrastructure
+
+on:
+  push:
+    branches:
+      - main
+      - db-fixes
+    paths:
+      - 'infra/terraform/**'
+      - '.github/workflows/deploy-infra.yml'
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Terraform action'
+        required: true
+        default: 'plan'
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
+
+env:
+  GCP_PROJECT_ID: project-f3c8a334-a3f2-4f66-a06
+  GCP_REGION: us-central1
+  GCP_ZONE: us-central1-c
+  TF_VERSION: 1.6.0
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/890841479962/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+          service_account: github-actions@project-f3c8a334-a3f2-4f66-a06.iam.gserviceaccount.com
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        working-directory: infra/terraform
+        run: terraform init
+
+      - name: Terraform Format Check
+        working-directory: infra/terraform
+        run: terraform fmt -check
+
+      - name: Terraform Validate
+        working-directory: infra/terraform
+        run: terraform validate
+
+      - name: Terraform Plan
+        id: plan
+        working-directory: infra/terraform
+        run: |
+          # Terraform is idempotent - it will skip resources that already exist
+          # If resources exist, plan will show "no changes" or only show differences
+          terraform plan -out=tfplan -no-color
+        continue-on-error: true
+
+      - name: Terraform Plan Status
+        if: steps.plan.outcome == 'failure'
+        run: |
+          echo "Terraform plan failed. This might be due to:"
+          echo "1. Existing resources with same name (import them or rename)"
+          echo "2. Authentication issues"
+          echo "3. Invalid configuration"
+          exit 1
+
+      - name: Terraform Apply
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
+        working-directory: infra/terraform
+        run: terraform apply -auto-approve tfplan
+
+      - name: Terraform Apply (Auto on main/db-fixes)
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/db-fixes'
+        working-directory: infra/terraform
+        run: terraform apply -auto-approve tfplan
+
+      - name: Terraform Output
+        if: steps.plan.outcome == 'success'
+        working-directory: infra/terraform
+        run: terraform output -json
+
