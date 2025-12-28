@@ -309,11 +309,17 @@ jobs:
           echo "Changed files:"
           echo "$CHANGED_FILES"
           
-          # Check for backend changes
+          # Check for backend changes (including migration files)
           BACKEND_CHANGED=false
           if echo "$CHANGED_FILES" | grep -qE "^backend/(src|Dockerfile|requirements|alembic)"; then
             BACKEND_CHANGED=true
             echo "Backend source files changed"
+          fi
+          
+          # Force backend rebuild if migration files changed (need to rebuild image with new migrations)
+          if echo "$CHANGED_FILES" | grep -qE "^backend/alembic/versions/"; then
+            BACKEND_CHANGED=true
+            echo "Backend migration files changed - forcing rebuild"
           fi
           
           # Check for frontend changes
@@ -467,7 +473,8 @@ jobs:
           fi
 
       - name: Build Docker images on VM
-        if: steps.detect-changes.outputs.skip_build != 'true' && steps.check-images.outputs.images_exist != 'true'
+        # Always rebuild if backend changed (even if images exist) to ensure migrations are updated
+        if: steps.detect-changes.outputs.skip_build != 'true' && (steps.check-images.outputs.images_exist != 'true' || steps.detect-changes.outputs.rebuild_backend == 'true')
         run: |
           DEPLOY_PATH="${{ steps.prepare-vm-dir.outputs.deploy_path }}"
           DEPLOY_PATH_EXPANDED=$(ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} "echo ${DEPLOY_PATH}")
