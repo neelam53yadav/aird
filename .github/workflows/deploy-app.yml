@@ -280,18 +280,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Cleanup Docker resources before build
-        if: steps.detect-changes.outputs.skip_build != 'true'
-        run: |
-          echo "Cleaning up Docker resources before build to free disk space..."
-          # Remove all unused containers, networks, images (both dangling and unreferenced)
-          docker system prune -af --volumes || true
-          # Clean build cache
-          docker builder prune -af || true
-          # Check disk space
-          df -h
-          echo "✅ Pre-build cleanup complete"
-
       - name: Detect changed files and determine which services to rebuild
         id: detect-changes
         run: |
@@ -386,6 +374,27 @@ jobs:
           echo "  Frontend: $REBUILD_FRONTEND"
           echo "  Airflow: $REBUILD_AIRFLOW"
           echo "  Skip build: $SKIP_BUILD"
+
+      - name: Cleanup Docker resources before build
+        if: steps.detect-changes.outputs.skip_build != 'true'
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Cleaning up Docker resources before build to free disk space..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          echo "Disk space before cleanup:"
+          df -h
+          echo ""
+          echo "Cleaning up all unused Docker resources..."
+          # Remove all unused containers, networks, images (both dangling and unreferenced)
+          docker system prune -af --volumes || true
+          # Clean build cache
+          docker builder prune -af || true
+          echo ""
+          echo "Disk space after cleanup:"
+          df -h
+          echo ""
+          echo "✅ Pre-build cleanup complete"
 
       - name: Prepare VM directory
         id: prepare-vm-dir
