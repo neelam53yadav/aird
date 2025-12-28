@@ -130,9 +130,9 @@ export function PlaybookSelector({
               </option>
             ))}
           </optgroup>
-          {playbooks.filter(pb => pb.path?.startsWith('custom:')).length > 0 && (
+          {playbooks.filter((pb: any) => pb.path?.startsWith('custom:')).length > 0 && (
             <optgroup label="Custom Playbooks">
-              {playbooks.filter(pb => pb.path?.startsWith('custom:')).map((playbook) => (
+              {playbooks.filter((pb: any) => pb.path?.startsWith('custom:')).map((playbook) => (
                 <option key={playbook.id} value={playbook.id}>
                   {playbook.id} (Custom)
                 </option>
