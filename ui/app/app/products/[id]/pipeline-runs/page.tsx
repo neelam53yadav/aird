@@ -28,7 +28,7 @@ export default function PipelineRunsPage() {
     setError(null)
     
     try {
-      const response = await apiClient.getPipelineRuns(productId, 50, true)
+      const response = await apiClient.getPipelineRuns(productId, 50)
       
       if (response.error) {
         setError(response.error)
