@@ -144,6 +144,29 @@ export default function PipelineRunsPage() {
     }
   }
 
+  const handleCancelRun = async (runId: string) => {
+    try {
+      const response = await apiClient.cancelPipelineRun(runId)
+      if (response.error) {
+        addToast({
+          type: 'error',
+          message: `Failed to cancel run: ${response.error}`,
+        })
+      } else {
+        addToast({
+          type: 'success',
+          message: 'Pipeline run cancelled successfully',
+        })
+        loadPipelineRuns()
+      }
+    } catch (err) {
+      addToast({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Failed to cancel run',
+      })
+    }
+  }
+
   const getStatusIcon = (status: PipelineRun['status']) => {
     switch (status) {
       case 'queued':
