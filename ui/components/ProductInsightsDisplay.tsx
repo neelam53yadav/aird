@@ -124,7 +124,7 @@ export function ProductInsightsDisplay({ productId, showTitle = true }: ProductI
               <div className="mt-2">
                 <p className="text-sm font-medium mb-1">Violations:</p>
                 <ul className="list-disc list-inside text-sm space-y-1">
-                  {policy.violations.map((violation, idx) => (
+                  {(policy.violations || []).map((violation: string, idx: number) => (
                     <li key={idx}>{violation}</li>
                   ))}
                 </ul>
@@ -134,7 +134,7 @@ export function ProductInsightsDisplay({ productId, showTitle = true }: ProductI
               <div className="mt-2">
                 <p className="text-sm font-medium mb-1">Warnings:</p>
                 <ul className="list-disc list-inside text-sm space-y-1">
-                  {policy.warnings.map((warning, idx) => (
+                  {(policy.warnings || []).map((warning: string, idx: number) => (
                     <li key={idx}>{warning}</li>
                   ))}
                 </ul>
