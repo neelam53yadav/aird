@@ -373,9 +373,9 @@ export default function PipelineRunsPage() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center gap-2">
-                            {getStatusIcon(run.status)}
-                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(run.status)}`}>
-                              {run.status.replace('_', ' ')}
+                            {getStatusIcon(run.status || 'unknown')}
+                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(run.status || 'unknown')}`}>
+                              {(run.status || 'unknown').replace(/_/g, ' ')}
                             </span>
                           </div>
                         </td>
