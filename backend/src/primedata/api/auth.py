@@ -87,11 +87,8 @@ async def signup(request: SignupRequest, db: Session = Depends(get_db)):
     # Check if user already exists
     existing_user = db.query(User).filter(User.email == request.email).first()
     if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User with this email already exists"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User with this email already exists")
+
     # Create new user
     password_hash = hash_password(request.password)
     user = User(
@@ -104,31 +101,22 @@ async def signup(request: SignupRequest, db: Session = Depends(get_db)):
     db.add(user)
     db.commit()
     db.refresh(user)
-    
+
     # Create default workspace
     workspace = Workspace(name=f"{user.name}'s Workspace")
     db.add(workspace)
     db.commit()
     db.refresh(workspace)
-    
+
     # Add user as owner
-    membership = WorkspaceMember(
-        workspace_id=workspace.id,
-        user_id=user.id,
-        role=WorkspaceRole.OWNER
-    )
+    membership = WorkspaceMember(workspace_id=workspace.id, user_id=user.id, role=WorkspaceRole.OWNER)
     db.add(membership)
     db.commit()
-    
+
     # Sign JWT token
-    payload = {
-        "sub": str(user.id),
-        "email": user.email,
-        "roles": user.roles,
-        "workspaces": [str(workspace.id)]
-    }
+    payload = {"sub": str(user.id), "email": user.email, "roles": user.roles, "workspaces": [str(workspace.id)]}
     access_token = sign_jwt(payload, exp_s=3600)
-    
+
     return LoginResponse(
         access_token=access_token,
         user={
@@ -150,42 +138,27 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
     # Find user by email
     user = db.query(User).filter(User.email == request.email).first()
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
+
     # Verify password
     if not user.password_hash or not verify_password(request.password, user.password_hash):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
+
     # Check if user is active
     if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="User account is inactive"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User account is inactive")
+
     # Get workspace memberships
-    workspace_memberships = db.query(WorkspaceMember).filter(
-        WorkspaceMember.user_id == user.id
-    ).all()
-    
+    workspace_memberships = db.query(WorkspaceMember).filter(WorkspaceMember.user_id == user.id).all()
+
     if not workspace_memberships:
         # Create default workspace if none exists
         workspace = Workspace(name=f"{user.name}'s Workspace")
         db.add(workspace)
         db.commit()
         db.refresh(workspace)
-        
-        membership = WorkspaceMember(
-            workspace_id=workspace.id,
-            user_id=user.id,
-            role=WorkspaceRole.OWNER
-        )
+
+        membership = WorkspaceMember(workspace_id=workspace.id, user_id=user.id, role=WorkspaceRole.OWNER)
         db.add(membership)
         db.commit()
         default_workspace_id = str(workspace.id)
@@ -193,16 +166,11 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
     else:
         default_workspace_id = str(workspace_memberships[0].workspace_id)
         workspace_ids = [str(m.workspace_id) for m in workspace_memberships]
-    
+
     # Sign JWT token
-    payload = {
-        "sub": str(user.id),
-        "email": user.email,
-        "roles": user.roles,
-        "workspaces": workspace_ids
-    }
+    payload = {"sub": str(user.id), "email": user.email, "roles": user.roles, "workspaces": workspace_ids}
     access_token = sign_jwt(payload, exp_s=3600)
-    
+
     return LoginResponse(
         access_token=access_token,
         user={
