@@ -52,6 +52,22 @@ export type HealthCheckResponse = {
   [key: string]: any
 }
 
+export type ACL = {
+  id?: string
+  name?: string
+  description?: string
+  product_id?: string
+  user_id?: string
+  access_type?: string
+  index_scope?: string
+  doc_scope?: string
+  field_scope?: string
+  rules?: Array<Record<string, any>>
+  created_at?: string
+  updated_at?: string
+  [key: string]: any
+}
+
 export type PipelineRun = {
   id?: string
   status?: string
