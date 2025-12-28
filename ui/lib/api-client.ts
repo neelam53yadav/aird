@@ -215,6 +215,11 @@ class ApiClient {
     }
   }
 
+  // Health Check API
+  async getHealthCheck(): Promise<ApiResponse> {
+    return this.get('/api/v1/health')
+  }
+
   // Products API
   async getProducts(): Promise<ApiResponse> {
     return this.get('/api/v1/products')
