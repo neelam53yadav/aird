@@ -280,6 +280,18 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Cleanup Docker resources before build
+        if: steps.detect-changes.outputs.skip_build != 'true'
+        run: |
+          echo "Cleaning up Docker resources before build to free disk space..."
+          # Remove all unused containers, networks, images (both dangling and unreferenced)
+          docker system prune -af --volumes || true
+          # Clean build cache
+          docker builder prune -af || true
+          # Check disk space
+          df -h
+          echo "✅ Pre-build cleanup complete"
+
       - name: Detect changed files and determine which services to rebuild
         id: detect-changes
         run: |
@@ -424,21 +436,27 @@ jobs:
           # Build backend if needed
           if [ "$REBUILD_BACKEND" = "true" ]; then
             echo "Building backend image..."
-            docker build -t infra-backend:latest -t infra-backend:${IMAGE_TAG} -f backend/Dockerfile backend/
+            DOCKER_BUILDKIT=1 docker build -t infra-backend:latest -t infra-backend:${IMAGE_TAG} -f backend/Dockerfile backend/
+            # Clean up build cache after each build
+            docker builder prune -f || true
           fi
           
           # Build frontend if needed
           if [ "$REBUILD_FRONTEND" = "true" ]; then
             echo "Building frontend image..."
-            docker build -t infra-frontend:latest -t infra-frontend:${IMAGE_TAG} -f ui/Dockerfile ui/
+            DOCKER_BUILDKIT=1 docker build -t infra-frontend:latest -t infra-frontend:${IMAGE_TAG} -f ui/Dockerfile ui/
+            # Clean up build cache after each build
+            docker builder prune -f || true
           fi
           
           # Build Airflow if needed
           if [ "$REBUILD_AIRFLOW" = "true" ]; then
             echo "Building Airflow images..."
-            docker build -t infra-airflow-webserver:latest -t infra-airflow-webserver:${IMAGE_TAG} -f infra/airflow/Dockerfile infra/airflow/
+            DOCKER_BUILDKIT=1 docker build -t infra-airflow-webserver:latest -t infra-airflow-webserver:${IMAGE_TAG} -f infra/airflow/Dockerfile infra/airflow/
             docker tag infra-airflow-webserver:latest infra-airflow-scheduler:latest
             docker tag infra-airflow-webserver:${IMAGE_TAG} infra-airflow-scheduler:${IMAGE_TAG}
+            # Clean up build cache after each build
+            docker builder prune -f || true
           fi
           
           # Save all built images to tar file (only save images that exist)
@@ -464,13 +482,15 @@ jobs:
             echo "images_built=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Cleanup Docker build cache
+      - name: Cleanup Docker build cache after build
         if: steps.detect-changes.outputs.skip_build != 'true'
         run: |
-          echo "Cleaning up Docker build cache to free disk space..."
-          docker builder prune -af --filter "until=24h" || true
-          docker image prune -af --filter "until=24h" || true
-          echo "✅ Docker cache cleaned"
+          echo "Cleaning up Docker build cache after build to free disk space..."
+          # Remove build cache to free space
+          docker builder prune -af || true
+          # Check disk space
+          df -h
+          echo "✅ Post-build cleanup complete"
 
       - name: Copy files to VM
         run: |
