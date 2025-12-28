@@ -170,11 +170,13 @@ export async function getEmbeddingDimension(modelName: string): Promise<number |
   try {
     const models = await fetchEmbeddingModels(false)
     const model = models.find(m => m.id === modelName)
-    return model?.dimension
+    if (model) return model.dimension
   } catch (error) {
     console.error('Error fetching embedding dimension:', error)
-    return fallbackModel?.dimension || 384
   }
+  
+  // Return undefined if model not found anywhere
+  return undefined
 }
 
 /**
