@@ -443,7 +443,7 @@ export function AITrustScoreDisplay({ productId, showTitle = true }: AITrustScor
             <div className="mb-4">
               <p className="text-sm font-medium text-gray-700 mb-2">General Suggestions:</p>
               <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
-                {optimizer.suggestions.map((suggestion, idx) => (
+                {(optimizer.suggestions || []).map((suggestion: string, idx: number) => (
                   <li key={idx}>{suggestion}</li>
                 ))}
               </ul>
