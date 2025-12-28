@@ -175,7 +175,7 @@ export default function SystemHealthPage() {
               <div
                 key={serviceName}
                 className={`bg-white rounded-lg shadow-sm border p-6 ${
-                  serviceStatus.status === 'healthy'
+                  (serviceStatus as any).status === 'healthy'
                     ? 'border-green-200'
                     : 'border-red-200'
                 }`}
@@ -183,7 +183,7 @@ export default function SystemHealthPage() {
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-3">
                     <div className={`p-2 rounded-lg ${
-                      serviceStatus.status === 'healthy'
+                      (serviceStatus as any).status === 'healthy'
                         ? 'bg-green-100 text-green-600'
                         : 'bg-red-100 text-red-600'
                     }`}>
@@ -196,30 +196,30 @@ export default function SystemHealthPage() {
                       <p className="text-xs text-gray-500 mt-0.5">{serviceName}</p>
                     </div>
                   </div>
-                  {serviceStatus.status === 'healthy' ? (
+                  {(serviceStatus as any).status === 'healthy' ? (
                     <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
                   ) : (
                     <XCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
                   )}
                 </div>
                 <div className={`mt-3 p-3 rounded-lg ${
-                  serviceStatus.status === 'healthy'
+                  (serviceStatus as any).status === 'healthy'
                     ? 'bg-green-50'
                     : 'bg-red-50'
                 }`}>
                   <p className={`text-sm font-medium ${
-                    serviceStatus.status === 'healthy'
+                    (serviceStatus as any).status === 'healthy'
                       ? 'text-green-800'
                       : 'text-red-800'
                   }`}>
-                    {serviceStatus.status === 'healthy' ? 'Operational' : 'Unavailable'}
+                    {(serviceStatus as any).status === 'healthy' ? 'Operational' : 'Unavailable'}
                   </p>
                   <p className={`text-xs mt-1 ${
-                    serviceStatus.status === 'healthy'
+                    (serviceStatus as any).status === 'healthy'
                       ? 'text-green-700'
                       : 'text-red-700'
                   }`}>
-                    {serviceStatus.message}
+                    {(serviceStatus as any).message}
                   </p>
                 </div>
               </div>
