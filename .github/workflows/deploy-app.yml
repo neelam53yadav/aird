@@ -407,6 +407,33 @@ jobs:
             -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
             ./ ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }}:${DEPLOY_PATH}/
 
+      - name: Verify Docker on VM
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Verifying Docker installation on VM..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          
+          # Check if Docker is installed and accessible
+          if ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} "command -v docker" > /dev/null 2>&1; then
+            echo "✅ Docker is installed"
+            ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} "docker --version"
+          else
+            echo "❌ Docker not found. Attempting to install Docker..."
+            ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+              "curl -fsSL https://get.docker.com -o get-docker.sh && sudo sh get-docker.sh && rm get-docker.sh && sudo usermod -aG docker $USER || true"
+            echo "✅ Docker installation initiated"
+          fi
+          
+          # Check if user needs to be in docker group (might require re-login, but try current session)
+          echo "Checking Docker access..."
+          if ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} "docker ps" > /dev/null 2>&1; then
+            echo "✅ Docker is accessible"
+          else
+            echo "⚠️  Docker may require sudo or user group membership. Will use sudo if needed."
+          fi
+          echo ""
+
       - name: Build Docker images on VM
         if: steps.detect-changes.outputs.skip_build != 'true'
         run: |
@@ -430,10 +457,17 @@ jobs:
           REBUILD_FRONTEND="${{ steps.detect-changes.outputs.rebuild_frontend }}"
           REBUILD_AIRFLOW="${{ steps.detect-changes.outputs.rebuild_airflow }}"
           
+          # Determine if we need sudo for docker commands
+          DOCKER_CMD="docker"
+          if ! ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} "docker ps" > /dev/null 2>&1; then
+            DOCKER_CMD="sudo docker"
+            echo "Using sudo for Docker commands"
+          fi
+          
           # Cleanup Docker resources on VM before building
           echo "Cleaning up Docker resources on VM before building..."
           ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
-            "docker system prune -f || true && docker builder prune -af || true"
+            "${DOCKER_CMD} system prune -f || true && ${DOCKER_CMD} builder prune -af || true"
           echo ""
           
           # Build backend if needed
@@ -441,7 +475,7 @@ jobs:
             echo "Building backend image on VM..."
             ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
               "cd ${DEPLOY_PATH_EXPANDED} && \
-               docker build -t infra-backend:latest -t infra-backend:${IMAGE_TAG} -f backend/Dockerfile backend/"
+               ${DOCKER_CMD} build -t infra-backend:latest -t infra-backend:${IMAGE_TAG} -f backend/Dockerfile backend/"
             echo "✅ Backend image built"
           fi
           
@@ -450,7 +484,7 @@ jobs:
             echo "Building frontend image on VM..."
             ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
               "cd ${DEPLOY_PATH_EXPANDED} && \
-               docker build -t infra-frontend:latest -t infra-frontend:${IMAGE_TAG} -f ui/Dockerfile ui/"
+               ${DOCKER_CMD} build -t infra-frontend:latest -t infra-frontend:${IMAGE_TAG} -f ui/Dockerfile ui/"
             echo "✅ Frontend image built"
           fi
           
@@ -459,9 +493,9 @@ jobs:
             echo "Building Airflow images on VM..."
             ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
               "cd ${DEPLOY_PATH_EXPANDED} && \
-               docker build -t infra-airflow-webserver:latest -t infra-airflow-webserver:${IMAGE_TAG} -f infra/airflow/Dockerfile infra/airflow/ && \
-               docker tag infra-airflow-webserver:latest infra-airflow-scheduler:latest && \
-               docker tag infra-airflow-webserver:${IMAGE_TAG} infra-airflow-scheduler:${IMAGE_TAG}"
+               ${DOCKER_CMD} build -t infra-airflow-webserver:latest -t infra-airflow-webserver:${IMAGE_TAG} -f infra/airflow/Dockerfile infra/airflow/ && \
+               ${DOCKER_CMD} tag infra-airflow-webserver:latest infra-airflow-scheduler:latest && \
+               ${DOCKER_CMD} tag infra-airflow-webserver:${IMAGE_TAG} infra-airflow-scheduler:${IMAGE_TAG}"
             echo "✅ Airflow images built"
           fi
           
@@ -469,7 +503,7 @@ jobs:
           echo ""
           echo "Cleaning up old Docker images on VM..."
           ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
-            "docker image prune -f || true"
+            "${DOCKER_CMD} image prune -f || true"
           echo "✅ Image cleanup complete"
 
       - name: Deploy on VM
@@ -488,20 +522,29 @@ jobs:
             export $(cat .env.production | grep -v '^#' | xargs)
           fi
           
+          # Determine Docker command (with or without sudo)
+          if docker ps > /dev/null 2>&1; then
+            DOCKER_CMD="docker"
+            DOCKER_COMPOSE_CMD="docker-compose"
+          else
+            DOCKER_CMD="sudo docker"
+            DOCKER_COMPOSE_CMD="sudo docker-compose"
+          fi
+          
           # Ensure Docker network exists (idempotent)
-          docker network create primedata-network 2>/dev/null || echo "Network already exists"
+          ${DOCKER_CMD} network create primedata-network 2>/dev/null || echo "Network already exists"
           
           # Images are already built on this VM
           # Just start services using the built images
           echo "Starting services with Docker images built on VM..."
-          docker-compose -f infra/docker-compose.prod.yml up -d --remove-orphans
+          ${DOCKER_COMPOSE_CMD} -f infra/docker-compose.prod.yml up -d --remove-orphans
           
           sleep 10
           
-          docker-compose -f infra/docker-compose.prod.yml exec -T backend \
+          ${DOCKER_COMPOSE_CMD} -f infra/docker-compose.prod.yml exec -T backend \
             alembic upgrade head || echo "Migration failed or already up to date"
           
-          docker-compose -f infra/docker-compose.prod.yml ps
+          ${DOCKER_COMPOSE_CMD} -f infra/docker-compose.prod.yml ps
           EOF
           
           scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
