@@ -566,6 +566,43 @@ class ApiClient {
   async deleteACLs(params: { acl_id: string }): Promise<ApiResponse> {
     return this.delete(`/api/v1/acls/${params.acl_id}`)
   }
+
+  // Cost Estimation API
+  async estimateCost(file: File, playbookId?: string): Promise<ApiResponse> {
+    const formData = new FormData()
+    formData.append('file', file)
+    if (playbookId) {
+      formData.append('playbook_id', playbookId)
+    }
+    
+    // Use fetch directly since we need FormData
+    try {
+      const url = `${this.baseUrl}/api/v1/cost/estimate`
+      const response = await fetch(url, {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+      })
+      
+      const status = response.status
+      if (!response.ok) {
+        const errorText = await response.text()
+        return {
+          error: `Request failed: ${errorText}`,
+          status,
+        }
+      }
+      
+      const data = await response.json()
+      return { data, status }
+    } catch (error) {
+      console.error('API request failed:', error)
+      return {
+        error: error instanceof Error ? error.message : 'Network error',
+        status: 0,
+      }
+    }
+  }
 }
 
 // Export singleton instance
