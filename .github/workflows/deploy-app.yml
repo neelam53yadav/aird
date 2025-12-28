@@ -10,6 +10,7 @@ on:
       - 'ui/**'
       - 'infra/docker-compose.prod.yml'
       - 'infra/airflow/**'
+      - '.github/workflows/deploy-app.yml'
   workflow_dispatch:
 
 env:
