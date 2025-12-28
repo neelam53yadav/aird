@@ -503,6 +503,15 @@ class ApiClient {
   async improveAIReadiness(productId: string, config: Record<string, any>): Promise<ApiResponse> {
     return this.post(`/api/v1/products/${productId}/improve-ai-readiness`, config)
   }
+
+  // MLflow Metrics API (deprecated/disabled but kept for compatibility)
+  async getMLflowMetricsForVersion(productId: string, version: number): Promise<ApiResponse> {
+    // MLflow integration is disabled, return empty response
+    return Promise.resolve({
+      data: null,
+      error: 'MLflow integration is disabled'
+    })
+  }
 }
 
 // Export singleton instance
