@@ -521,9 +521,12 @@ jobs:
           # Build frontend if needed
           if [ "$REBUILD_FRONTEND" = "true" ]; then
             echo "Building frontend image on VM..."
-            ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+            # Get VM IP to construct API URL for build args
+            VM_IP="${{ steps.get-vm-ip.outputs.vm_ip }}"
+            API_URL="http://${VM_IP}:8000"
+            ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${VM_IP} \
               "cd ${DEPLOY_PATH_EXPANDED} && \
-               ${DOCKER_CMD} build -t infra-frontend:latest -t infra-frontend:${IMAGE_TAG} -f ui/Dockerfile ui/"
+               ${DOCKER_CMD} build --build-arg NEXT_PUBLIC_API_URL=\"${API_URL}\" --build-arg NEXT_PUBLIC_API_BASE=\"${API_URL}\" -t infra-frontend:latest -t infra-frontend:${IMAGE_TAG} -f ui/Dockerfile ui/"
             echo "✅ Frontend image built"
           fi
           
