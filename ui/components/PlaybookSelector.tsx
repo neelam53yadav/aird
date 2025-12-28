@@ -124,7 +124,7 @@ export function PlaybookSelector({
         >
           <option value="">None (Auto-detect)</option>
           <optgroup label="Built-in Playbooks">
-            {playbooks.filter(pb => !pb.path?.startsWith('custom:')).map((playbook) => (
+            {playbooks.filter((pb: any) => !pb.path?.startsWith('custom:')).map((playbook) => (
               <option key={playbook.id} value={playbook.id}>
                 {playbook.id}
               </option>
