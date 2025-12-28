@@ -102,7 +102,7 @@ async function fetchEmbeddingModels(useCache: boolean = true): Promise<Embedding
     embeddingModelsCache = response.data.models || []
     embeddingModelsCacheTime = Date.now()
     
-    return embeddingModelsCache
+    return embeddingModelsCache || []
   } catch (error) {
     console.error('Error fetching embedding models:', error)
     // Return fallback models on error
