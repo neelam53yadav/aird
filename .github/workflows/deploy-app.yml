@@ -277,9 +277,6 @@ jobs:
           echo "  VM IP: ${{ steps.get-vm-ip.outputs.vm_ip }}"
           echo ""
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
       - name: Detect changed files and determine which services to rebuild
         id: detect-changes
         run: |
