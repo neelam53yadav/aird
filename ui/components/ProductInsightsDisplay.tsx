@@ -187,7 +187,7 @@ export function ProductInsightsDisplay({ productId, showTitle = true }: ProductI
             <div className="mb-4">
               <p className="text-sm font-medium text-gray-700 mb-2">Recommendations:</p>
               <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
-                {optimizer.suggestions.map((suggestion, idx) => (
+                {(optimizer.suggestions || []).map((suggestion: string, idx: number) => (
                   <li key={idx}>{suggestion}</li>
                 ))}
               </ul>
@@ -197,7 +197,7 @@ export function ProductInsightsDisplay({ productId, showTitle = true }: ProductI
             <div>
               <p className="text-sm font-medium text-gray-700 mb-2">Playbook Recommendations:</p>
               <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
-                {optimizer.playbook_recommendations.map((rec, idx) => (
+                {(optimizer.playbook_recommendations || []).map((rec: string, idx: number) => (
                   <li key={idx}>{rec}</li>
                 ))}
               </ul>
