@@ -537,6 +537,31 @@ class ApiClient {
       error: 'MLflow integration is disabled'
     })
   }
+
+  // ACL API
+  async listACLs(params: { product_id?: string }): Promise<ApiResponse> {
+    const queryParams = new URLSearchParams()
+    if (params.product_id) {
+      queryParams.append('product_id', params.product_id)
+    }
+    const queryString = queryParams.toString()
+    return this.get(`/api/v1/acls${queryString ? `?${queryString}` : ''}`)
+  }
+
+  async createACL(data: {
+    product_id: string
+    user_id: string
+    access_type: string
+    index_scope?: string
+    doc_scope?: string
+    field_scope?: string
+  }): Promise<ApiResponse> {
+    return this.post('/api/v1/acls', data)
+  }
+
+  async deleteACL(aclId: string): Promise<ApiResponse> {
+    return this.delete(`/api/v1/acls/${aclId}`)
+  }
 }
 
 // Export singleton instance
