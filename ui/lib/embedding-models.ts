@@ -173,7 +173,7 @@ export async function getEmbeddingDimension(modelName: string): Promise<number |
     return model?.dimension
   } catch (error) {
     console.error('Error fetching embedding dimension:', error)
-    return fallbackModel?.dimension
+    return fallbackModel?.dimension || 384
   }
 }
 
