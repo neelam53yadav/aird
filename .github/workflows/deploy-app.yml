@@ -434,8 +434,40 @@ jobs:
           fi
           echo ""
 
+      - name: Check if Docker images exist on VM
+        id: check-images
+        run: |
+          DEPLOY_PATH="${{ steps.prepare-vm-dir.outputs.deploy_path }}"
+          DEPLOY_PATH_EXPANDED=$(ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} "echo ${DEPLOY_PATH}")
+          
+          # Determine Docker command (with or without sudo)
+          if ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} "docker ps" > /dev/null 2>&1; then
+            DOCKER_CMD="docker"
+          else
+            DOCKER_CMD="sudo docker"
+          fi
+          
+          # Check if images exist
+          IMAGES_EXIST=true
+          if ! ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} "${DOCKER_CMD} image inspect infra-backend:latest" > /dev/null 2>&1; then
+            IMAGES_EXIST=false
+          fi
+          if ! ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} "${DOCKER_CMD} image inspect infra-frontend:latest" > /dev/null 2>&1; then
+            IMAGES_EXIST=false
+          fi
+          if ! ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} "${DOCKER_CMD} image inspect infra-airflow-webserver:latest" > /dev/null 2>&1; then
+            IMAGES_EXIST=false
+          fi
+          
+          echo "images_exist=${IMAGES_EXIST}" >> $GITHUB_OUTPUT
+          if [ "$IMAGES_EXIST" = "true" ]; then
+            echo "✅ Docker images already exist on VM, will skip building"
+          else
+            echo "⚠️  Docker images not found on VM, will build them"
+          fi
+
       - name: Build Docker images on VM
-        if: steps.detect-changes.outputs.skip_build != 'true'
+        if: steps.detect-changes.outputs.skip_build != 'true' && steps.check-images.outputs.images_exist != 'true'
         run: |
           DEPLOY_PATH="${{ steps.prepare-vm-dir.outputs.deploy_path }}"
           DEPLOY_PATH_EXPANDED=$(ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} "echo ${DEPLOY_PATH}")
@@ -517,18 +549,30 @@ jobs:
           DEPLOY_DIR="${DEPLOY_PATH_EXPANDED}"
           cd \${DEPLOY_DIR}
           
-          # Load environment variables
-          if [ -f .env.production ]; then
+          # Load environment variables (use .env file, Docker Compose auto-loads it)
+          if [ -f .env ]; then
+            export $(cat .env | grep -v '^#' | xargs)
+          elif [ -f .env.production ]; then
             export $(cat .env.production | grep -v '^#' | xargs)
           fi
           
           # Determine Docker command (with or without sudo)
           if docker ps > /dev/null 2>&1; then
             DOCKER_CMD="docker"
-            DOCKER_COMPOSE_CMD="docker-compose"
+            # Check for docker compose plugin first, then fallback to docker-compose
+            if docker compose version > /dev/null 2>&1; then
+              DOCKER_COMPOSE_CMD="docker compose"
+            else
+              DOCKER_COMPOSE_CMD="docker-compose"
+            fi
           else
             DOCKER_CMD="sudo docker"
-            DOCKER_COMPOSE_CMD="sudo docker-compose"
+            # Check for docker compose plugin first, then fallback to docker-compose
+            if sudo docker compose version > /dev/null 2>&1; then
+              DOCKER_COMPOSE_CMD="sudo docker compose"
+            else
+              DOCKER_COMPOSE_CMD="sudo docker-compose"
+            fi
           fi
           
           # Ensure Docker network exists (idempotent)
