@@ -120,7 +120,7 @@ export default function PipelineRunsPage() {
   const handleSync = async () => {
     setSyncing(true)
     try {
-      const response = await apiClient.syncPipelineRuns()
+      const response = await apiClient.syncPipelineRuns(productId)
       
       if (response.error) {
         addToast({
