@@ -547,48 +547,46 @@ jobs:
           cat > /tmp/deploy_script.sh << EOF
           set -e
           DEPLOY_DIR="${DEPLOY_PATH_EXPANDED}"
-          cd \${DEPLOY_DIR}
+          cd "\${DEPLOY_DIR}"
           
-          # Load environment variables (use .env file, Docker Compose auto-loads it)
-          if [ -f .env ]; then
-            export $(cat .env | grep -v '^#' | xargs)
-          elif [ -f .env.production ]; then
-            export $(cat .env.production | grep -v '^#' | xargs)
-          fi
+          # Note: Docker Compose automatically loads .env file from the current directory
+          # No need to manually export environment variables
           
           # Determine Docker command (with or without sudo)
           if docker ps > /dev/null 2>&1; then
             DOCKER_CMD="docker"
-            # Check for docker compose plugin first, then fallback to docker-compose
-            if docker compose version > /dev/null 2>&1; then
-              DOCKER_COMPOSE_CMD="docker compose"
-            else
-              DOCKER_COMPOSE_CMD="docker-compose"
-            fi
+            USE_SUDO=false
           else
             DOCKER_CMD="sudo docker"
-            # Check for docker compose plugin first, then fallback to docker-compose
-            if sudo docker compose version > /dev/null 2>&1; then
-              DOCKER_COMPOSE_CMD="sudo docker compose"
-            else
-              DOCKER_COMPOSE_CMD="sudo docker-compose"
-            fi
+            USE_SUDO=true
+          fi
+          
+          # Determine Docker Compose command (check for plugin first, then standalone)
+          # Use sh -c to properly handle multi-word commands
+          if \${DOCKER_CMD} compose version > /dev/null 2>&1; then
+            DOCKER_COMPOSE_CMD="\${DOCKER_CMD} compose"
+          elif command -v docker-compose > /dev/null 2>&1; then
+            DOCKER_COMPOSE_CMD="docker-compose"
+          elif [ "\${USE_SUDO}" = "true" ] && sudo command -v docker-compose > /dev/null 2>&1; then
+            DOCKER_COMPOSE_CMD="sudo docker-compose"
+          else
+            echo "Error: docker compose or docker-compose not found"
+            exit 1
           fi
           
           # Ensure Docker network exists (idempotent)
-          ${DOCKER_CMD} network create primedata-network 2>/dev/null || echo "Network already exists"
+          \${DOCKER_CMD} network create primedata-network 2>/dev/null || echo "Network already exists"
           
           # Images are already built on this VM
           # Just start services using the built images
           echo "Starting services with Docker images built on VM..."
-          ${DOCKER_COMPOSE_CMD} -f infra/docker-compose.prod.yml up -d --remove-orphans
+          sh -c "\${DOCKER_COMPOSE_CMD} -f infra/docker-compose.prod.yml up -d --remove-orphans"
           
           sleep 10
           
-          ${DOCKER_COMPOSE_CMD} -f infra/docker-compose.prod.yml exec -T backend \
-            alembic upgrade head || echo "Migration failed or already up to date"
+          sh -c "\${DOCKER_COMPOSE_CMD} -f infra/docker-compose.prod.yml exec -T backend alembic upgrade head" || echo "Migration failed or already up to date"
           
-          ${DOCKER_COMPOSE_CMD} -f infra/docker-compose.prod.yml ps
+          sh -c "\${DOCKER_COMPOSE_CMD} -f infra/docker-compose.prod.yml ps"
           EOF
           
           scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
