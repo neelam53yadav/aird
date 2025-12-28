@@ -312,6 +312,10 @@ class ApiClient {
     return this.get(`/api/v1/pipeline/runs?product_id=${productId}&limit=${limit}`)
   }
 
+  async syncPipelineRuns(productId: string): Promise<ApiResponse> {
+    return this.post(`/api/v1/pipeline/runs/sync`, { product_id: productId })
+  }
+
   async cancelPipelineRun(runId: string): Promise<ApiResponse> {
     return this.patch(`/api/v1/pipeline/runs/${runId}`, {
       status: 'failed',
