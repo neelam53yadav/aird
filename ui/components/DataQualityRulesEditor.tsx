@@ -96,7 +96,7 @@ export function DataQualityRulesEditor({
         break
     }
     
-    setRules(prev => {
+    setRules((prev: any) => {
       const rulesData = prev.rules || prev
       return {
         ...prev,
