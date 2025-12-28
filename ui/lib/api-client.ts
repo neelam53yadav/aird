@@ -562,6 +562,10 @@ class ApiClient {
   async deleteACL(aclId: string): Promise<ApiResponse> {
     return this.delete(`/api/v1/acls/${aclId}`)
   }
+
+  async deleteACLs(params: { acl_id: string }): Promise<ApiResponse> {
+    return this.delete(`/api/v1/acls/${params.acl_id}`)
+  }
 }
 
 // Export singleton instance
