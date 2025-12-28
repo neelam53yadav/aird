@@ -197,7 +197,7 @@ export function CostEstimation({ showTitle = true }: CostEstimationProps) {
                         <div key={key}>
                           <dt className="text-xs text-gray-500">{key}</dt>
                           <dd className="text-sm font-medium text-gray-900">
-                            {formatCurrency(value)}
+                            {formatCurrency(typeof value === 'number' ? value : 0)}
                           </dd>
                         </div>
                       ))}
