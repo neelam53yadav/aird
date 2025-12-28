@@ -464,6 +464,14 @@ jobs:
             echo "images_built=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Cleanup Docker build cache
+        if: steps.detect-changes.outputs.skip_build != 'true'
+        run: |
+          echo "Cleaning up Docker build cache to free disk space..."
+          docker builder prune -af --filter "until=24h" || true
+          docker image prune -af --filter "until=24h" || true
+          echo "✅ Docker cache cleaned"
+
       - name: Copy files to VM
         run: |
           DEPLOY_PATH="${{ steps.prepare-vm-dir.outputs.deploy_path }}"
@@ -507,6 +515,11 @@ jobs:
             "cd ${DEPLOY_PATH_EXPANDED}/images && \
              ls -t docker-images-*.tar.gz 2>/dev/null | tail -n +4 | xargs -r rm -f && \
              echo 'Old image files cleaned up' || echo 'No old images to clean'"
+          
+          # Cleanup: Remove local tar file after successful transfer
+          echo "Cleaning up local image file..."
+          rm -f /tmp/docker-images-${IMAGE_VERSION}.tar.gz
+          echo "✅ Local image file removed"
 
       - name: Deploy on VM
         run: |
@@ -553,4 +566,16 @@ jobs:
           sleep 5
           curl -f http://${{ steps.get-vm-ip.outputs.vm_ip }}:8000/health || echo "Health check failed"
           curl -f http://${{ steps.get-vm-ip.outputs.vm_ip }}:8080/health || echo "Airflow health check failed"
+
+      - name: Cleanup Docker resources (always)
+        if: always()
+        run: |
+          echo "Cleaning up Docker resources..."
+          # Remove the tar file if it still exists
+          rm -f /tmp/docker-images-*.tar.gz || true
+          # Clean up Docker build cache
+          docker builder prune -af --filter "until=1h" || true
+          # Remove unused images
+          docker image prune -af --filter "until=1h" || true
+          echo "✅ Cleanup complete"
 
