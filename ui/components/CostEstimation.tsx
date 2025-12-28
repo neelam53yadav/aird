@@ -119,8 +119,8 @@ export function CostEstimation({ showTitle = true }: CostEstimationProps) {
             Preprocessing Playbook (Optional)
           </label>
           <PlaybookSelector
-            selectedPlaybook={playbookId}
-            onSelectPlaybook={setPlaybookId}
+            value={playbookId}
+            onChange={setPlaybookId}
           />
           <p className="mt-1 text-sm text-gray-500">
             Select a playbook to use for cost estimation, or leave blank for auto-detection.
