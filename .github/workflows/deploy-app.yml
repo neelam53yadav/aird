@@ -375,27 +375,6 @@ jobs:
           echo "  Airflow: $REBUILD_AIRFLOW"
           echo "  Skip build: $SKIP_BUILD"
 
-      - name: Cleanup Docker resources before build
-        if: steps.detect-changes.outputs.skip_build != 'true'
-        run: |
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "Cleaning up Docker resources before build to free disk space..."
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo ""
-          echo "Disk space before cleanup:"
-          df -h
-          echo ""
-          echo "Cleaning up all unused Docker resources..."
-          # Remove all unused containers, networks, images (both dangling and unreferenced)
-          docker system prune -af --volumes || true
-          # Clean build cache
-          docker builder prune -af || true
-          echo ""
-          echo "Disk space after cleanup:"
-          df -h
-          echo ""
-          echo "✅ Pre-build cleanup complete"
-
       - name: Prepare VM directory
         id: prepare-vm-dir
         run: |
@@ -422,85 +401,6 @@ jobs:
             echo "deploy_path=~/primedata" >> $GITHUB_OUTPUT
           fi
 
-      - name: Build and save Docker images
-        id: build-images
-        if: steps.detect-changes.outputs.skip_build != 'true'
-        run: |
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "Building Docker images in GitHub Actions..."
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo ""
-          
-          # Get version tag from commit SHA (short)
-          IMAGE_VERSION="${GITHUB_SHA:0:7}"
-          IMAGE_TAG="v${IMAGE_VERSION}"
-          
-          echo "Image version tag: ${IMAGE_TAG}"
-          
-          # Build images conditionally based on what changed
-          REBUILD_BACKEND="${{ steps.detect-changes.outputs.rebuild_backend }}"
-          REBUILD_FRONTEND="${{ steps.detect-changes.outputs.rebuild_frontend }}"
-          REBUILD_AIRFLOW="${{ steps.detect-changes.outputs.rebuild_airflow }}"
-          
-          # Build backend if needed
-          if [ "$REBUILD_BACKEND" = "true" ]; then
-            echo "Building backend image..."
-            DOCKER_BUILDKIT=1 docker build -t infra-backend:latest -t infra-backend:${IMAGE_TAG} -f backend/Dockerfile backend/
-            # Clean up build cache after each build
-            docker builder prune -f || true
-          fi
-          
-          # Build frontend if needed
-          if [ "$REBUILD_FRONTEND" = "true" ]; then
-            echo "Building frontend image..."
-            DOCKER_BUILDKIT=1 docker build -t infra-frontend:latest -t infra-frontend:${IMAGE_TAG} -f ui/Dockerfile ui/
-            # Clean up build cache after each build
-            docker builder prune -f || true
-          fi
-          
-          # Build Airflow if needed
-          if [ "$REBUILD_AIRFLOW" = "true" ]; then
-            echo "Building Airflow images..."
-            DOCKER_BUILDKIT=1 docker build -t infra-airflow-webserver:latest -t infra-airflow-webserver:${IMAGE_TAG} -f infra/airflow/Dockerfile infra/airflow/
-            docker tag infra-airflow-webserver:latest infra-airflow-scheduler:latest
-            docker tag infra-airflow-webserver:${IMAGE_TAG} infra-airflow-scheduler:${IMAGE_TAG}
-            # Clean up build cache after each build
-            docker builder prune -f || true
-          fi
-          
-          # Save all built images to tar file (only save images that exist)
-          IMAGES_TO_SAVE=""
-          if [ "$REBUILD_BACKEND" = "true" ]; then
-            IMAGES_TO_SAVE="${IMAGES_TO_SAVE} infra-backend:latest infra-backend:${IMAGE_TAG}"
-          fi
-          if [ "$REBUILD_FRONTEND" = "true" ]; then
-            IMAGES_TO_SAVE="${IMAGES_TO_SAVE} infra-frontend:latest infra-frontend:${IMAGE_TAG}"
-          fi
-          if [ "$REBUILD_AIRFLOW" = "true" ]; then
-            IMAGES_TO_SAVE="${IMAGES_TO_SAVE} infra-airflow-webserver:latest infra-airflow-webserver:${IMAGE_TAG} infra-airflow-scheduler:latest infra-airflow-scheduler:${IMAGE_TAG}"
-          fi
-          
-          if [ -n "$IMAGES_TO_SAVE" ]; then
-            echo "Saving images to tar file..."
-            docker save $IMAGES_TO_SAVE | gzip > /tmp/docker-images-${IMAGE_TAG}.tar.gz
-            echo "✅ Images saved to /tmp/docker-images-${IMAGE_TAG}.tar.gz"
-            echo "image_version=${IMAGE_TAG}" >> $GITHUB_OUTPUT
-            echo "images_built=true" >> $GITHUB_OUTPUT
-          else
-            echo "No images to build"
-            echo "images_built=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Cleanup Docker build cache after build
-        if: steps.detect-changes.outputs.skip_build != 'true'
-        run: |
-          echo "Cleaning up Docker build cache after build to free disk space..."
-          # Remove build cache to free space
-          docker builder prune -af || true
-          # Check disk space
-          df -h
-          echo "✅ Post-build cleanup complete"
-
       - name: Copy files to VM
         run: |
           DEPLOY_PATH="${{ steps.prepare-vm-dir.outputs.deploy_path }}"
@@ -509,46 +409,70 @@ jobs:
             -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
             ./ ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }}:${DEPLOY_PATH}/
 
-      - name: Transfer and load Docker images
-        if: steps.build-images.outputs.images_built == 'true'
+      - name: Build Docker images on VM
+        if: steps.detect-changes.outputs.skip_build != 'true'
         run: |
           DEPLOY_PATH="${{ steps.prepare-vm-dir.outputs.deploy_path }}"
           DEPLOY_PATH_EXPANDED=$(ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} "echo ${DEPLOY_PATH}")
-          IMAGE_VERSION="${{ steps.build-images.outputs.image_version }}"
           
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "Transferring Docker images to VM..."
+          echo "Building Docker images on GCP VM..."
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo ""
           
-          # Create images directory on VM
+          # Get version tag from commit SHA (short)
+          IMAGE_VERSION="${GITHUB_SHA:0:7}"
+          IMAGE_TAG="v${IMAGE_VERSION}"
+          
+          echo "Image version tag: ${IMAGE_TAG}"
+          echo ""
+          
+          # Build images conditionally based on what changed
+          REBUILD_BACKEND="${{ steps.detect-changes.outputs.rebuild_backend }}"
+          REBUILD_FRONTEND="${{ steps.detect-changes.outputs.rebuild_frontend }}"
+          REBUILD_AIRFLOW="${{ steps.detect-changes.outputs.rebuild_airflow }}"
+          
+          # Cleanup Docker resources on VM before building
+          echo "Cleaning up Docker resources on VM before building..."
           ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
-            "mkdir -p ${DEPLOY_PATH_EXPANDED}/images"
+            "docker system prune -f || true && docker builder prune -af || true"
+          echo ""
           
-          # Transfer compressed tar file
-          echo "Transferring docker-images-${IMAGE_VERSION}.tar.gz to VM..."
-          scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
-            /tmp/docker-images-${IMAGE_VERSION}.tar.gz \
-            ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }}:${DEPLOY_PATH_EXPANDED}/images/
+          # Build backend if needed
+          if [ "$REBUILD_BACKEND" = "true" ]; then
+            echo "Building backend image on VM..."
+            ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+              "cd ${DEPLOY_PATH_EXPANDED} && \
+               docker build -t infra-backend:latest -t infra-backend:${IMAGE_TAG} -f backend/Dockerfile backend/"
+            echo "✅ Backend image built"
+          fi
           
-          # Load images on VM
-          echo "Loading images on VM..."
+          # Build frontend if needed
+          if [ "$REBUILD_FRONTEND" = "true" ]; then
+            echo "Building frontend image on VM..."
+            ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+              "cd ${DEPLOY_PATH_EXPANDED} && \
+               docker build -t infra-frontend:latest -t infra-frontend:${IMAGE_TAG} -f ui/Dockerfile ui/"
+            echo "✅ Frontend image built"
+          fi
+          
+          # Build Airflow if needed
+          if [ "$REBUILD_AIRFLOW" = "true" ]; then
+            echo "Building Airflow images on VM..."
+            ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+              "cd ${DEPLOY_PATH_EXPANDED} && \
+               docker build -t infra-airflow-webserver:latest -t infra-airflow-webserver:${IMAGE_TAG} -f infra/airflow/Dockerfile infra/airflow/ && \
+               docker tag infra-airflow-webserver:latest infra-airflow-scheduler:latest && \
+               docker tag infra-airflow-webserver:${IMAGE_TAG} infra-airflow-scheduler:${IMAGE_TAG}"
+            echo "✅ Airflow images built"
+          fi
+          
+          # Cleanup old/unused images on VM (keep last 3 versions)
+          echo ""
+          echo "Cleaning up old Docker images on VM..."
           ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
-            "gunzip -c ${DEPLOY_PATH_EXPANDED}/images/docker-images-${IMAGE_VERSION}.tar.gz | docker load"
-          
-          echo "✅ Images loaded successfully"
-          
-          # Cleanup old images (keep last 3 versions)
-          echo "Cleaning up old image versions (keeping last 3)..."
-          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
-            "cd ${DEPLOY_PATH_EXPANDED}/images && \
-             ls -t docker-images-*.tar.gz 2>/dev/null | tail -n +4 | xargs -r rm -f && \
-             echo 'Old image files cleaned up' || echo 'No old images to clean'"
-          
-          # Cleanup: Remove local tar file after successful transfer
-          echo "Cleaning up local image file..."
-          rm -f /tmp/docker-images-${IMAGE_VERSION}.tar.gz
-          echo "✅ Local image file removed"
+            "docker image prune -f || true"
+          echo "✅ Image cleanup complete"
 
       - name: Deploy on VM
         run: |
@@ -569,9 +493,9 @@ jobs:
           # Ensure Docker network exists (idempotent)
           docker network create primedata-network 2>/dev/null || echo "Network already exists"
           
-          # Images are already built and loaded in GitHub Actions
-          # Just start services using pre-loaded images
-          echo "Starting services with pre-loaded Docker images..."
+          # Images are already built on this VM
+          # Just start services using the built images
+          echo "Starting services with Docker images built on VM..."
           docker-compose -f infra/docker-compose.prod.yml up -d --remove-orphans
           
           sleep 10
@@ -596,15 +520,4 @@ jobs:
           curl -f http://${{ steps.get-vm-ip.outputs.vm_ip }}:8000/health || echo "Health check failed"
           curl -f http://${{ steps.get-vm-ip.outputs.vm_ip }}:8080/health || echo "Airflow health check failed"
 
-      - name: Cleanup Docker resources (always)
-        if: always()
-        run: |
-          echo "Cleaning up Docker resources..."
-          # Remove the tar file if it still exists
-          rm -f /tmp/docker-images-*.tar.gz || true
-          # Clean up Docker build cache
-          docker builder prune -af --filter "until=1h" || true
-          # Remove unused images
-          docker image prune -af --filter "until=1h" || true
-          echo "✅ Cleanup complete"
 
