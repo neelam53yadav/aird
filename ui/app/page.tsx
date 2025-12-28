@@ -7,15 +7,8 @@ import { AuthButtons } from '@/components/AuthButtons'
 import { exchangeToken } from '@/lib/auth-utils'
 
 export default function HomePage() {
-  const [enableEmailAuth, setEnableEmailAuth] = useState(false)
   const router = useRouter()
   const { data: session, status } = useSession()
-
-  // Set email auth enabled state
-  useEffect(() => {
-    const emailAuthEnabled = process.env.NEXT_PUBLIC_ENABLE_EMAIL_AUTH === 'true'
-    setEnableEmailAuth(emailAuthEnabled)
-  }, [])
 
   // Redirect to dashboard if user is already authenticated
   useEffect(() => {
@@ -85,15 +78,13 @@ export default function HomePage() {
               Sign in with Google
             </button>
             
-            {enableEmailAuth && (
-              <button
-                data-testid="cta-email"
-                onClick={handleEmailSignIn}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-8 rounded-lg shadow-sm transition-all duration-200 hover:shadow-md"
-              >
-                Continue with email
-              </button>
-            )}
+            <button
+              data-testid="cta-email"
+              onClick={handleEmailSignIn}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-8 rounded-lg shadow-sm transition-all duration-200 hover:shadow-md"
+            >
+              Continue with email
+            </button>
           </div>
         </div>
 
