@@ -341,8 +341,8 @@ export function ACLManagement({ productId, showTitle = true }: ACLManagementProp
                     </div>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-sm">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getAccessTypeColor(acl.access_type)}`}>
-                      {acl.access_type}
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getAccessTypeColor(acl.access_type || 'FULL')}`}>
+                      {acl.access_type || 'FULL'}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-900">
