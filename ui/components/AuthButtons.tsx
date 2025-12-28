@@ -12,15 +12,11 @@ interface AuthButtonsProps {
 
 export function AuthButtons({ className }: AuthButtonsProps) {
   const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [name, setName] = useState("")
   const [isLoading, setIsLoading] = useState(false)
-  const [isEmailAuthEnabled, setIsEmailAuthEnabled] = useState(false)
+  const [isSignUp, setIsSignUp] = useState(false)
   const router = useRouter()
-
-  // Set email auth enabled state
-  useEffect(() => {
-    const emailAuthEnabled = process.env.NEXT_PUBLIC_ENABLE_EMAIL_AUTH === 'true'
-    setIsEmailAuthEnabled(emailAuthEnabled)
-  }, [])
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true)
@@ -49,32 +45,67 @@ export function AuthButtons({ className }: AuthButtonsProps) {
     }
   }
 
-  const handleEmailSignIn = async (e: React.FormEvent) => {
+  const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!email) return
+    if (!email || !password) return
+    if (isSignUp && !name) return
 
     setIsLoading(true)
     try {
-      const result = await signIn("email", { 
-        email, 
-        redirect: false,
-        callbackUrl: "/dashboard"
-      })
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
       
-      if (result?.ok) {
-        // Exchange token to register user in backend
-        const exchangeSuccess = await exchangeToken()
-        if (exchangeSuccess) {
-          console.log("Token exchange successful")
-        } else {
-          console.warn("Token exchange failed, but continuing with redirect")
+      if (isSignUp) {
+        // Sign up with email/password
+        const response = await fetch(`${apiUrl}/api/v1/auth/signup`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password, name }),
+        })
+
+        if (!response.ok) {
+          const error = await response.json()
+          throw new Error(error.detail || "Sign up failed")
         }
-        router.push('/dashboard')
-      } else if (result?.error) {
-        console.error("Email sign in error:", result.error)
+
+        const data = await response.json()
+        
+        // Sign in with NextAuth using credentials
+        const result = await signIn("credentials", {
+          email,
+          password,
+          redirect: false,
+        })
+
+        if (result?.ok) {
+          const exchangeSuccess = await exchangeToken()
+          if (exchangeSuccess) {
+            console.log("Token exchange successful")
+          }
+          router.push('/dashboard')
+        } else {
+          throw new Error("Failed to sign in after signup")
+        }
+      } else {
+        // Sign in with email/password using NextAuth credentials provider
+        const result = await signIn("credentials", {
+          email,
+          password,
+          redirect: false,
+        })
+        
+        if (result?.ok) {
+          const exchangeSuccess = await exchangeToken()
+          if (exchangeSuccess) {
+            console.log("Token exchange successful")
+          }
+          router.push('/dashboard')
+        } else {
+          throw new Error(result?.error || "Sign in failed")
+        }
       }
     } catch (error) {
-      console.error("Email sign in error:", error)
+      console.error("Email auth error:", error)
+      alert(error instanceof Error ? error.message : "Authentication failed")
     } finally {
       setIsLoading(false)
     }
@@ -110,41 +141,64 @@ export function AuthButtons({ className }: AuthButtonsProps) {
         {isLoading ? "Signing in..." : "Sign in with Google"}
       </Button>
 
-      {/* Email Sign In (if enabled) */}
-      {isEmailAuthEnabled && (
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <span className="w-full border-t" />
-          </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-background px-2 text-muted-foreground">
-              Or continue with email
-            </span>
-          </div>
+      {/* Email/Password Auth */}
+      <div className="relative">
+        <div className="absolute inset-0 flex items-center">
+          <span className="w-full border-t" />
         </div>
-      )}
+        <div className="relative flex justify-center text-xs uppercase">
+          <span className="bg-background px-2 text-muted-foreground">
+            Or continue with email
+          </span>
+        </div>
+      </div>
 
-      {isEmailAuthEnabled && (
-        <form onSubmit={handleEmailSignIn} className="space-y-2">
+      <form onSubmit={handleEmailAuth} className="space-y-4">
+        {isSignUp && (
           <input
-            type="email"
-            placeholder="Enter your email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            type="text"
+            placeholder="Full name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            required
+            required={isSignUp}
           />
-          <Button
-            type="submit"
-            disabled={isLoading || !email}
-            variant="outline"
-            className="w-full"
-            size="lg"
+        )}
+        <input
+          type="email"
+          placeholder="Email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          required
+        />
+        <input
+          type="password"
+          placeholder="Password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          required
+        />
+        <Button
+          type="submit"
+          disabled={isLoading || !email || !password || (isSignUp && !name)}
+          variant="outline"
+          className="w-full"
+          size="lg"
+        >
+          {isLoading ? (isSignUp ? "Signing up..." : "Signing in...") : (isSignUp ? "Sign up" : "Sign in")}
+        </Button>
+        <div className="text-center text-sm">
+          <button
+            type="button"
+            onClick={() => setIsSignUp(!isSignUp)}
+            className="text-blue-600 hover:text-blue-500"
           >
-            {isLoading ? "Sending..." : "Send magic link"}
-          </Button>
-        </form>
-      )}
+            {isSignUp ? "Already have an account? Sign in" : "Don't have an account? Sign up"}
+          </button>
+        </div>
+      </form>
     </div>
   )
 }
