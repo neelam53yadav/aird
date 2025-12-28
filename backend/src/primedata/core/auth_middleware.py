@@ -28,6 +28,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
             r"^/\.well-known/jwks\.json$",
             r"^/api/v1/auth/session/exchange$",  # Token exchange endpoint - must be anonymous
             r"^/api/v1/auth/session/exchange/$",  # With trailing slash
+            r"^/api/v1/auth/signup$",  # Signup endpoint
+            r"^/api/v1/auth/signup/$",  # With trailing slash
+            r"^/api/v1/auth/login$",  # Login endpoint
+            r"^/api/v1/auth/login/$",  # With trailing slash
         ]
 
     async def dispatch(self, request: Request, call_next):

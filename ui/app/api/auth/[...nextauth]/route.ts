@@ -1,11 +1,50 @@
 import NextAuth from "next-auth"
 import GoogleProvider from "next-auth/providers/google"
+import CredentialsProvider from "next-auth/providers/credentials"
 
 const handler = NextAuth({
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID || "dummy",
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || "dummy",
+    }),
+    CredentialsProvider({
+      name: "Credentials",
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" }
+      },
+      async authorize(credentials) {
+        if (!credentials?.email || !credentials?.password) {
+          return null
+        }
+        
+        // Call your backend login API
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+        const res = await fetch(`${apiUrl}/api/v1/auth/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: credentials.email,
+            password: credentials.password,
+          }),
+        })
+        
+        if (!res.ok) {
+          return null
+        }
+        
+        const data = await res.json()
+        
+        // Return user object that NextAuth expects
+        return {
+          id: data.user.id,
+          email: data.user.email,
+          name: data.user.name,
+          image: data.user.picture_url,
+          access_token: data.access_token, // Store backend token for session exchange
+        }
+      }
     })
   ],
   session: {
@@ -21,6 +60,10 @@ const handler = NextAuth({
         token.provider = account?.provider
         token.google_sub = account?.provider === "google" ? account.providerAccountId : null
         token.roles = ["viewer"] // Default roles
+        // Store backend access token for credentials provider
+        if ((user as any).access_token) {
+          token.backend_access_token = (user as any).access_token
+        }
       }
       return token
     },
