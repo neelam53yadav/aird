@@ -443,11 +443,11 @@ export default function PipelineRunsPage() {
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          {(run.status === 'running' || run.status === 'queued') && (
+                          {(run.status === 'running' || run.status === 'queued') && run.id && (
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => handleCancelRun(run.id)}
+                              onClick={() => handleCancelRun(run.id!)}
                               className="text-red-600 hover:text-red-700 hover:bg-red-50"
                             >
                               <X className="h-4 w-4 mr-1" />
