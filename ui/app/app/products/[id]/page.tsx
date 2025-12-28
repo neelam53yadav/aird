@@ -1994,7 +1994,8 @@ export default function ProductDetailPage() {
                 </Button>
                 <Button
                   onClick={() => {
-                    const selectedVersion = document.querySelector('input[name="export-version"]:checked')?.value
+                    const selectedInput = document.querySelector('input[name="export-version"]:checked') as HTMLInputElement | null
+                    const selectedVersion = selectedInput?.value
                     if (selectedVersion === 'prod') {
                       handleCreateExport('prod')
                     } else {
