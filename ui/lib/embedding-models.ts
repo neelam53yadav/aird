@@ -213,11 +213,13 @@ export async function requiresApiKey(modelName: string): Promise<boolean> {
   try {
     const models = await fetchEmbeddingModels(false)
     const model = models.find(m => m.id === modelName)
-    return model?.requires_api_key ?? false
+    if (model) return model.requires_api_key || false
   } catch (error) {
     console.error('Error checking API key requirement:', error)
-    return fallbackModel?.requiresApiKey ?? false
   }
+  
+  // Return false if model not found
+  return false
 }
 
 /**
