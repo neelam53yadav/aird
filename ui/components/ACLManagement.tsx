@@ -377,8 +377,8 @@ export function ACLManagement({ productId, showTitle = true }: ACLManagementProp
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => handleDelete(acl.id)}
-                      disabled={deleting === acl.id}
+                      onClick={() => acl.id && handleDelete(acl.id)}
+                      disabled={deleting === acl.id || !acl.id}
                       className="text-red-600 hover:text-red-800"
                     >
                       {deleting === acl.id ? (
