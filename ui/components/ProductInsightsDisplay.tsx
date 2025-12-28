@@ -154,22 +154,25 @@ export function ProductInsightsDisplay({ productId, showTitle = true }: ProductI
           {Object.entries(fingerprint)
             .filter(([key]) => key !== 'AI_Trust_Score')
             .sort(([a], [b]) => a.localeCompare(b))
-            .map(([key, value]) => (
-              <div key={key} className="border border-gray-200 rounded-lg p-3">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-700">{key.replace(/_/g, ' ')}</span>
-                  <span className="text-sm font-semibold text-gray-900">{formatMetricValue(value)}</span>
+            .map(([key, value]) => {
+              const numValue = typeof value === 'number' ? value : 0
+              return (
+                <div key={key} className="border border-gray-200 rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-gray-700">{key.replace(/_/g, ' ')}</span>
+                    <span className="text-sm font-semibold text-gray-900">{formatMetricValue(numValue)}</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-1.5">
+                    <div
+                      className={`h-1.5 rounded-full ${
+                        numValue >= 0.8 ? 'bg-green-500' : numValue >= 0.6 ? 'bg-yellow-500' : 'bg-red-500'
+                      }`}
+                      style={{ width: `${Math.min(numValue * 100, 100)}%` }}
+                    />
+                  </div>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-1.5">
-                  <div
-                    className={`h-1.5 rounded-full ${
-                      value >= 0.8 ? 'bg-green-500' : value >= 0.6 ? 'bg-yellow-500' : 'bg-red-500'
-                    }`}
-                    style={{ width: `${Math.min(value * 100, 100)}%` }}
-                  />
-                </div>
-              </div>
-            ))}
+              )
+            })}
         </div>
       </div>
 
