@@ -455,7 +455,7 @@ export function AITrustScoreDisplay({ productId, showTitle = true }: AITrustScor
             <div>
               <p className="text-sm font-medium text-gray-700 mb-2">Playbook Recommendations:</p>
               <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
-                {optimizer.playbook_recommendations.map((rec, idx) => (
+                {(optimizer.playbook_recommendations || []).map((rec: string, idx: number) => (
                   <li key={idx}>{rec}</li>
                 ))}
               </ul>
