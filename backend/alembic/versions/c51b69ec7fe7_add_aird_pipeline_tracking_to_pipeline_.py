@@ -143,11 +143,11 @@ def upgrade() -> None:
         op.add_column('products', sa.Column('readiness_fingerprint', sa.JSON(), nullable=True))
     
     # Create policystatus enum type first (before using it in add_column)
-    if not enum_exists('policystatus'):
-        op.execute("CREATE TYPE policystatus AS ENUM ('PASSED', 'FAILED', 'WARNINGS', 'UNKNOWN')")
+    policystatus_enum = postgresql.ENUM('PASSED', 'FAILED', 'WARNINGS', 'UNKNOWN', name='policystatus', create_type=False)
+    policystatus_enum.create(op.get_bind(), checkfirst=True)
     
     if not column_exists('products', 'policy_status'):
-        op.add_column('products', sa.Column('policy_status', sa.Enum('PASSED', 'FAILED', 'WARNINGS', 'UNKNOWN', name='policystatus', create_type=False), nullable=True))
+        op.add_column('products', sa.Column('policy_status', postgresql.ENUM('PASSED', 'FAILED', 'WARNINGS', 'UNKNOWN', name='policystatus', create_type=False), nullable=True))
     if not column_exists('products', 'policy_violations'):
         op.add_column('products', sa.Column('policy_violations', sa.JSON(), nullable=True))
     if not column_exists('products', 'chunk_metrics'):
