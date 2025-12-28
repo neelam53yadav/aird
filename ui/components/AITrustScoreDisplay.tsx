@@ -322,7 +322,7 @@ export function AITrustScoreDisplay({ productId, showTitle = true }: AITrustScor
               <div className="mt-2">
                 <p className="text-sm font-medium mb-1">Violations:</p>
                 <ul className="list-disc list-inside text-sm space-y-1">
-                  {policy.violations.map((violation, idx) => (
+                  {(policy.violations || []).map((violation: string, idx: number) => (
                     <li key={idx}>{violation}</li>
                   ))}
                 </ul>
