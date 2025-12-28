@@ -371,7 +371,7 @@ export function ACLManagement({ productId, showTitle = true }: ACLManagementProp
                     </div>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                    {new Date(acl.created_at).toLocaleDateString()}
+                    {acl.created_at ? new Date(acl.created_at).toLocaleDateString() : 'N/A'}
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-sm">
                     <Button
