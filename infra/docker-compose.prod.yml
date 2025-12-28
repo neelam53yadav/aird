@@ -10,11 +10,6 @@ services:
     volumes:
       - qdrant_data:/qdrant/storage
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
     networks:
       - primedata-network
 
@@ -53,11 +48,12 @@ services:
       - airflow_plugins:/opt/airflow/plugins
       - ../infra/airflow/triggers:/opt/airflow/triggers
       - ../infra/airflow/dags:/opt/airflow/dags:ro
-      - ../../backend/src:/opt/airflow/primedata/src:ro
+      - /opt/primedata/backend/src:/opt/airflow/primedata/src:ro
       - /opt/primedata/data:/opt/airflow/data
+    command: webserver
     depends_on:
       qdrant:
-        condition: service_healthy
+        condition: service_started
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
@@ -95,11 +91,12 @@ services:
       - airflow_plugins:/opt/airflow/plugins
       - ../infra/airflow/triggers:/opt/airflow/triggers
       - ../infra/airflow/dags:/opt/airflow/dags:ro
-      - ../../backend/src:/opt/airflow/primedata/src:ro
+      - /opt/primedata/backend/src:/opt/airflow/primedata/src:ro
       - /opt/primedata/data:/opt/airflow/data
+    command: scheduler
     depends_on:
       qdrant:
-        condition: service_healthy
+        condition: service_started
     restart: unless-stopped
     networks:
       - primedata-network
@@ -126,7 +123,7 @@ services:
       - "8000:8000"
     depends_on:
       qdrant:
-        condition: service_healthy
+        condition: service_started
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]

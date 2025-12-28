@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from primedata.core.jwt_keys import sign_jwt
 from primedata.core.nextauth_verify import verify_nextauth_token
+from primedata.core.password import hash_password, verify_password
 from primedata.core.security import get_current_user
 from primedata.db.database import get_db
 from primedata.db.models import AuthProvider, User, Workspace, WorkspaceMember, WorkspaceRole
@@ -52,6 +53,167 @@ class WorkspaceResponse(BaseModel):
     name: str
     role: str
     created_at: str
+
+
+class SignupRequest(BaseModel):
+    """Signup request model."""
+
+    email: str
+    password: str
+    name: str
+
+
+class LoginRequest(BaseModel):
+    """Login request model."""
+
+    email: str
+    password: str
+
+
+class LoginResponse(BaseModel):
+    """Login response model."""
+
+    access_token: str
+    token_type: str = "bearer"
+    user: Dict[str, Any]
+    default_workspace_id: str
+
+
+@router.post("/api/v1/auth/signup", response_model=LoginResponse)
+async def signup(request: SignupRequest, db: Session = Depends(get_db)):
+    """
+    Register a new user with email and password.
+    """
+    # Check if user already exists
+    existing_user = db.query(User).filter(User.email == request.email).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User with this email already exists"
+        )
+    
+    # Create new user
+    password_hash = hash_password(request.password)
+    user = User(
+        email=request.email,
+        name=request.name,
+        password_hash=password_hash,
+        auth_provider=AuthProvider.SIMPLE,
+        roles=["viewer"],
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    
+    # Create default workspace
+    workspace = Workspace(name=f"{user.name}'s Workspace")
+    db.add(workspace)
+    db.commit()
+    db.refresh(workspace)
+    
+    # Add user as owner
+    membership = WorkspaceMember(
+        workspace_id=workspace.id,
+        user_id=user.id,
+        role=WorkspaceRole.OWNER
+    )
+    db.add(membership)
+    db.commit()
+    
+    # Sign JWT token
+    payload = {
+        "sub": str(user.id),
+        "email": user.email,
+        "roles": user.roles,
+        "workspaces": [str(workspace.id)]
+    }
+    access_token = sign_jwt(payload, exp_s=3600)
+    
+    return LoginResponse(
+        access_token=access_token,
+        user={
+            "id": str(user.id),
+            "email": user.email,
+            "name": user.name,
+            "roles": user.roles,
+            "picture_url": user.picture_url,
+        },
+        default_workspace_id=str(workspace.id),
+    )
+
+
+@router.post("/api/v1/auth/login", response_model=LoginResponse)
+async def login(request: LoginRequest, db: Session = Depends(get_db)):
+    """
+    Login with email and password.
+    """
+    # Find user by email
+    user = db.query(User).filter(User.email == request.email).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password"
+        )
+    
+    # Verify password
+    if not user.password_hash or not verify_password(request.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password"
+        )
+    
+    # Check if user is active
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is inactive"
+        )
+    
+    # Get workspace memberships
+    workspace_memberships = db.query(WorkspaceMember).filter(
+        WorkspaceMember.user_id == user.id
+    ).all()
+    
+    if not workspace_memberships:
+        # Create default workspace if none exists
+        workspace = Workspace(name=f"{user.name}'s Workspace")
+        db.add(workspace)
+        db.commit()
+        db.refresh(workspace)
+        
+        membership = WorkspaceMember(
+            workspace_id=workspace.id,
+            user_id=user.id,
+            role=WorkspaceRole.OWNER
+        )
+        db.add(membership)
+        db.commit()
+        default_workspace_id = str(workspace.id)
+        workspace_ids = [default_workspace_id]
+    else:
+        default_workspace_id = str(workspace_memberships[0].workspace_id)
+        workspace_ids = [str(m.workspace_id) for m in workspace_memberships]
+    
+    # Sign JWT token
+    payload = {
+        "sub": str(user.id),
+        "email": user.email,
+        "roles": user.roles,
+        "workspaces": workspace_ids
+    }
+    access_token = sign_jwt(payload, exp_s=3600)
+    
+    return LoginResponse(
+        access_token=access_token,
+        user={
+            "id": str(user.id),
+            "email": user.email,
+            "name": user.name,
+            "roles": user.roles,
+            "picture_url": user.picture_url,
+        },
+        default_workspace_id=default_workspace_id,
+    )
 
 
 @router.post("/api/v1/auth/session/exchange", response_model=SessionExchangeResponse)

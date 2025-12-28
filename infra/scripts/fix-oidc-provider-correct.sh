@@ -36,3 +36,4 @@ echo "projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/github-p
 echo ""
 echo "This provider will only allow tokens from repository: ${GITHUB_REPO}"
 
+

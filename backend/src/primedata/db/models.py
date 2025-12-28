@@ -175,6 +175,7 @@ class User(Base):
     google_sub = Column(String(255), unique=True, nullable=True, index=True)
     roles = Column(JSON, nullable=False, default=list)  # List of roles
     is_active = Column(Boolean, default=True)
+    password_hash = Column(String(255), nullable=True)  # Nullable for OAuth users (Google, etc.)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

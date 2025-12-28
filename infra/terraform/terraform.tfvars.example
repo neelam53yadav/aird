@@ -19,3 +19,4 @@ db_instance_name = "primedata-postgres"
 # Networking
 enable_public_ip = true
 
+
