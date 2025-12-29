@@ -363,8 +363,12 @@ async def sync_full(
                 logger.info(f"Folder datasource {datasource_id} in upload mode - querying existing uploaded files")
                 
                 # Query existing RawFile records for this datasource
-                # Use the current version (where files were uploaded), not the new version
+                # Check all versions, not just current_version, since files might have been uploaded
+                # before current_version was set, or to version 1 when current_version was None
+                # First try current_version, then try version 1, then try any version
                 current_version = product.current_version or 1
+                
+                # Try to find files in current_version first
                 existing_files = (
                     db.query(RawFile)
                     .filter(
@@ -374,7 +378,45 @@ async def sync_full(
                     .all()
                 )
                 
-                logger.info(f"Found {len(existing_files)} files uploaded to version {current_version}")
+                logger.info(f"Querying for files in version {current_version}: found {len(existing_files)} files")
+                
+                # If no files found in current_version, try version 1 (common case when product is new)
+                if len(existing_files) == 0 and current_version != 1:
+                    existing_files = (
+                        db.query(RawFile)
+                        .filter(
+                            RawFile.data_source_id == datasource_id,
+                            RawFile.version == 1
+                        )
+                        .all()
+                    )
+                    logger.info(f"No files in version {current_version}, trying version 1: found {len(existing_files)} files")
+                    if len(existing_files) > 0:
+                        current_version = 1  # Update to use version 1 for the rest of the logic
+                
+                # If still no files, try any version (last resort)
+                if len(existing_files) == 0:
+                    any_version_files = (
+                        db.query(RawFile)
+                        .filter(RawFile.data_source_id == datasource_id)
+                        .order_by(RawFile.version.desc())
+                        .limit(1)
+                        .all()
+                    )
+                    if any_version_files:
+                        # Use the version of the most recent file
+                        current_version = any_version_files[0].version
+                        existing_files = (
+                            db.query(RawFile)
+                            .filter(
+                                RawFile.data_source_id == datasource_id,
+                                RawFile.version == current_version
+                            )
+                            .all()
+                        )
+                        logger.info(f"No files in version 1, found files in version {current_version}: {len(existing_files)} files")
+                
+                logger.info(f"Final: Found {len(existing_files)} files uploaded to version {current_version}")
                 
                 # Convert RawFile records to sync result format
                 files_processed = []
@@ -643,6 +685,10 @@ async def upload_files(
 
     version = product.current_version or 1
     output_prefix = raw_prefix(datasource.workspace_id, datasource.product_id, version)
+    
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"Uploading {len(files)} files to datasource {datasource_id}, product {datasource.product_id}, version {version}")
 
     uploaded_files = []
     errors = []
@@ -693,12 +739,14 @@ async def upload_files(
                         status=RawFileStatus.INGESTED,
                     )
                     db.add(raw_file)
+                    logger.info(f"Created RawFile record for {filename} (version {version}, datasource {datasource_id}, key: {key})")
                     uploaded_files.append({
                         "filename": filename,
                         "size": file_size,
                         "key": key
                     })
                 else:
+                    logger.warning(f"File {filename} already exists in version {version}")
                     errors.append(f"File {filename} already exists")
             else:
                 errors.append(f"Failed to upload {file.filename}")
