@@ -6,6 +6,7 @@ import { useSession } from 'next-auth/react'
 import { Package, Database, TrendingUp, Activity, AlertCircle, CheckCircle, Clock, Plus, ArrowUpRight, ArrowDownRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { StatusBadge } from '@/components/ui/status-badge'
+import { StatCardSkeleton, ListSkeleton } from '@/components/ui/skeleton'
 import AppLayout from '@/components/layout/AppLayout'
 import { apiClient } from '@/lib/api-client'
 import { exchangeToken } from '@/lib/auth-utils'
@@ -89,18 +90,21 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <AppLayout>
-        <div className="p-6">
-          <div className="animate-pulse">
-            <div className="h-8 bg-gray-200 rounded w-1/4 mb-6"></div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-              {[...Array(4)].map((_, i) => (
-                <div key={i} className="bg-white p-6 rounded-lg shadow-sm border">
-                  <div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div>
-                  <div className="h-8 bg-gray-200 rounded w-1/3"></div>
-                </div>
-              ))}
-            </div>
+        <div className="p-6 bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-50/30 min-h-screen">
+          <div className="mb-8">
+            <div className="h-10 bg-gray-200 rounded-xl w-1/4 mb-2 animate-pulse"></div>
+            <div className="h-6 bg-gray-200 rounded w-1/3 animate-pulse"></div>
           </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            {[...Array(4)].map((_, i) => (
+              <StatCardSkeleton key={i} />
+            ))}
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <CardSkeleton />
+            <CardSkeleton />
+          </div>
+          <CardSkeleton />
         </div>
       </AppLayout>
     )

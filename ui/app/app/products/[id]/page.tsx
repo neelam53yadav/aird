@@ -5,7 +5,9 @@ import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Package, Database, Settings, Play, Pause, Search, TrendingUp, BarChart3, AlertTriangle, GitBranch, FileText, Download, FileSpreadsheet, Upload, Loader2, ArrowDownToLine, CheckCircle2 } from 'lucide-react'
+import { ArrowLeft, Package, Database, Settings, Play, Pause, Search, TrendingUp, BarChart3, AlertTriangle, GitBranch, FileText, Download, FileSpreadsheet, Upload, Loader2, ArrowDownToLine, CheckCircle2, Home, Shield, Layers, Lock, FileCheck } from 'lucide-react'
+import { StatusBadge } from '@/components/ui/status-badge'
+import { TableSkeleton, CardSkeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { ConfirmModal, ResultModal } from '@/components/ui/modal'
 import AppLayout from '@/components/layout/AppLayout'
@@ -745,31 +747,32 @@ export default function ProductDetailPage() {
 
   return (
     <AppLayout>
-      <div className="p-6">
-        {/* Breadcrumb Navigation */}
+      <div className="p-6 bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-50/30 min-h-screen">
+        {/* Enhanced Breadcrumb Navigation */}
         <div className="flex items-center mb-6">
-          <Link href="/app/products" className="flex items-center text-sm text-gray-500 hover:text-gray-700 transition-colors">
+          <Link href="/app/products" className="flex items-center text-sm text-gray-500 hover:text-gray-700 transition-colors font-medium">
             <ArrowLeft className="h-4 w-4 mr-1" />
             Products
           </Link>
           <span className="mx-2 text-gray-400">/</span>
-          <span className="text-sm font-medium text-gray-900">{product.name}</span>
+          <span className="text-sm font-semibold text-gray-900">{product.name}</span>
         </div>
 
-        {/* Page Header */}
-        <div className="mb-8">
+        {/* Enhanced Page Header */}
+        <div className="mb-8 bg-white rounded-xl shadow-md border border-gray-100 p-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center">
-              <div className="bg-blue-100 rounded-lg p-2 mr-4">
-                <Package className="h-6 w-6 text-blue-600" />
+              <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl p-3 mr-4 shadow-sm">
+                <Package className="h-6 w-6 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">{product.name}</h1>
-                <div className="flex items-center mt-1">
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(product.status)}`}>
-                    {product.status}
-                  </span>
-                  <span className="ml-3 text-sm text-gray-500">v{product.current_version}</span>
+                <h1 className="text-3xl font-bold text-gray-900 mb-2">{product.name}</h1>
+                <div className="flex items-center gap-3">
+                  <StatusBadge status={product.status as any} />
+                  <div className="flex items-center text-sm text-gray-500 bg-gray-50 px-2 py-1 rounded-md">
+                    <GitBranch className="h-3 w-3 mr-1" />
+                    <span>v{product.current_version}</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -778,6 +781,7 @@ export default function ProductDetailPage() {
                 variant="outline" 
                 size="sm"
                 onClick={() => router.push(`/app/products/${productId}/edit`)}
+                className="border-2 hover:border-blue-300 hover:bg-blue-50"
               >
                 <Settings className="h-4 w-4 mr-2" />
                 Settings
@@ -786,9 +790,10 @@ export default function ProductDetailPage() {
                 size="sm"
                 onClick={() => setShowPipelineModal(true)}
                 disabled={runningPipeline || dataSources.length === 0}
+                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg"
               >
                 <Play className="h-4 w-4 mr-2" />
-                Run
+                Run Pipeline
               </Button>
             </div>
           </div>
@@ -804,36 +809,37 @@ export default function ProductDetailPage() {
           </div>
         )}
 
-        {/* Tabs */}
-        <div className="mb-8">
-          <nav className="flex space-x-8">
+        {/* Enhanced Tabs */}
+        <div className="mb-8 border-b border-gray-200">
+          <nav className="flex space-x-1 overflow-x-auto">
             <button
               onClick={() => setActiveTab('overview')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              className={`flex items-center gap-2 py-4 px-4 border-b-2 font-medium text-sm transition-all whitespace-nowrap ${
                 activeTab === 'overview'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'border-blue-600 text-blue-600 bg-blue-50/50'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
               }`}
             >
+              <Home className="h-4 w-4" />
               Overview
             </button>
             <button
               onClick={() => setActiveTab('ai-trust-score')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              className={`flex items-center gap-2 py-4 px-4 border-b-2 font-medium text-sm transition-all whitespace-nowrap ${
                 activeTab === 'ai-trust-score'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'border-blue-600 text-blue-600 bg-blue-50/50'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
               }`}
             >
+              <Shield className="h-4 w-4" />
               AI Trust Score
               {product?.trust_score !== undefined && (() => {
-                // Handle both 0-1 and 0-100 formats
                 const trustScore = product.trust_score || 0
                 const percentage = trustScore > 1 ? trustScore : trustScore * 100
                 const normalizedScore = trustScore > 1 ? trustScore / 100 : trustScore
                 
                 return (
-                  <span className={`ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                  <span className={`ml-1 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
                     normalizedScore >= 0.8 ? 'bg-green-100 text-green-800' :
                     normalizedScore >= 0.6 ? 'bg-yellow-100 text-yellow-800' :
                     'bg-red-100 text-red-800'
@@ -845,56 +851,65 @@ export default function ProductDetailPage() {
             </button>
             <button
               onClick={() => setActiveTab('chunk-metadata')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              className={`flex items-center gap-2 py-4 px-4 border-b-2 font-medium text-sm transition-all whitespace-nowrap ${
                 activeTab === 'chunk-metadata'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'border-blue-600 text-blue-600 bg-blue-50/50'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
               }`}
             >
+              <Layers className="h-4 w-4" />
               Chunk Metadata
             </button>
             <button
               onClick={() => setActiveTab('acl')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              className={`flex items-center gap-2 py-4 px-4 border-b-2 font-medium text-sm transition-all whitespace-nowrap ${
                 activeTab === 'acl'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'border-blue-600 text-blue-600 bg-blue-50/50'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
               }`}
             >
+              <Lock className="h-4 w-4" />
               Access Control
             </button>
             <button
               onClick={() => setActiveTab('datasources')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              className={`flex items-center gap-2 py-4 px-4 border-b-2 font-medium text-sm transition-all whitespace-nowrap ${
                 activeTab === 'datasources'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'border-blue-600 text-blue-600 bg-blue-50/50'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
               }`}
             >
-              Data Sources ({dataSources.length})
+              <Database className="h-4 w-4" />
+              Data Sources
+              <span className="ml-1 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-700">
+                {dataSources.length}
+              </span>
             </button>
             <button
               onClick={() => setActiveTab('data-quality')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              className={`flex items-center gap-2 py-4 px-4 border-b-2 font-medium text-sm transition-all whitespace-nowrap ${
                 activeTab === 'data-quality'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'border-blue-600 text-blue-600 bg-blue-50/50'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
               }`}
             >
-              Data Quality {dataQualityViolations.length > 0 && (
-                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+              <FileCheck className="h-4 w-4" />
+              Data Quality
+              {dataQualityViolations.length > 0 && (
+                <span className="ml-1 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800">
                   {dataQualityViolations.length}
                 </span>
               )}
             </button>
             <button
               onClick={() => setActiveTab('exports')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              className={`flex items-center gap-2 py-4 px-4 border-b-2 font-medium text-sm transition-all whitespace-nowrap ${
                 activeTab === 'exports'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'border-blue-600 text-blue-600 bg-blue-50/50'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
               }`}
             >
+              <Download className="h-4 w-4" />
               Exports
             </button>
           </nav>
@@ -919,7 +934,7 @@ export default function ProductDetailPage() {
 
         {activeTab === 'overview' && (
           <div className="space-y-6">
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Product Information</h2>
               <dl className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
                 <div>
@@ -929,9 +944,7 @@ export default function ProductDetailPage() {
                 <div>
                   <dt className="text-sm font-medium text-gray-500">Status</dt>
                   <dd className="mt-1">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(product.status)}`}>
-                      {product.status}
-                    </span>
+                    <StatusBadge status={product.status as any} />
                   </dd>
                 </div>
                 <div>
@@ -1226,69 +1239,59 @@ export default function ProductDetailPage() {
                   <div>
                     <h3 className="text-md font-medium text-gray-900 mb-3">Recent Runs</h3>
                     {loadingPipelineRuns ? (
-                      <div className="text-center py-4">
-                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto mb-2"></div>
-                        <p className="text-gray-600">Loading runs...</p>
-                      </div>
+                      <TableSkeleton rows={3} cols={5} />
                     ) : pipelineRuns.length === 0 ? (
                       <div className="text-center py-4">
                         <p className="text-gray-500">No pipeline runs yet</p>
                       </div>
                     ) : (
-                      <div className="overflow-x-auto">
+                      <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
                         <table className="min-w-full divide-y divide-gray-200">
-                          <thead className="bg-gray-50">
+                          <thead className="bg-gradient-to-r from-gray-50 to-blue-50">
                             <tr>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                                 Version
                               </th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                                 Status
                               </th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                                 Started
                               </th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                                 Duration
                               </th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                                 Actions
                               </th>
                             </tr>
                           </thead>
                           <tbody className="bg-white divide-y divide-gray-200">
                             {pipelineRuns.map((run) => (
-                              <tr key={run.id} className="hover:bg-gray-50">
-                                <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                              <tr key={run.id} className="hover:bg-blue-50/50 transition-colors">
+                                <td className="px-6 py-4 whitespace-nowrap">
                                   <div className="flex items-center space-x-2">
-                                    <span>v{run.version}</span>
+                                    <span className="text-sm font-semibold text-gray-900">v{run.version}</span>
                                     {product?.promoted_version === run.version && (
-                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gradient-to-r from-purple-500 to-pink-600 text-white shadow-sm">
                                         🚀 PROD
                                       </span>
                                     )}
                                   </div>
                                 </td>
-                                <td className="px-4 py-4 whitespace-nowrap text-sm">
-                                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                    run.status === 'succeeded' ? 'bg-green-100 text-green-800' :
-                                    run.status === 'running' ? 'bg-blue-100 text-blue-800' :
-                                    run.status === 'failed' ? 'bg-red-100 text-red-800' :
-                                    'bg-yellow-100 text-yellow-800'
-                                  }`}>
-                                    {run.status}
-                                  </span>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <StatusBadge status={run.status as any} size="sm" />
                                 </td>
-                                <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                                   {run.started_at ? new Date(run.started_at).toLocaleString() : '-'}
                                 </td>
-                                <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                                   {run.started_at && run.finished_at ? 
                                     `${Math.round((new Date(run.finished_at).getTime() - new Date(run.started_at).getTime()) / 1000)}s` :
                                     run.started_at ? 'Running...' : '-'
                                   }
                                 </td>
-                                <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
+                                <td className="px-6 py-4 whitespace-nowrap text-sm">
                                   <div className="flex space-x-2">
                                     {run.dag_run_id && (
                                       <a
@@ -1356,10 +1359,7 @@ export default function ProductDetailPage() {
                 </div>
                 
                 {loadingArtifacts ? (
-                  <div className="text-center py-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                    <p className="text-gray-600">Loading artifacts...</p>
-                  </div>
+                  <TableSkeleton rows={3} cols={5} />
                 ) : rawArtifacts.length === 0 ? (
                   <div className="text-center py-8">
                     <Database className="h-12 w-12 text-gray-400 mx-auto mb-4" />
@@ -1367,30 +1367,30 @@ export default function ProductDetailPage() {
                     <p className="text-gray-600">Run the pipeline to ingest data from all data sources and see artifacts here.</p>
                   </div>
                 ) : (
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
                     <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
+                      <thead className="bg-gradient-to-r from-gray-50 to-blue-50">
                         <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                             Name
                           </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                             Size
                           </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                             Type
                           </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                             Last Modified
                           </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                             Actions
                           </th>
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
                         {rawArtifacts.map((artifact, index) => (
-                          <tr key={index} className="hover:bg-gray-50">
+                          <tr key={index} className="hover:bg-blue-50/50 transition-colors">
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                               {artifact.name}
                             </td>
@@ -1449,12 +1449,14 @@ export default function ProductDetailPage() {
             </div>
 
             {dataSources.length === 0 ? (
-              <div className="text-center py-12 bg-white rounded-lg shadow-sm border border-gray-200">
-                <Database className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No data sources yet</h3>
+              <div className="text-center py-12 bg-white rounded-xl shadow-md border border-gray-100">
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4">
+                  <Database className="h-10 w-10 text-blue-600" />
+                </div>
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">No data sources yet</h3>
                 <p className="text-gray-600 mb-6">Connect your first data source to get started.</p>
                 <Link href={`/app/products/${product.id}/datasources/new`}>
-                  <Button>
+                  <Button className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg">
                     <Database className="h-4 w-4 mr-2" />
                     Add Data Source
                   </Button>
@@ -1465,28 +1467,30 @@ export default function ProductDetailPage() {
                 {dataSources.map((datasource) => {
                   const displayInfo = getDataSourceDisplayInfo(datasource)
                   return (
-                    <div key={datasource.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                      <div className="flex items-start mb-3">
-                        <span className="text-2xl mr-3 flex-shrink-0">{getDataSourceTypeIcon(datasource.type)}</span>
+                    <div key={datasource.id} className="bg-white rounded-xl shadow-md border-2 border-gray-100 p-6 hover:shadow-lg hover:border-blue-300 transition-all duration-200 group">
+                      <div className="flex items-start mb-4">
+                        <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl p-2.5 mr-3 flex-shrink-0 shadow-sm group-hover:scale-110 transition-transform">
+                          <span className="text-xl">{getDataSourceTypeIcon(datasource.type)}</span>
+                        </div>
                         <div className="min-w-0 flex-1">
-                          <h3 className="font-medium text-gray-900 text-sm">{displayInfo.title}</h3>
-                          <p className="text-xs text-gray-600 truncate" title={displayInfo.fullSubtitle}>
+                          <h3 className="font-semibold text-gray-900 text-sm mb-1 group-hover:text-blue-600 transition-colors">{displayInfo.title}</h3>
+                          <p className="text-xs text-gray-600 truncate mb-1" title={displayInfo.fullSubtitle}>
                             {displayInfo.subtitle}
                           </p>
-                          <p className="text-xs text-gray-500 mt-1 truncate" title={displayInfo.details}>
+                          <p className="text-xs text-gray-500 truncate" title={displayInfo.details}>
                             {displayInfo.details}
                           </p>
                         </div>
                       </div>
                       
-                      <div className="mb-4">
+                      <div className="mb-4 pb-4 border-b border-gray-100">
                         <div className="flex items-center justify-between mb-2">
                           <p className="text-xs text-gray-500">
                             Created {new Date(datasource.created_at).toLocaleDateString()}
                           </p>
-                          <div className="flex items-center">
-                            <div className="w-2 h-2 bg-green-400 rounded-full mr-1"></div>
-                            <span className="text-xs text-green-600">Active</span>
+                          <div className="flex items-center bg-green-50 px-2 py-1 rounded-md border border-green-200">
+                            <div className="w-2 h-2 bg-green-500 rounded-full mr-1.5 animate-pulse"></div>
+                            <span className="text-xs font-medium text-green-700">Active</span>
                           </div>
                         </div>
                         {datasource.last_cursor && (
@@ -1501,14 +1505,14 @@ export default function ProductDetailPage() {
                           <Button 
                             variant="outline" 
                             size="sm" 
-                            className="flex-1 text-xs"
+                            className="flex-1 text-xs border-2 hover:border-blue-300 hover:bg-blue-50"
                             onClick={() => handleEditDataSource(datasource.id)}
                           >
                             Edit
                           </Button>
                           <Button 
                             size="sm" 
-                            className="flex-1 text-xs"
+                            className="flex-1 text-xs bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-sm hover:shadow-md"
                             onClick={() => handleTestConnection(datasource.id)}
                             disabled={testingConnection === datasource.id}
                           >
@@ -1524,7 +1528,7 @@ export default function ProductDetailPage() {
                           <Button 
                             variant="outline" 
                             size="sm" 
-                            className="flex-1 text-xs text-red-600 border-red-300 hover:bg-red-50"
+                            className="flex-1 text-xs text-red-600 border-2 border-red-300 hover:bg-red-50 hover:border-red-400"
                             onClick={() => handleDeleteDataSource(datasource.id)}
                           >
                             Delete
@@ -1850,10 +1854,7 @@ export default function ProductDetailPage() {
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                 <h3 className="text-md font-medium text-gray-900 mb-4">Available Exports</h3>
                 {loadingExports ? (
-                  <div className="text-center py-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-                    <p className="text-gray-600 mt-2">Loading exports...</p>
-                  </div>
+                  <TableSkeleton rows={3} cols={5} />
                 ) : exports.length === 0 ? (
                   <div className="text-center py-8">
                     <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
@@ -1865,30 +1866,30 @@ export default function ProductDetailPage() {
                     </Button>
                   </div>
                 ) : (
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
                     <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
+                      <thead className="bg-gradient-to-r from-gray-50 to-blue-50">
                         <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                             Bundle Name
                           </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                             Version
                           </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                             Size
                           </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                             Created
                           </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                             Actions
                           </th>
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
                         {exports.map((exportBundle) => (
-                          <tr key={exportBundle.id}>
+                          <tr key={exportBundle.id} className="hover:bg-blue-50/50 transition-colors">
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div className="text-sm font-medium text-gray-900">
                                 {exportBundle.bundle_name}
