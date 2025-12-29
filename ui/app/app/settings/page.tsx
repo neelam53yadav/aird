@@ -109,7 +109,9 @@ export default function SettingsPage() {
 
     if (session) {
       // Load both workspace settings and user profile
-      Promise.all([loadWorkspaceSettings(), fetchUserProfile()])
+      Promise.all([loadWorkspaceSettings(), fetchUserProfile()]).catch((error) => {
+        console.error('Failed to load settings:', error)
+      })
     } else {
       setLoading(false)
     }
