@@ -86,9 +86,14 @@ async def check_qdrant() -> Dict[str, Any]:
     """Check Qdrant connectivity."""
     try:
         import httpx
+        import os
+        
+        # Use Docker service name or localhost for local dev
+        qdrant_host = os.getenv("QDRANT_HOST", "qdrant")
+        qdrant_port = os.getenv("QDRANT_PORT", "6333")
 
         async with httpx.AsyncClient() as client:
-            response = await client.get("http://localhost:6333/", timeout=5.0)
+            response = await client.get(f"http://{qdrant_host}:{qdrant_port}/", timeout=5.0)
             if response.status_code == 200:
                 return {"status": "healthy", "message": "Qdrant is accessible"}
             else:
@@ -97,19 +102,64 @@ async def check_qdrant() -> Dict[str, Any]:
         return {"status": "unhealthy", "message": f"Qdrant connection failed: {str(e)}"}
 
 
-async def check_minio() -> Dict[str, Any]:
-    """Check MinIO connectivity."""
+async def check_storage() -> Dict[str, Any]:
+    """Check storage connectivity (GCS or MinIO)."""
     try:
-        import httpx
-
-        async with httpx.AsyncClient() as client:
-            response = await client.get("http://localhost:9000/minio/health/live", timeout=5.0)
-            if response.status_code == 200:
-                return {"status": "healthy", "message": "MinIO is accessible"}
+        import os
+        
+        use_gcs = os.getenv("USE_GCS", "false").lower() == "true"
+        
+        if use_gcs:
+            # Check GCS by verifying bucket access
+            try:
+                from primedata.storage.minio_client import minio_client
+                
+                # Try to list objects in the primary bucket to verify connectivity
+                buckets = ["primedata-raw", "primedata-clean", "primedata-chunk"]
+                accessible_buckets = 0
+                
+                for bucket_name in buckets:
+                    try:
+                        # Check if bucket exists and is accessible
+                        # Access the gcs_client directly (it's initialized in __init__)
+                        if hasattr(minio_client, 'gcs_client') and minio_client.gcs_client:
+                            bucket = minio_client.gcs_client.bucket(bucket_name)
+                            if bucket.exists():
+                                accessible_buckets += 1
+                    except Exception:
+                        pass
+                
+                if accessible_buckets > 0:
+                    return {
+                        "status": "healthy", 
+                        "message": f"GCS is accessible ({accessible_buckets}/{len(buckets)} buckets accessible)"
+                    }
+                else:
+                    return {
+                        "status": "degraded", 
+                        "message": "GCS client initialized but buckets may not be accessible"
+                    }
+            except Exception as e:
+                return {"status": "unhealthy", "message": f"GCS connection failed: {str(e)}"}
+        else:
+            # Check MinIO for local development
+            import httpx
+            
+            minio_host = os.getenv("MINIO_HOST", "minio")
+            if ":" in minio_host:
+                # If MINIO_HOST includes port, use it as-is
+                minio_url = f"http://{minio_host}/minio/health/live"
             else:
-                return {"status": "unhealthy", "message": f"MinIO returned status {response.status_code}"}
+                minio_url = f"http://{minio_host}:9000/minio/health/live"
+
+            async with httpx.AsyncClient() as client:
+                response = await client.get(minio_url, timeout=5.0)
+                if response.status_code == 200:
+                    return {"status": "healthy", "message": "MinIO is accessible"}
+                else:
+                    return {"status": "unhealthy", "message": f"MinIO returned status {response.status_code}"}
     except Exception as e:
-        return {"status": "unhealthy", "message": f"MinIO connection failed: {str(e)}"}
+        return {"status": "unhealthy", "message": f"Storage connection failed: {str(e)}"}
 
 
 # MLflow check disabled - MLflow integration removed
@@ -122,9 +172,14 @@ async def check_airflow() -> Dict[str, Any]:
     """Check Airflow connectivity."""
     try:
         import httpx
+        import os
+        
+        # Use Docker service name or localhost for local dev
+        airflow_host = os.getenv("AIRFLOW_HOST", "airflow-webserver")
+        airflow_port = os.getenv("AIRFLOW_PORT", "8080")
 
         async with httpx.AsyncClient() as client:
-            response = await client.get("http://localhost:8080/health", timeout=5.0)
+            response = await client.get(f"http://{airflow_host}:{airflow_port}/health", timeout=5.0)
             if response.status_code == 200:
                 return {"status": "healthy", "message": "Airflow is accessible"}
             else:
@@ -137,9 +192,13 @@ async def check_airflow() -> Dict[str, Any]:
 async def health_check():
     """Comprehensive health check endpoint."""
     # Check all services concurrently (MLflow removed)
-    services = await asyncio.gather(check_database(), check_qdrant(), check_minio(), check_airflow(), return_exceptions=True)
+    services = await asyncio.gather(check_database(), check_qdrant(), check_storage(), check_airflow(), return_exceptions=True)
 
     # Process results
+    import os
+    use_gcs = os.getenv("USE_GCS", "false").lower() == "true"
+    storage_name = "gcs" if use_gcs else "minio"
+    
     service_results = {
         "database": (
             services[0] if not isinstance(services[0], Exception) else {"status": "unhealthy", "message": str(services[0])}
@@ -147,7 +206,7 @@ async def health_check():
         "qdrant": (
             services[1] if not isinstance(services[1], Exception) else {"status": "unhealthy", "message": str(services[1])}
         ),
-        "minio": (
+        storage_name: (
             services[2] if not isinstance(services[2], Exception) else {"status": "unhealthy", "message": str(services[2])}
         ),
         "airflow": (
