@@ -146,13 +146,25 @@ def register_stage_artifacts(
             # Construct MinIO key for processed JSONL
             minio_key = f"ws/{workspace_id}/prod/{product_id}/v/{version}/clean/{file_stem}.jsonl"
 
-            # Get file info from MinIO
+            # Get file info using unified stat_object method
             try:
                 from primedata.storage.minio_client import minio_client
 
-                stat = minio_client.client.stat_object("primedata-clean", minio_key)
-                file_size = stat.size
-                minio_etag = stat.etag
+                stat_info = minio_client.stat_object("primedata-clean", minio_key)
+                if not stat_info:
+                    logger.warning(f"Could not get file info for {minio_key}")
+                    continue
+
+                file_size = stat_info["size"]
+                minio_etag = stat_info["etag"]
+
+                # Calculate checksum from file content
+                file_data = minio_client.get_bytes("primedata-clean", minio_key)
+                if not file_data:
+                    logger.warning(f"Could not download file for checksum calculation: {minio_key}")
+                    continue
+
+                checksum = calculate_checksum(file_data, algorithm="sha256")
             except Exception as e:
                 logger.warning(f"Could not get file info for {minio_key}: {e}")
                 continue
@@ -169,6 +181,7 @@ def register_stage_artifacts(
                 minio_bucket="primedata-clean",
                 minio_key=minio_key,
                 file_size=file_size,
+                checksum=checksum,
                 minio_etag=minio_etag,
                 input_artifact_ids=input_artifact_ids,  # Would be raw file artifact IDs
                 artifact_metadata={
@@ -189,33 +202,44 @@ def register_stage_artifacts(
         try:
             from primedata.storage.minio_client import minio_client
 
-            stat = minio_client.client.stat_object("primedata-clean", metrics_key)
-            file_size = stat.size
-            minio_etag = stat.etag
-        except Exception:
-            logger.warning(f"Could not get metrics.json info")
-        else:
-            artifact_id = register_artifact(
-                db=db,
-                pipeline_run_id=pipeline_run_id,
-                workspace_id=workspace_id,
-                product_id=product_id,
-                version=version,
-                stage_name=stage_name,
-                artifact_type=ArtifactType.JSON,
-                artifact_name="metrics",
-                minio_bucket="primedata-clean",
-                minio_key=metrics_key,
-                file_size=file_size,
-                minio_etag=minio_etag,
-                input_artifact_ids=input_artifact_ids,  # Would be preprocess artifact IDs
-                artifact_metadata={
-                    "total_chunks": result.metrics.get("total_chunks", 0),
-                    "avg_trust_score": result.metrics.get("avg_trust_score", 0.0),
-                },
-                retention_policy=RetentionPolicy.DAYS_90,
-            ).id
-            registered_ids.append(artifact_id)
+            stat_info = minio_client.stat_object("primedata-clean", metrics_key)
+            if not stat_info:
+                logger.warning(f"Could not get metrics.json info")
+            else:
+                file_size = stat_info["size"]
+                minio_etag = stat_info["etag"]
+
+                # Calculate checksum from file content
+                file_data = minio_client.get_bytes("primedata-clean", metrics_key)
+                if not file_data:
+                    logger.warning(f"Could not download metrics.json for checksum calculation")
+                else:
+                    checksum = calculate_checksum(file_data, algorithm="sha256")
+
+                    artifact_id = register_artifact(
+                        db=db,
+                        pipeline_run_id=pipeline_run_id,
+                        workspace_id=workspace_id,
+                        product_id=product_id,
+                        version=version,
+                        stage_name=stage_name,
+                        artifact_type=ArtifactType.JSON,
+                        artifact_name="metrics",
+                        minio_bucket="primedata-clean",
+                        minio_key=metrics_key,
+                        file_size=file_size,
+                        checksum=checksum,
+                        minio_etag=minio_etag,
+                        input_artifact_ids=input_artifact_ids,  # Would be preprocess artifact IDs
+                        artifact_metadata={
+                            "total_chunks": result.metrics.get("total_chunks", 0),
+                            "avg_trust_score": result.metrics.get("avg_trust_score", 0.0),
+                        },
+                        retention_policy=RetentionPolicy.DAYS_90,
+                    ).id
+                    registered_ids.append(artifact_id)
+        except Exception as e:
+            logger.warning(f"Could not get metrics.json info: {e}")
 
     elif stage_name == "fingerprint":
         # Fingerprint is stored via storage.put_artifact() in primedata-exports under artifacts/
@@ -224,30 +248,41 @@ def register_stage_artifacts(
         try:
             from primedata.storage.minio_client import minio_client
 
-            stat = minio_client.client.stat_object("primedata-exports", fingerprint_key)
-            file_size = stat.size
-            minio_etag = stat.etag
-        except Exception:
-            logger.warning(f"Could not get fingerprint.json info")
-        else:
-            artifact_id = register_artifact(
-                db=db,
-                pipeline_run_id=pipeline_run_id,
-                workspace_id=workspace_id,
-                product_id=product_id,
-                version=version,
-                stage_name=stage_name,
-                artifact_type=ArtifactType.JSON,
-                artifact_name="fingerprint",
-                minio_bucket="primedata-exports",
-                minio_key=fingerprint_key,
-                file_size=file_size,
-                minio_etag=minio_etag,
-                input_artifact_ids=input_artifact_ids,  # scoring artifacts
-                artifact_metadata=result.metrics.get("fingerprint", {}),
-                retention_policy=RetentionPolicy.KEEP_FOREVER,  # Fingerprints are important
-            ).id
-            registered_ids.append(artifact_id)
+            stat_info = minio_client.stat_object("primedata-exports", fingerprint_key)
+            if not stat_info:
+                logger.warning(f"Could not get fingerprint.json info")
+            else:
+                file_size = stat_info["size"]
+                minio_etag = stat_info["etag"]
+
+                # Calculate checksum from file content
+                file_data = minio_client.get_bytes("primedata-exports", fingerprint_key)
+                if not file_data:
+                    logger.warning(f"Could not download fingerprint.json for checksum calculation")
+                else:
+                    checksum = calculate_checksum(file_data, algorithm="sha256")
+
+                    artifact_id = register_artifact(
+                        db=db,
+                        pipeline_run_id=pipeline_run_id,
+                        workspace_id=workspace_id,
+                        product_id=product_id,
+                        version=version,
+                        stage_name=stage_name,
+                        artifact_type=ArtifactType.JSON,
+                        artifact_name="fingerprint",
+                        minio_bucket="primedata-exports",
+                        minio_key=fingerprint_key,
+                        file_size=file_size,
+                        checksum=checksum,
+                        minio_etag=minio_etag,
+                        input_artifact_ids=input_artifact_ids,  # scoring artifacts
+                        artifact_metadata=result.metrics.get("fingerprint", {}),
+                        retention_policy=RetentionPolicy.KEEP_FOREVER,  # Fingerprints are important
+                    ).id
+                    registered_ids.append(artifact_id)
+        except Exception as e:
+            logger.warning(f"Could not get fingerprint.json info: {e}")
 
     elif stage_name == "validation":
         # Validation generates CSV summary via storage.put_artifact -> primedata-exports ws/.../artifacts/ai_validation_summary.csv
@@ -260,32 +295,43 @@ def register_stage_artifacts(
             try:
                 from primedata.storage.minio_client import minio_client
 
-                stat = minio_client.client.stat_object(bucket, key)
-                file_size = stat.size
-                minio_etag = stat.etag
-            except Exception:
-                logger.warning(f"Could not get validation CSV info")
-            else:
-                artifact_id = register_artifact(
-                    db=db,
-                    pipeline_run_id=pipeline_run_id,
-                    workspace_id=workspace_id,
-                    product_id=product_id,
-                    version=version,
-                    stage_name=stage_name,
-                    artifact_type=ArtifactType.CSV,
-                    artifact_name="validation_summary",
-                    minio_bucket=bucket,
-                    minio_key=key,
-                    file_size=file_size,
-                    minio_etag=minio_etag,
-                    input_artifact_ids=input_artifact_ids,
-                    artifact_metadata={
-                        "threshold": result.metrics.get("threshold", 70.0),
-                    },
-                    retention_policy=RetentionPolicy.DAYS_90,
-                ).id
-                registered_ids.append(artifact_id)
+                stat_info = minio_client.stat_object(bucket, key)
+                if not stat_info:
+                    logger.warning(f"Could not get validation CSV info")
+                else:
+                    file_size = stat_info["size"]
+                    minio_etag = stat_info["etag"]
+
+                    # Calculate checksum from file content
+                    file_data = minio_client.get_bytes(bucket, key)
+                    if not file_data:
+                        logger.warning(f"Could not download validation CSV for checksum calculation")
+                    else:
+                        checksum = calculate_checksum(file_data, algorithm="sha256")
+
+                        artifact_id = register_artifact(
+                            db=db,
+                            pipeline_run_id=pipeline_run_id,
+                            workspace_id=workspace_id,
+                            product_id=product_id,
+                            version=version,
+                            stage_name=stage_name,
+                            artifact_type=ArtifactType.CSV,
+                            artifact_name="validation_summary",
+                            minio_bucket=bucket,
+                            minio_key=key,
+                            file_size=file_size,
+                            checksum=checksum,
+                            minio_etag=minio_etag,
+                            input_artifact_ids=input_artifact_ids,
+                            artifact_metadata={
+                                "threshold": result.metrics.get("threshold", 70.0),
+                            },
+                            retention_policy=RetentionPolicy.DAYS_90,
+                        ).id
+                        registered_ids.append(artifact_id)
+            except Exception as e:
+                logger.warning(f"Could not get validation CSV info: {e}")
 
     elif stage_name == "reporting":
         # Reporting stores PDF via storage.put_artifact -> primedata-exports ws/.../artifacts/ai_trust_report.pdf
@@ -299,33 +345,44 @@ def register_stage_artifacts(
             try:
                 from primedata.storage.minio_client import minio_client
 
-                stat = minio_client.client.stat_object(bucket, key)
-                file_size = stat.size
-                minio_etag = stat.etag
-            except Exception:
-                logger.warning(f"Could not get trust report PDF info")
-            else:
-                artifact_id = register_artifact(
-                    db=db,
-                    pipeline_run_id=pipeline_run_id,
-                    workspace_id=workspace_id,
-                    product_id=product_id,
-                    version=version,
-                    stage_name=stage_name,
-                    artifact_type=ArtifactType.PDF,
-                    artifact_name="trust_report",
-                    minio_bucket=bucket,
-                    minio_key=key,
-                    file_size=file_size,
-                    minio_etag=minio_etag,
-                    input_artifact_ids=input_artifact_ids,
-                    artifact_metadata={
-                        "threshold": result.metrics.get("threshold", 70.0),
-                        "pdf_size_bytes": result.metrics.get("pdf_size_bytes"),
-                    },
-                    retention_policy=RetentionPolicy.KEEP_FOREVER,  # Reports are important
-                ).id
-                registered_ids.append(artifact_id)
+                stat_info = minio_client.stat_object(bucket, key)
+                if not stat_info:
+                    logger.warning(f"Could not get trust report PDF info")
+                else:
+                    file_size = stat_info["size"]
+                    minio_etag = stat_info["etag"]
+
+                    # Calculate checksum from file content
+                    file_data = minio_client.get_bytes(bucket, key)
+                    if not file_data:
+                        logger.warning(f"Could not download trust report PDF for checksum calculation")
+                    else:
+                        checksum = calculate_checksum(file_data, algorithm="sha256")
+
+                        artifact_id = register_artifact(
+                            db=db,
+                            pipeline_run_id=pipeline_run_id,
+                            workspace_id=workspace_id,
+                            product_id=product_id,
+                            version=version,
+                            stage_name=stage_name,
+                            artifact_type=ArtifactType.PDF,
+                            artifact_name="trust_report",
+                            minio_bucket=bucket,
+                            minio_key=key,
+                            file_size=file_size,
+                            checksum=checksum,
+                            minio_etag=minio_etag,
+                            input_artifact_ids=input_artifact_ids,
+                            artifact_metadata={
+                                "threshold": result.metrics.get("threshold", 70.0),
+                                "pdf_size_bytes": result.metrics.get("pdf_size_bytes"),
+                            },
+                            retention_policy=RetentionPolicy.KEEP_FOREVER,  # Reports are important
+                        ).id
+                        registered_ids.append(artifact_id)
+            except Exception as e:
+                logger.warning(f"Could not get trust report PDF info: {e}")
 
     elif stage_name == "indexing":
         # Indexing creates vectors in Qdrant (not stored in MinIO, but we track it)

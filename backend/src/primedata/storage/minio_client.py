@@ -406,6 +406,50 @@ class MinIOClient:
         except Exception:
             return False
 
+    def stat_object(self, bucket: str, key: str) -> Optional[Dict[str, Any]]:
+        """Get object metadata (size, ETag, etc.).
+
+        Args:
+            bucket: Bucket name
+            key: Object key
+
+        Returns:
+            Dictionary with 'size', 'etag', 'content_type', 'last_modified', or None if failed
+        """
+        try:
+            self._ensure_buckets()
+
+            if self.use_gcs:
+                # Get metadata from GCS
+                gcs_bucket = self.gcs_client.bucket(bucket)
+                blob = gcs_bucket.blob(key)
+                if not blob.exists():
+                    return None
+
+                # GCS blob properties - reload to fetch latest metadata
+                blob.reload()
+                return {
+                    "size": blob.size,
+                    "etag": blob.etag or blob.md5_hash or "",  # Use ETag or MD5 hash
+                    "content_type": blob.content_type,
+                    "last_modified": blob.updated,
+                }
+            else:
+                # Get metadata from MinIO
+                stat = self.client.stat_object(bucket, key)
+                return {
+                    "size": stat.size,
+                    "etag": stat.etag,
+                    "content_type": stat.content_type,
+                    "last_modified": stat.last_modified,
+                }
+        except S3Error as e:
+            logger.warning(f"Could not get object info for {bucket}/{key}: {e}")
+            return None
+        except Exception as e:
+            logger.warning(f"Could not get object info for {bucket}/{key}: {e}")
+            return None
+
     def get_bytes(self, bucket: str, key: str) -> Optional[bytes]:
         """Download object as bytes (alias for get_object for consistency).
 
