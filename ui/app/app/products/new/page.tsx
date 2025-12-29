@@ -209,34 +209,34 @@ export default function NewProductPage() {
 
   return (
     <AppLayout>
-      <div className="p-6">
-        {/* Breadcrumb Navigation */}
+      <div className="p-6 bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-50/30 min-h-screen">
+        {/* Enhanced Breadcrumb Navigation */}
         <div className="flex items-center mb-6">
-          <Link href="/app/products" className="flex items-center text-sm text-gray-500 hover:text-gray-700 transition-colors">
+          <Link href="/app/products" className="flex items-center text-sm text-gray-500 hover:text-gray-700 transition-colors font-medium">
             <ArrowLeft className="h-4 w-4 mr-1" />
             Products
           </Link>
           <span className="mx-2 text-gray-400">/</span>
-          <span className="text-sm font-medium text-gray-900">Create New</span>
+          <span className="text-sm font-semibold text-gray-900">Create New</span>
         </div>
 
-        {/* Page Header */}
+        {/* Enhanced Page Header */}
         <div className="mb-8">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Create New Product</h1>
-            <p className="text-gray-600 mt-1">Set up a new data product in your workspace</p>
+            <h1 className="text-4xl font-bold text-gray-900 mb-2 tracking-tight">Create New Product</h1>
+            <p className="text-lg text-gray-600">Set up a new data product in your workspace</p>
           </div>
         </div>
 
-        {/* Content */}
+        {/* Enhanced Content */}
         <div className="max-w-2xl">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
-          <div className="flex items-center mb-6">
-            <div className="bg-blue-100 rounded-lg p-3 mr-4">
-              <Package className="h-6 w-6 text-blue-600" />
+        <div className="bg-white rounded-xl shadow-md border border-gray-100 p-8">
+          <div className="flex items-center mb-8">
+            <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl p-3 mr-4 shadow-sm">
+              <Package className="h-6 w-6 text-white" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">Product Details</h2>
+              <h2 className="text-xl font-semibold text-gray-900">Product Details</h2>
               <p className="text-sm text-gray-600">Give your product a name to get started</p>
             </div>
           </div>
@@ -443,19 +443,30 @@ export default function NewProductPage() {
             </div>
 
             {error && (
-              <div className="bg-red-50 border border-red-200 rounded-md p-4">
-                <p className="text-sm text-red-600">{error}</p>
+              <div className="bg-red-50 border-2 border-red-200 rounded-xl p-4 shadow-sm">
+                <p className="text-sm font-medium text-red-600">{error}</p>
               </div>
             )}
 
-            <div className="flex justify-end space-x-3">
+            <div className="flex justify-end space-x-3 pt-6 border-t border-gray-200">
               <Link href="/app/products">
-                <Button type="button" variant="outline">
+                <Button type="button" variant="outline" className="border-2 hover:border-gray-300 hover:bg-gray-50">
                   Cancel
                 </Button>
               </Link>
-              <Button type="submit" disabled={loading || !name.trim() || !workspaceId}>
-                {loading ? 'Creating...' : 'Create Product'}
+              <Button 
+                type="submit" 
+                disabled={loading || !name.trim() || !workspaceId}
+                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg disabled:opacity-50"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  'Create Product'
+                )}
               </Button>
             </div>
           </form>
