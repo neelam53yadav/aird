@@ -14,7 +14,8 @@ import {
   Menu,
   X,
   ChevronDown,
-  CreditCard
+  CreditCard,
+  Sparkles
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
@@ -38,6 +39,13 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const pathname = usePathname()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [betaBannerDismissed, setBetaBannerDismissed] = useState(() => {
+    // Check localStorage to persist dismissal
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('betaBannerDismissed') === 'true'
+    }
+    return false
+  })
 
   useEffect(() => {
     if (status === 'loading') return
@@ -63,6 +71,13 @@ export default function AppLayout({ children }: AppLayoutProps) {
     }
   }, [userMenuOpen])
 
+  const handleDismissBanner = () => {
+    setBetaBannerDismissed(true)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('betaBannerDismissed', 'true')
+    }
+  }
+
   if (status === 'loading') {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -79,8 +94,39 @@ export default function AppLayout({ children }: AppLayoutProps) {
   }
 
   return (
-    <div className="h-screen flex overflow-hidden bg-gray-50">
-      {/* Mobile sidebar overlay */}
+    <div className="h-screen flex flex-col overflow-hidden bg-gray-50">
+      {/* Professional Beta Release Banner */}
+      {!betaBannerDismissed && (
+        <div className="relative bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white shadow-lg">
+          <div className="absolute inset-0 bg-black opacity-5"></div>
+          <div className="relative flex items-center justify-center px-4 py-2.5">
+            <div className="flex items-center space-x-3 max-w-7xl w-full">
+              <div className="flex items-center space-x-2 flex-shrink-0">
+                <div className="bg-white/20 backdrop-blur-sm rounded-full p-1.5">
+                  <Sparkles className="h-4 w-4 text-white" />
+                </div>
+                <span className="text-xs font-bold tracking-wider uppercase bg-white/20 px-2 py-0.5 rounded">
+                  Beta
+                </span>
+              </div>
+              <p className="text-sm font-medium flex-1 text-center">
+                You're using PrimeData Beta. We're actively improving features and performance. 
+                <span className="hidden sm:inline"> Your feedback helps us build better.</span>
+              </p>
+              <button
+                onClick={handleDismissBanner}
+                className="flex-shrink-0 p-1 rounded-md hover:bg-white/20 transition-colors focus:outline-none focus:ring-2 focus:ring-white/50"
+                aria-label="Dismiss beta banner"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex-1 flex overflow-hidden">
+        {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
           <div 
