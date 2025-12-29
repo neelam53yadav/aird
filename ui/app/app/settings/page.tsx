@@ -223,7 +223,8 @@ export default function SettingsPage() {
   }
 
   return (
-    <AppLayout>
+    <>
+      <AppLayout>
       <div className="p-6 bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-50/30 min-h-screen">
         <div className="max-w-7xl mx-auto">
           <div className="mb-8">
