@@ -8,6 +8,7 @@ Following enterprise best practices:
 - Maintainability: Business logic in one place, DAG files stay minimal
 """
 
+import json
 import logging
 import os
 from datetime import datetime
@@ -1344,6 +1345,19 @@ def task_policy(**context) -> Dict[str, Any]:
                 # Store policy result in metadata only (no MinIO file)
                 from primedata.db.models import PipelineArtifact as PA
 
+                # Prepare artifact metadata
+                artifact_metadata_dict = {
+                    "policy_passed": result.metrics.get("policy_passed", False),
+                    "violations": result.metrics.get("violations", []),
+                    "violations_count": result.metrics.get("violations_count", 0),
+                    "thresholds": result.metrics.get("thresholds", {}),
+                }
+
+                # Calculate checksum from metadata JSON (since there's no file)
+                metadata_json = json.dumps(artifact_metadata_dict, sort_keys=True)
+                metadata_bytes = metadata_json.encode("utf-8")
+                metadata_checksum = calculate_checksum(metadata_bytes, algorithm="sha256")
+
                 policy_artifact = PA(
                     pipeline_run_id=aird_context["pipeline_run"].id,
                     workspace_id=workspace_id,
@@ -1355,7 +1369,7 @@ def task_policy(**context) -> Dict[str, Any]:
                     minio_bucket="none",  # No MinIO file
                     minio_key=f"policy_result_{product_id}_v{version}",
                     file_size=0,
-                    checksum=None,
+                    checksum=metadata_checksum,  # Calculate checksum from metadata JSON
                     minio_etag=None,
                     input_artifacts=(
                         [
@@ -1369,12 +1383,7 @@ def task_policy(**context) -> Dict[str, Any]:
                         if input_artifact_ids
                         else []
                     ),
-                    artifact_metadata={
-                        "policy_passed": result.metrics.get("policy_passed", False),
-                        "violations": result.metrics.get("violations", []),
-                        "violations_count": result.metrics.get("violations_count", 0),
-                        "thresholds": result.metrics.get("thresholds", {}),
-                    },
+                    artifact_metadata=artifact_metadata_dict,
                     retention_policy=RetentionPolicy.KEEP_FOREVER,  # Policy results are important
                     status=ArtifactStatus.ACTIVE,
                 )
