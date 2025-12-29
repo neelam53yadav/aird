@@ -15,7 +15,10 @@ import {
   X,
   ChevronDown,
   CreditCard,
-  Sparkles
+  Sparkles,
+  ChevronLeft,
+  Bell,
+  Search
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
@@ -38,6 +41,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const router = useRouter()
   const pathname = usePathname()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [betaBannerDismissed, setBetaBannerDismissed] = useState(() => {
     // Check localStorage to persist dismissal
@@ -136,42 +140,62 @@ export default function AppLayout({ children }: AppLayoutProps) {
         </div>
       )}
 
-      {/* Sidebar */}
-      <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 ${
+      {/* Enhanced Sidebar */}
+      <div className={`fixed inset-y-0 left-0 z-50 bg-white shadow-xl transform transition-all duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 ${
         sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-      }`}>
-        {/* Sidebar header */}
-        <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200">
-          <h1 className="text-xl font-bold text-gray-900">PrimeData</h1>
-          <button
-            onClick={() => setSidebarOpen(false)}
-            className="lg:hidden p-2 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100"
-          >
-            <X className="h-6 w-6" />
-          </button>
+      } ${sidebarCollapsed ? 'w-20 lg:w-20' : 'w-64'}`}>
+        {/* Enhanced Sidebar header */}
+        <div className="flex items-center justify-between h-16 px-4 border-b-2 border-gray-100 bg-gradient-to-r from-blue-50/50 to-indigo-50/50">
+          {!sidebarCollapsed && (
+            <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+              PrimeData
+            </h1>
+          )}
+          {sidebarCollapsed && (
+            <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center mx-auto">
+              <span className="text-white font-bold text-sm">P</span>
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              className="hidden lg:flex p-1.5 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+              aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              <ChevronLeft className={`h-4 w-4 transition-transform ${sidebarCollapsed ? 'rotate-180' : ''}`} />
+            </button>
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="lg:hidden p-2 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
         
-        {/* Navigation */}
+        {/* Enhanced Navigation */}
         <nav className="mt-6 px-3">
           <div className="space-y-1">
             {navigation.map((item) => {
-              // Check if current path starts with the navigation item href
               const isActive = pathname.startsWith(item.href)
               return (
                 <Link
                   key={item.name}
                   href={item.href}
-                  className={`group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                  className={`group flex items-center px-3 py-3 text-sm font-medium rounded-lg transition-all duration-200 ${
                     isActive
-                      ? 'bg-blue-100 text-blue-700'
-                      : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
+                      ? 'bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 border-l-4 border-blue-600 shadow-sm'
+                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
                   }`}
                   onClick={() => setSidebarOpen(false)}
+                  title={sidebarCollapsed ? item.name : undefined}
                 >
-                  <item.icon className={`mr-3 h-5 w-5 ${
-                    isActive ? 'text-blue-500' : 'text-gray-400 group-hover:text-gray-500'
-                  }`} />
-                  {item.name}
+                  <item.icon className={`h-5 w-5 flex-shrink-0 ${
+                    isActive ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'
+                  } ${sidebarCollapsed ? 'mx-auto' : 'mr-3'}`} />
+                  {!sidebarCollapsed && (
+                    <span className="truncate">{item.name}</span>
+                  )}
                 </Link>
               )
             })}
@@ -181,62 +205,88 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
       {/* Main content area */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Top header */}
-        <header className="bg-white shadow-sm border-b border-gray-200">
+        {/* Enhanced Top header */}
+        <header className="bg-white shadow-md border-b-2 border-gray-100">
           <div className="flex items-center justify-between h-16 px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center">
+            <div className="flex items-center flex-1">
               <button
                 onClick={() => setSidebarOpen(true)}
-                className="lg:hidden p-2 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+                className="lg:hidden p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
               >
                 <Menu className="h-6 w-6" />
               </button>
-              <h2 className="ml-2 text-lg font-semibold text-gray-900">
+              <h2 className="ml-2 text-xl font-semibold text-gray-900">
                 {navigation.find(item => item.href === pathname)?.name || 'PrimeData'}
               </h2>
             </div>
             
-            <div className="flex items-center space-x-4">
-              {/* User menu */}
+            <div className="flex items-center space-x-3">
+              {/* Search button (placeholder for future) */}
+              <button
+                className="hidden md:flex p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                aria-label="Search"
+              >
+                <Search className="h-5 w-5" />
+              </button>
+              
+              {/* Notifications (placeholder) */}
+              <button
+                className="hidden md:flex relative p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                aria-label="Notifications"
+              >
+                <Bell className="h-5 w-5" />
+                <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full"></span>
+              </button>
+              
+              {/* Enhanced User menu */}
               <div className="relative user-menu">
                 <button
                   onClick={() => setUserMenuOpen(!userMenuOpen)}
-                  className="flex items-center space-x-3 p-2 rounded-md hover:bg-gray-100 transition-colors"
+                  className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-100 transition-colors border-2 border-transparent hover:border-gray-200"
                 >
                   {session.user?.image ? (
                     <img
-                      className="h-8 w-8 rounded-full"
+                      className="h-9 w-9 rounded-full ring-2 ring-gray-200"
                       src={session.user.image}
                       alt="Profile"
                     />
                   ) : (
-                    <div className="h-8 w-8 rounded-full bg-blue-500 flex items-center justify-center">
-                      <span className="text-white text-sm font-medium">
+                    <div className="h-9 w-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center ring-2 ring-gray-200">
+                      <span className="text-white text-sm font-semibold">
                         {session.user?.name?.charAt(0)?.toUpperCase() || 'U'}
                       </span>
                     </div>
                   )}
                   <div className="hidden sm:block text-left">
-                    <p className="text-sm font-medium text-gray-900">{session.user?.name}</p>
+                    <p className="text-sm font-semibold text-gray-900">{session.user?.name}</p>
                     <p className="text-xs text-gray-500">{session.user?.email}</p>
                   </div>
-                  <ChevronDown className="h-4 w-4 text-gray-400" />
+                  <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} />
                 </button>
                 
                 {userMenuOpen && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 z-50">
-                    <div className="py-1">
-                      <div className="px-4 py-2 border-b border-gray-100">
-                        <p className="text-sm font-medium text-gray-900">{session.user?.name}</p>
-                        <p className="text-xs text-gray-500">{session.user?.email}</p>
+                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border-2 border-gray-100 z-50 overflow-hidden">
+                    <div className="py-2">
+                      <div className="px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-blue-50/30">
+                        <p className="text-sm font-semibold text-gray-900">{session.user?.name}</p>
+                        <p className="text-xs text-gray-500 truncate">{session.user?.email}</p>
                       </div>
+                      <Link
+                        href="/app/settings"
+                        onClick={() => setUserMenuOpen(false)}
+                        className="flex items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                      >
+                        <Settings className="h-4 w-4 mr-3 text-gray-400" />
+                        Settings
+                      </Link>
                       <button
                         onClick={() => {
                           setUserMenuOpen(false)
                           signOut({ callbackUrl: '/' })
                         }}
-                        className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                        className="w-full text-left flex items-center px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
                       >
+                        <X className="h-4 w-4 mr-3" />
                         Sign Out
                       </button>
                     </div>

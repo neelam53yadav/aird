@@ -25,26 +25,27 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="flex min-h-screen items-center justify-center p-4">
-        {/* Backdrop */}
+        {/* Enhanced Backdrop with animation */}
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
+          className="fixed inset-0 bg-black bg-opacity-50 transition-opacity duration-300"
           onClick={onClose}
         />
         
-        {/* Modal */}
-        <div className={`relative w-full ${sizeClasses[size]} bg-white rounded-lg shadow-xl`}>
-          {/* Header */}
-          <div className="flex items-center justify-between p-6 border-b border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+        {/* Enhanced Modal with animation */}
+        <div className={`relative w-full ${sizeClasses[size]} bg-white rounded-xl shadow-2xl transform transition-all duration-300 scale-100`}>
+          {/* Enhanced Header */}
+          <div className="flex items-center justify-between p-6 border-b-2 border-gray-100 bg-gradient-to-r from-gray-50 to-blue-50/30">
+            <h3 className="text-xl font-semibold text-gray-900">{title}</h3>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
+              className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg p-1.5 transition-all"
+              aria-label="Close modal"
             >
               <X className="h-5 w-5" />
             </button>
           </div>
           
-          {/* Content */}
+          {/* Enhanced Content */}
           <div className="p-6">
             {children}
           </div>
@@ -76,17 +77,30 @@ export function ConfirmModal({
   variant = 'info'
 }: ConfirmModalProps) {
   const variantClasses = {
-    danger: 'bg-red-600 hover:bg-red-700 focus:ring-red-500',
-    warning: 'bg-yellow-600 hover:bg-yellow-700 focus:ring-yellow-500',
-    info: 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500'
+    danger: 'bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 shadow-md hover:shadow-lg',
+    warning: 'bg-gradient-to-r from-yellow-600 to-amber-600 hover:from-yellow-700 hover:to-amber-700 shadow-md hover:shadow-lg',
+    info: 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg'
+  }
+
+  const iconConfig = {
+    danger: '⚠️',
+    warning: '⚠️',
+    info: 'ℹ️'
   }
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={title} size="sm">
-      <div className="space-y-4">
-        <p className="text-gray-600">{message}</p>
-        <div className="flex justify-end space-x-3">
-          <Button variant="outline" onClick={onClose}>
+      <div className="space-y-6">
+        <div className="flex items-start space-x-4">
+          <div className="flex-shrink-0 text-3xl">{iconConfig[variant]}</div>
+          <p className="text-gray-700 leading-relaxed">{message}</p>
+        </div>
+        <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+          <Button 
+            variant="outline" 
+            onClick={onClose}
+            className="border-2 hover:border-gray-300 hover:bg-gray-50"
+          >
             {cancelText}
           </Button>
           <Button 
@@ -163,24 +177,38 @@ export function ResultModal({ isOpen, onClose, title, message, type }: ResultMod
 
   const config = typeConfig[type]
 
+  const iconConfig = {
+    success: { icon: '✅', bg: 'bg-green-100' },
+    error: { icon: '❌', bg: 'bg-red-100' },
+    warning: { icon: '⚠️', bg: 'bg-yellow-100' },
+    info: { icon: 'ℹ️', bg: 'bg-blue-100' }
+  }
+
+  const icon = iconConfig[type]
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={title} size="sm">
-      <div className="space-y-4">
-        <div className={`border rounded-lg p-4 ${config.bgColor} ${config.borderColor}`}>
-          <div className="flex items-center">
-            {config.icon}
-            <div className="ml-3">
-              <p className={`text-sm font-medium ${config.textColor}`}>
+      <div className="space-y-6">
+        <div className={`border-2 rounded-xl p-6 ${config.bgColor} ${config.borderColor}`}>
+          <div className="flex items-start space-x-4">
+            <div className={`${icon.bg} rounded-full p-3 flex-shrink-0`}>
+              <span className="text-2xl">{icon.icon}</span>
+            </div>
+            <div className="flex-1">
+              <p className={`text-lg font-semibold ${config.textColor} mb-2`}>
                 {title}
               </p>
-              <p className={`text-sm ${config.textColor.replace('800', '700')}`}>
+              <p className={`text-sm ${config.textColor.replace('800', '700')} leading-relaxed`}>
                 {message}
               </p>
             </div>
           </div>
         </div>
         <div className="flex justify-end">
-          <Button onClick={onClose}>
+          <Button 
+            onClick={onClose}
+            className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg"
+          >
             OK
           </Button>
         </div>
