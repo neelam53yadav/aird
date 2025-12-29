@@ -707,9 +707,30 @@ jobs:
           # Ensure Docker network exists (idempotent)
           \${DOCKER_CMD} network create primedata-network 2>/dev/null || echo "Network already exists"
           
+          # Verify required images exist before starting
+          echo "Verifying required Docker images exist..."
+          REQUIRED_IMAGES=("infra-backend:latest" "infra-frontend:latest" "infra-airflow-webserver:latest" "infra-airflow-scheduler:latest")
+          MISSING_IMAGES=()
+          for img in "\${REQUIRED_IMAGES[@]}"; do
+            if ! \${DOCKER_CMD} image inspect "\$img" > /dev/null 2>&1; then
+              MISSING_IMAGES+=("\$img")
+            fi
+          done
+          
+          if [ \${#MISSING_IMAGES[@]} -gt 0 ]; then
+            echo "❌ Error: Missing required images: \${MISSING_IMAGES[*]}"
+            echo "Please ensure images are built before deployment."
+            exit 1
+          fi
+          
+          echo "✅ All required images exist"
+          
           # Images are already built on this VM
-          # Just start services using the built images
+          # Just start services using the built images (don't try to pull from registry)
           echo "Starting services with Docker images built on VM..."
+          # Use --pull never to prevent Docker Compose from trying to pull images
+          # If --pull is not supported, the command will fail, so we try without it as fallback
+          sh -c "\${DOCKER_COMPOSE_CMD} -f infra/docker-compose.prod.yml up -d --pull never --remove-orphans" || \
           sh -c "\${DOCKER_COMPOSE_CMD} -f infra/docker-compose.prod.yml up -d --remove-orphans"
           
           sleep 10
