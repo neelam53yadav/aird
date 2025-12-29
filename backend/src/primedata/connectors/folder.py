@@ -183,8 +183,8 @@ class FolderConnector(BaseConnector):
     def sync_full(self, output_bucket: str, output_prefix: str) -> Dict[str, Any]:
         """Read all files from the directory and upload to MinIO/GCS.
 
-        If no root_path is provided (upload mode), returns empty result.
-        Files should be uploaded via the upload-files API endpoint instead.
+        If no root_path is provided (upload mode), lists files already in storage
+        for the given output_prefix and returns them as already processed.
         """
         start_time = time.time()
         files_processed = 0
@@ -192,16 +192,59 @@ class FolderConnector(BaseConnector):
         errors = 0
         details = {"files_processed": [], "files_failed": [], "files_skipped": []}
 
-        # If no path provided, this is upload mode - no files to sync
+        # If no path provided, this is upload mode - list files from storage
         if not self.root_path:
-            logger.info("Folder connector in upload mode - no files to sync. Use upload-files endpoint to add files.")
-            return {
-                "files": 0,
-                "bytes": 0,
-                "errors": 0,
-                "duration": time.time() - start_time,
-                "details": {"message": "Upload mode - use upload-files endpoint to add files"},
-            }
+            logger.info(
+                f"Folder connector in upload mode - listing files from storage (bucket: {output_bucket}, prefix: {output_prefix})"
+            )
+            try:
+                # List all objects in storage with the given prefix
+                objects = minio_client.list_objects(output_bucket, output_prefix)
+                logger.info(f"Found {len(objects)} files in storage with prefix {output_prefix}")
+
+                files_processed = len(objects)
+                for obj in objects:
+                    file_size = obj.get("size", 0)
+                    bytes_transferred += file_size
+                    # Extract filename from the object key (remove prefix)
+                    object_key = obj.get("name", "")
+                    if object_key.startswith(output_prefix):
+                        filename = object_key[len(output_prefix) :]
+                    else:
+                        filename = Path(object_key).name
+
+                    details["files_processed"].append(
+                        {
+                            "path": filename,
+                            "key": object_key,
+                            "size": file_size,
+                            "content_type": obj.get("content_type", "application/octet-stream"),
+                        }
+                    )
+
+                logger.info(
+                    f"Upload mode sync completed: {files_processed} files already in storage, {bytes_transferred} bytes"
+                )
+
+                return {
+                    "files": files_processed,
+                    "bytes": bytes_transferred,
+                    "errors": 0,
+                    "duration": time.time() - start_time,
+                    "details": {
+                        **details,
+                        "message": f"Found {files_processed} files already in storage (upload mode)",
+                    },
+                }
+            except Exception as e:
+                logger.error(f"Error listing files from storage in upload mode: {e}", exc_info=True)
+                return {
+                    "files": 0,
+                    "bytes": 0,
+                    "errors": 1,
+                    "duration": time.time() - start_time,
+                    "details": {"error": f"Failed to list files from storage: {str(e)}"},
+                }
 
         logger.info(f"Starting folder sync from {self.root_path}")
 
