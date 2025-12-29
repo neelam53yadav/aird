@@ -13,6 +13,7 @@ services:
 
   airflow-webserver:
     image: infra-airflow-webserver:latest
+    pull_policy: never
     container_name: primedata-airflow-webserver
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
@@ -66,6 +67,7 @@ services:
 
   airflow-scheduler:
     image: infra-airflow-scheduler:latest
+    pull_policy: never
     container_name: primedata-airflow-scheduler
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
@@ -107,6 +109,7 @@ services:
 
   backend:
     image: infra-backend:latest
+    pull_policy: never
     container_name: primedata-backend
     environment:
       DATABASE_URL: ${DATABASE_URL}
@@ -144,6 +147,7 @@ services:
 
   frontend:
     image: infra-frontend:latest
+    pull_policy: never
     container_name: primedata-frontend
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
