@@ -408,6 +408,13 @@ jobs:
             echo "✅ Docker Compose config changed - will rebuild all services"
           fi
           
+          # Check for workflow file changes (affects build process - force frontend rebuild)
+          WORKFLOW_CHANGED=false
+          if echo "$CHANGED_FILES" | grep -qE "^\.github/workflows/deploy-app\.yml"; then
+            WORKFLOW_CHANGED=true
+            echo "✅ Workflow file changed - will rebuild frontend to apply build changes"
+          fi
+          
           # Determine which services to rebuild
           if [ "$COMPOSE_CHANGED" = true ]; then
             # If compose file changed, rebuild all
@@ -416,7 +423,12 @@ jobs:
             REBUILD_AIRFLOW=true
           else
             REBUILD_BACKEND=$BACKEND_CHANGED
-            REBUILD_FRONTEND=$FRONTEND_CHANGED
+            # Force frontend rebuild if workflow changed (build process changed)
+            if [ "$WORKFLOW_CHANGED" = true ]; then
+              REBUILD_FRONTEND=true
+            else
+              REBUILD_FRONTEND=$FRONTEND_CHANGED
+            fi
             REBUILD_AIRFLOW=$AIRFLOW_CHANGED
           fi
           
