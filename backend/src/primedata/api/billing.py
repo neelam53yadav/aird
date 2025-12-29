@@ -218,7 +218,7 @@ async def get_billing_limits(workspace_id: str, db: Session = Depends(get_db), c
             billing_profile.plan.value.lower() if hasattr(billing_profile.plan, "value") else str(billing_profile.plan).lower()
         )
         limits = plan_limits.get(current_plan, plan_limits["free"])
-        
+
         # Calculate actual usage
         usage = calculate_workspace_usage(workspace_id, db)
 
@@ -286,46 +286,42 @@ async def handle_subscription_deleted(event: Dict[str, Any]):
 def calculate_workspace_usage(workspace_id: str, db: Session) -> Dict[str, Any]:
     """
     Calculate actual usage for a workspace.
-    
+
     Args:
         workspace_id: Workspace ID (string or UUID)
         db: Database session
-        
+
     Returns:
         Dictionary with usage metrics
     """
     workspace_uuid = UUID(workspace_id) if isinstance(workspace_id, str) else workspace_id
-    
+
     # Count products
     products_count = db.query(func.count(Product.id)).filter(Product.workspace_id == workspace_uuid).scalar() or 0
-    
+
     # Count data sources
     data_sources_count = db.query(func.count(DataSource.id)).filter(DataSource.workspace_id == workspace_uuid).scalar() or 0
-    
+
     # Count pipeline runs in current month
     now = datetime.utcnow()
     month_start = datetime(now.year, now.month, 1)
     pipeline_runs_count = (
         db.query(func.count(PipelineRun.id))
-        .filter(
-            and_(
-                PipelineRun.workspace_id == workspace_uuid,
-                PipelineRun.started_at >= month_start
-            )
-        )
-        .scalar() or 0
+        .filter(and_(PipelineRun.workspace_id == workspace_uuid, PipelineRun.started_at >= month_start))
+        .scalar()
+        or 0
     )
-    
+
     # Count vectors in Qdrant (sum across all products in workspace)
     vectors_count = 0
     try:
         from ..indexing.qdrant_client import QdrantClient
-        
+
         qdrant_client = QdrantClient()
         if qdrant_client.is_connected():
             # Get all products in workspace
             products = db.query(Product).filter(Product.workspace_id == workspace_uuid).all()
-            
+
             for product in products:
                 # Try to get collection info for current version
                 if product.current_version > 0:
@@ -344,7 +340,7 @@ def calculate_workspace_usage(workspace_id: str, db: Session) -> Dict[str, Any]:
     except Exception as e:
         logger.warning(f"Failed to count vectors from Qdrant: {e}")
         # Continue without vector count
-    
+
     return {
         "products": products_count,
         "data_sources": data_sources_count,
