@@ -5,11 +5,12 @@ import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, CheckCircle, AlertTriangle, XCircle, TrendingUp, Settings, RefreshCw, Eye, FileText } from 'lucide-react'
+import { ArrowLeft, CheckCircle, AlertTriangle, XCircle, TrendingUp, Settings, RefreshCw, Eye, FileText, Database, Zap, BarChart3 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ResultModal } from '@/components/ui/modal'
 import AppLayout from '@/components/layout/AppLayout'
 import { apiClient } from '@/lib/api-client'
+import { CardSkeleton, StatCardSkeleton } from '@/components/ui/skeleton'
 
 interface Product {
   id: string
@@ -222,10 +223,14 @@ export default function AIReadinessPage() {
   if (status === 'loading' || loading) {
     return (
       <AppLayout>
-        <div className="p-6 flex items-center justify-center min-h-96">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading AI readiness dashboard...</p>
+        <div className="p-6 bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-50/30 min-h-screen">
+          <div className="max-w-7xl mx-auto space-y-6">
+            <CardSkeleton />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {[1, 2, 3, 4].map((i) => (
+                <StatCardSkeleton key={i} />
+              ))}
+            </div>
           </div>
         </div>
       </AppLayout>
@@ -249,7 +254,8 @@ export default function AIReadinessPage() {
 
   return (
     <AppLayout>
-      <div className="p-6">
+      <div className="p-6 bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-50/30 min-h-screen">
+        <div className="max-w-7xl mx-auto">
         {/* Breadcrumb Navigation */}
         <div className="flex items-center mb-6">
           <Link href="/app/products" className="flex items-center text-sm text-gray-500 hover:text-gray-700 transition-colors">
@@ -268,12 +274,12 @@ export default function AIReadinessPage() {
         <div className="mb-8">
           <div className="flex items-center justify-between">
             <div className="flex items-center">
-              <div className="bg-purple-100 rounded-lg p-2 mr-4">
-                <TrendingUp className="h-6 w-6 text-purple-600" />
+              <div className="bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl p-3 mr-4 shadow-lg">
+                <TrendingUp className="h-6 w-6 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">AI Readiness Dashboard</h1>
-                <p className="text-sm text-gray-500 mt-1">Assess and improve data quality for optimal AI performance</p>
+                <h1 className="text-3xl font-bold text-gray-900">AI Readiness Dashboard</h1>
+                <p className="text-sm text-gray-600 mt-1">Assess and improve data quality for optimal AI performance</p>
               </div>
             </div>
             <div className="flex space-x-3">
@@ -391,100 +397,179 @@ export default function AIReadinessPage() {
           /* Assessment Results */
           <div className="space-y-6">
             {/* Overall Score */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Overall AI Readiness Score</h2>
-                  <p className="text-sm text-gray-600 mt-1">
-                    📊 Assessing {useVersion === 'prod' ? 'production' : 'current'} data • 
-                    <span className="ml-1 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                      v{aiReadiness.version}
-                    </span>
-                  </p>
+            <div className="bg-white rounded-xl shadow-lg border-2 border-gray-100 p-8 relative overflow-hidden">
+              <div className="absolute top-0 right-0 -mr-4 -mt-4 bg-gradient-to-br from-purple-500/10 to-indigo-500/10 rounded-full h-32 w-32"></div>
+              <div className="relative">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-900 mb-2">Overall AI Readiness Score</h2>
+                    <p className="text-sm text-gray-600">
+                      📊 Assessing {useVersion === 'prod' ? 'production' : 'current'} data • 
+                      <span className="ml-1 inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-sm">
+                        v{aiReadiness.version}
+                      </span>
+                    </p>
+                  </div>
+                  <div className={`flex items-center px-4 py-2 rounded-full text-lg font-bold shadow-md ${
+                    aiReadiness.score.overall_score >= 8 ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white' :
+                    aiReadiness.score.overall_score >= 6 ? 'bg-gradient-to-r from-yellow-500 to-orange-600 text-white' : 
+                    'bg-gradient-to-r from-red-500 to-rose-600 text-white'
+                  }`}>
+                    {getScoreIcon(aiReadiness.score.overall_score)}
+                    <span className="ml-2">{aiReadiness.score.overall_score}/10</span>
+                  </div>
                 </div>
-                <div className={`flex items-center px-3 py-1 rounded-full text-sm font-medium ${getScoreColor(aiReadiness.score.overall_score)}`}>
-                  {getScoreIcon(aiReadiness.score.overall_score)}
-                  <span className="ml-2">{aiReadiness.score.overall_score}/10</span>
+                
+                <div className="w-full bg-gray-200 rounded-full h-4 mb-4 shadow-inner">
+                  <div 
+                    className={`h-4 rounded-full transition-all duration-700 shadow-md ${
+                      aiReadiness.score.overall_score >= 8 ? 'bg-gradient-to-r from-green-500 to-emerald-600' :
+                      aiReadiness.score.overall_score >= 6 ? 'bg-gradient-to-r from-yellow-500 to-orange-600' : 
+                      'bg-gradient-to-r from-red-500 to-rose-600'
+                    }`}
+                    style={{ width: `${(aiReadiness.score.overall_score / 10) * 100}%` }}
+                  ></div>
                 </div>
+                
+                <p className="text-sm text-gray-500">
+                  Last assessed: {new Date(aiReadiness.last_assessed).toLocaleString()}
+                </p>
               </div>
-              
-              <div className="w-full bg-gray-200 rounded-full h-3 mb-4">
-                <div 
-                  className={`h-3 rounded-full transition-all duration-500 ${
-                    aiReadiness.score.overall_score >= 8 ? 'bg-green-500' :
-                    aiReadiness.score.overall_score >= 6 ? 'bg-yellow-500' : 'bg-red-500'
-                  }`}
-                  style={{ width: `${(aiReadiness.score.overall_score / 10) * 100}%` }}
-                ></div>
-              </div>
-              
-              <p className="text-sm text-gray-600">
-                Last assessed: {new Date(aiReadiness.last_assessed).toLocaleString()}
-              </p>
             </div>
 
             {/* Score Breakdown */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-medium text-gray-900">Data Quality</h3>
-                  <span className={`px-2 py-1 rounded text-xs font-medium ${getScoreColor(aiReadiness.score.data_quality_score)}`}>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg p-2">
+                    <Database className="h-5 w-5 text-white" />
+                  </div>
+                  <span className={`px-3 py-1 rounded-full text-sm font-bold ${
+                    aiReadiness.score.data_quality_score >= 8 ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white' :
+                    aiReadiness.score.data_quality_score >= 6 ? 'bg-gradient-to-r from-yellow-500 to-orange-600 text-white' : 
+                    'bg-gradient-to-r from-red-500 to-rose-600 text-white'
+                  }`}>
                     {aiReadiness.score.data_quality_score}/10
                   </span>
                 </div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Data Quality</h3>
                 <p className="text-xs text-gray-600">Encoding, duplicates, empty chunks</p>
+                <div className="mt-3 w-full bg-gray-200 rounded-full h-1.5">
+                  <div 
+                    className={`h-1.5 rounded-full ${
+                      aiReadiness.score.data_quality_score >= 8 ? 'bg-gradient-to-r from-green-500 to-emerald-600' :
+                      aiReadiness.score.data_quality_score >= 6 ? 'bg-gradient-to-r from-yellow-500 to-orange-600' : 
+                      'bg-gradient-to-r from-red-500 to-rose-600'
+                    }`}
+                    style={{ width: `${(aiReadiness.score.data_quality_score / 10) * 100}%` }}
+                  ></div>
+                </div>
               </div>
               
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-medium text-gray-900">Chunk Quality</h3>
-                  <span className={`px-2 py-1 rounded text-xs font-medium ${getScoreColor(aiReadiness.score.chunk_quality_score)}`}>
+              <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg p-2">
+                    <FileText className="h-5 w-5 text-white" />
+                  </div>
+                  <span className={`px-3 py-1 rounded-full text-sm font-bold ${
+                    aiReadiness.score.chunk_quality_score >= 8 ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white' :
+                    aiReadiness.score.chunk_quality_score >= 6 ? 'bg-gradient-to-r from-yellow-500 to-orange-600 text-white' : 
+                    'bg-gradient-to-r from-red-500 to-rose-600 text-white'
+                  }`}>
                     {aiReadiness.score.chunk_quality_score}/10
                   </span>
                 </div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Chunk Quality</h3>
                 <p className="text-xs text-gray-600">Size distribution, content quality</p>
+                <div className="mt-3 w-full bg-gray-200 rounded-full h-1.5">
+                  <div 
+                    className={`h-1.5 rounded-full ${
+                      aiReadiness.score.chunk_quality_score >= 8 ? 'bg-gradient-to-r from-green-500 to-emerald-600' :
+                      aiReadiness.score.chunk_quality_score >= 6 ? 'bg-gradient-to-r from-yellow-500 to-orange-600' : 
+                      'bg-gradient-to-r from-red-500 to-rose-600'
+                    }`}
+                    style={{ width: `${(aiReadiness.score.chunk_quality_score / 10) * 100}%` }}
+                  ></div>
+                </div>
               </div>
               
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-medium text-gray-900">Embedding Quality</h3>
-                  <span className={`px-2 py-1 rounded text-xs font-medium ${getScoreColor(aiReadiness.score.embedding_quality_score)}`}>
+              <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="bg-gradient-to-br from-purple-500 to-indigo-600 rounded-lg p-2">
+                    <Zap className="h-5 w-5 text-white" />
+                  </div>
+                  <span className={`px-3 py-1 rounded-full text-sm font-bold ${
+                    aiReadiness.score.embedding_quality_score >= 8 ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white' :
+                    aiReadiness.score.embedding_quality_score >= 6 ? 'bg-gradient-to-r from-yellow-500 to-orange-600 text-white' : 
+                    'bg-gradient-to-r from-red-500 to-rose-600 text-white'
+                  }`}>
                     {aiReadiness.score.embedding_quality_score}/10
                   </span>
                 </div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Embedding Quality</h3>
                 <p className="text-xs text-gray-600">Vector representation quality</p>
+                <div className="mt-3 w-full bg-gray-200 rounded-full h-1.5">
+                  <div 
+                    className={`h-1.5 rounded-full ${
+                      aiReadiness.score.embedding_quality_score >= 8 ? 'bg-gradient-to-r from-green-500 to-emerald-600' :
+                      aiReadiness.score.embedding_quality_score >= 6 ? 'bg-gradient-to-r from-yellow-500 to-orange-600' : 
+                      'bg-gradient-to-r from-red-500 to-rose-600'
+                    }`}
+                    style={{ width: `${(aiReadiness.score.embedding_quality_score / 10) * 100}%` }}
+                  ></div>
+                </div>
               </div>
               
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-medium text-gray-900">Coverage</h3>
-                  <span className={`px-2 py-1 rounded text-xs font-medium ${getScoreColor(aiReadiness.score.coverage_score)}`}>
+              <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="bg-gradient-to-br from-orange-500 to-red-600 rounded-lg p-2">
+                    <BarChart3 className="h-5 w-5 text-white" />
+                  </div>
+                  <span className={`px-3 py-1 rounded-full text-sm font-bold ${
+                    aiReadiness.score.coverage_score >= 8 ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white' :
+                    aiReadiness.score.coverage_score >= 6 ? 'bg-gradient-to-r from-yellow-500 to-orange-600 text-white' : 
+                    'bg-gradient-to-r from-red-500 to-rose-600 text-white'
+                  }`}>
                     {aiReadiness.score.coverage_score}/10
                   </span>
                 </div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Coverage</h3>
                 <p className="text-xs text-gray-600">Document and chunk volume</p>
+                <div className="mt-3 w-full bg-gray-200 rounded-full h-1.5">
+                  <div 
+                    className={`h-1.5 rounded-full ${
+                      aiReadiness.score.coverage_score >= 8 ? 'bg-gradient-to-r from-green-500 to-emerald-600' :
+                      aiReadiness.score.coverage_score >= 6 ? 'bg-gradient-to-r from-yellow-500 to-orange-600' : 
+                      'bg-gradient-to-r from-red-500 to-rose-600'
+                    }`}
+                    style={{ width: `${(aiReadiness.score.coverage_score / 10) * 100}%` }}
+                  ></div>
+                </div>
               </div>
             </div>
 
             {/* Metrics */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Data Quality Metrics</h2>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-gray-900">{aiReadiness.metrics.total_documents}</div>
-                  <div className="text-sm text-gray-600">Documents</div>
+            <div className="bg-white rounded-xl shadow-lg border-2 border-gray-100 p-8">
+              <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center">
+                <BarChart3 className="h-5 w-5 mr-2 text-purple-600" />
+                Data Quality Metrics
+              </h2>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                <div className="text-center p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
+                  <div className="text-3xl font-bold text-gray-900 mb-1">{aiReadiness.metrics.total_documents}</div>
+                  <div className="text-sm font-medium text-gray-600">Documents</div>
                 </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-gray-900">{aiReadiness.metrics.total_chunks}</div>
-                  <div className="text-sm text-gray-600">Chunks</div>
+                <div className="text-center p-4 bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl border border-green-100">
+                  <div className="text-3xl font-bold text-gray-900 mb-1">{aiReadiness.metrics.total_chunks}</div>
+                  <div className="text-sm font-medium text-gray-600">Chunks</div>
                 </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-gray-900">{Math.round(aiReadiness.metrics.avg_chunk_size)}</div>
-                  <div className="text-sm text-gray-600">Avg Chunk Size</div>
+                <div className="text-center p-4 bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl border border-purple-100">
+                  <div className="text-3xl font-bold text-gray-900 mb-1">{Math.round(aiReadiness.metrics.avg_chunk_size)}</div>
+                  <div className="text-sm font-medium text-gray-600">Avg Chunk Size</div>
                 </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-gray-900">{aiReadiness.metrics.duplicate_chunks}</div>
-                  <div className="text-sm text-gray-600">Duplicates</div>
+                <div className="text-center p-4 bg-gradient-to-br from-orange-50 to-red-50 rounded-xl border border-orange-100">
+                  <div className="text-3xl font-bold text-gray-900 mb-1">{aiReadiness.metrics.duplicate_chunks}</div>
+                  <div className="text-sm font-medium text-gray-600">Duplicates</div>
                 </div>
               </div>
             </div>
@@ -652,6 +737,7 @@ export default function AIReadinessPage() {
             type={resultModalData.type}
           />
         )}
+        </div>
       </div>
     </AppLayout>
   )
