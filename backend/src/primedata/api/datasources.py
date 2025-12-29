@@ -19,7 +19,7 @@ from primedata.core.security import get_current_user
 from primedata.db.database import get_db
 from primedata.db.models import DataSource, DataSourceType, Product, RawFile, RawFileStatus
 from primedata.storage.minio_client import minio_client
-from primedata.storage.paths import raw_prefix
+from primedata.storage.paths import raw_prefix, safe_filename
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
