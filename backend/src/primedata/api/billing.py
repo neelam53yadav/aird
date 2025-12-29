@@ -6,18 +6,23 @@ including checkout sessions, customer portal, and webhooks.
 """
 
 import json
+import logging
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
+from uuid import UUID
 
 import stripe
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
+from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 
 from ..core.security import get_current_user
 from ..db.database import get_db
-from ..db.models import BillingPlan, BillingProfile, Workspace
+from ..db.models import BillingPlan, BillingProfile, DataSource, PipelineRun, Product, Workspace
+
+logger = logging.getLogger(__name__)
 
 # Initialize Stripe
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
@@ -213,7 +218,9 @@ async def get_billing_limits(workspace_id: str, db: Session = Depends(get_db), c
             billing_profile.plan.value.lower() if hasattr(billing_profile.plan, "value") else str(billing_profile.plan).lower()
         )
         limits = plan_limits.get(current_plan, plan_limits["free"])
-        usage = billing_profile.usage or {}
+        
+        # Calculate actual usage
+        usage = calculate_workspace_usage(workspace_id, db)
 
         return BillingLimitsResponse(plan=current_plan, limits=limits, usage=usage)
 
@@ -274,6 +281,76 @@ async def handle_subscription_deleted(event: Dict[str, Any]):
     """Handle subscription deleted event."""
     # Implementation for subscription deleted
     pass
+
+
+def calculate_workspace_usage(workspace_id: str, db: Session) -> Dict[str, Any]:
+    """
+    Calculate actual usage for a workspace.
+    
+    Args:
+        workspace_id: Workspace ID (string or UUID)
+        db: Database session
+        
+    Returns:
+        Dictionary with usage metrics
+    """
+    workspace_uuid = UUID(workspace_id) if isinstance(workspace_id, str) else workspace_id
+    
+    # Count products
+    products_count = db.query(func.count(Product.id)).filter(Product.workspace_id == workspace_uuid).scalar() or 0
+    
+    # Count data sources
+    data_sources_count = db.query(func.count(DataSource.id)).filter(DataSource.workspace_id == workspace_uuid).scalar() or 0
+    
+    # Count pipeline runs in current month
+    now = datetime.utcnow()
+    month_start = datetime(now.year, now.month, 1)
+    pipeline_runs_count = (
+        db.query(func.count(PipelineRun.id))
+        .filter(
+            and_(
+                PipelineRun.workspace_id == workspace_uuid,
+                PipelineRun.started_at >= month_start
+            )
+        )
+        .scalar() or 0
+    )
+    
+    # Count vectors in Qdrant (sum across all products in workspace)
+    vectors_count = 0
+    try:
+        from ..indexing.qdrant_client import QdrantClient
+        
+        qdrant_client = QdrantClient()
+        if qdrant_client.is_connected():
+            # Get all products in workspace
+            products = db.query(Product).filter(Product.workspace_id == workspace_uuid).all()
+            
+            for product in products:
+                # Try to get collection info for current version
+                if product.current_version > 0:
+                    collection_name = qdrant_client.find_collection_name(
+                        workspace_id=str(workspace_uuid),
+                        product_id=str(product.id),
+                        version=product.current_version,
+                        product_name=product.name,
+                    )
+                    if collection_name:
+                        collection_info = qdrant_client.get_collection_info(collection_name)
+                        if collection_info:
+                            vectors_count += collection_info.get("vectors_count", 0)
+        else:
+            logger.warning("Qdrant not connected, cannot count vectors")
+    except Exception as e:
+        logger.warning(f"Failed to count vectors from Qdrant: {e}")
+        # Continue without vector count
+    
+    return {
+        "products": products_count,
+        "data_sources": data_sources_count,
+        "pipeline_runs_this_month": pipeline_runs_count,
+        "vectors": vectors_count,
+    }
 
 
 def check_billing_limits(workspace_id: str, limit_type: str, current_count: int, db: Session) -> bool:

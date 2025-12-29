@@ -22,6 +22,7 @@ from primedata.api.playbooks import router as playbooks_router  # M1
 from primedata.api.playground import router as playground_router
 from primedata.api.products import router as products_router
 from primedata.api.settings import router as settings_router
+from primedata.api.team import router as team_router
 from primedata.core.auth_middleware import AuthMiddleware
 from primedata.core.jwt_keys import get_public_jwks
 from primedata.core.settings import get_settings
@@ -69,6 +70,7 @@ app.include_router(analytics_router, prefix="/api/v1/analytics", tags=["analytic
 app.include_router(playbooks_router)  # M1
 app.include_router(acl_router)  # M5
 app.include_router(settings_router)
+app.include_router(team_router)  # Team management
 
 
 async def check_database() -> Dict[str, Any]:
