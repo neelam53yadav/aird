@@ -8,6 +8,7 @@ import { Plus, Package, MoreVertical, Trash2, Edit, GitBranch } from 'lucide-rea
 import { Button } from '@/components/ui/button'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { ConfirmModal, ResultModal } from '@/components/ui/modal'
+import { ErrorState } from '@/components/ui/error-state'
 import AppLayout from '@/components/layout/AppLayout'
 import { apiClient } from '@/lib/api-client'
 
