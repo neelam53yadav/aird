@@ -329,6 +329,18 @@ def register_stage_artifacts(
 
     elif stage_name == "indexing":
         # Indexing creates vectors in Qdrant (not stored in MinIO, but we track it)
+        # Prepare artifact metadata
+        artifact_metadata_dict = {
+            "vectors_indexed": result.metrics.get("points_indexed", 0),  # Indexing stage uses 'points_indexed'
+            "collection_name": result.metrics.get("collection_name"),
+            "embedding_model": result.metrics.get("embedding_model"),
+        }
+
+        # Calculate checksum from metadata JSON (since vectors are in Qdrant, not MinIO)
+        metadata_json = json.dumps(artifact_metadata_dict, sort_keys=True)
+        metadata_bytes = metadata_json.encode("utf-8")
+        metadata_checksum = calculate_checksum(metadata_bytes, algorithm="sha256")
+
         artifact_id = register_artifact(
             db=db,
             pipeline_run_id=pipeline_run_id,
@@ -341,13 +353,10 @@ def register_stage_artifacts(
             minio_bucket="qdrant",  # Special bucket name for Qdrant
             minio_key=f"collection_ws_{workspace_id}_prod_{product_id}_v_{version}",
             file_size=0,  # Vectors are in Qdrant, not MinIO
-            minio_etag=None,
+            checksum=metadata_checksum,  # Calculate checksum from metadata JSON
+            minio_etag=metadata_checksum,  # Use checksum as ETag since there's no file
             input_artifact_ids=input_artifact_ids,
-            artifact_metadata={
-                "vectors_indexed": result.metrics.get("points_indexed", 0),  # Indexing stage uses 'points_indexed'
-                "collection_name": result.metrics.get("collection_name"),
-                "embedding_model": result.metrics.get("embedding_model"),
-            },
+            artifact_metadata=artifact_metadata_dict,
             retention_policy=RetentionPolicy.KEEP_FOREVER,  # Vectors are critical
         ).id
         registered_ids.append(artifact_id)
