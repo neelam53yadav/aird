@@ -560,18 +560,18 @@ jobs:
             echo "Using sudo for Docker commands"
           fi
           
-          # Cleanup Docker resources on VM before building
-          echo "Cleaning up Docker resources on VM before building..."
+          # Only prune dangling images, NOT the build cache (this preserves layer cache for faster builds!)
+          echo "Cleaning up dangling images (preserving build cache)..."
           ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
-            "${DOCKER_CMD} system prune -f || true && ${DOCKER_CMD} builder prune -af || true"
+            "${DOCKER_CMD} image prune -f || true"
           echo ""
           
           # Build backend if needed (changed OR doesn't exist)
           if [ "$REBUILD_BACKEND" = "true" ] || [ "$IMAGES_EXIST" != "true" ]; then
-            echo "🔨 Building backend image..."
+            echo "🔨 Building backend image (using cache)..."
             ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
               "cd ${DEPLOY_PATH_EXPANDED} && \
-               ${DOCKER_CMD} build -t infra-backend:latest -t infra-backend:${IMAGE_TAG} -f backend/Dockerfile backend/"
+               ${DOCKER_CMD} build --cache-from infra-backend:latest -t infra-backend:latest -t infra-backend:${IMAGE_TAG} -f backend/Dockerfile backend/"
             echo "✅ Backend image built"
           else
             echo "⏭️  Skipping backend build (no changes detected)"
@@ -579,12 +579,12 @@ jobs:
           
           # Build frontend if needed (changed OR doesn't exist)
           if [ "$REBUILD_FRONTEND" = "true" ] || [ "$IMAGES_EXIST" != "true" ]; then
-            echo "🔨 Building frontend image..."
+            echo "🔨 Building frontend image (using cache)..."
             VM_IP="${{ steps.get-vm-ip.outputs.vm_ip }}"
             API_URL="http://${VM_IP}:8000"
             ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${VM_IP} \
               "cd ${DEPLOY_PATH_EXPANDED} && \
-               ${DOCKER_CMD} build --build-arg NEXT_PUBLIC_API_URL=\"${API_URL}\" --build-arg NEXT_PUBLIC_API_BASE=\"${API_URL}\" -t infra-frontend:latest -t infra-frontend:${IMAGE_TAG} -f ui/Dockerfile ui/"
+               ${DOCKER_CMD} build --cache-from infra-frontend:latest --build-arg NEXT_PUBLIC_API_URL=\"${API_URL}\" --build-arg NEXT_PUBLIC_API_BASE=\"${API_URL}\" -t infra-frontend:latest -t infra-frontend:${IMAGE_TAG} -f ui/Dockerfile ui/"
             echo "✅ Frontend image built"
           else
             echo "⏭️  Skipping frontend build (no changes detected)"
@@ -592,10 +592,10 @@ jobs:
           
           # Build Airflow if needed (changed OR doesn't exist)
           if [ "$REBUILD_AIRFLOW" = "true" ] || [ "$IMAGES_EXIST" != "true" ]; then
-            echo "🔨 Building Airflow images..."
+            echo "🔨 Building Airflow images (using cache)..."
             ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
               "cd ${DEPLOY_PATH_EXPANDED} && \
-               ${DOCKER_CMD} build -t infra-airflow-webserver:latest -t infra-airflow-webserver:${IMAGE_TAG} -f infra/airflow/Dockerfile infra/airflow/ && \
+               ${DOCKER_CMD} build --cache-from infra-airflow-webserver:latest -t infra-airflow-webserver:latest -t infra-airflow-webserver:${IMAGE_TAG} -f infra/airflow/Dockerfile infra/airflow/ && \
                ${DOCKER_CMD} tag infra-airflow-webserver:latest infra-airflow-scheduler:latest && \
                ${DOCKER_CMD} tag infra-airflow-webserver:${IMAGE_TAG} infra-airflow-scheduler:${IMAGE_TAG}"
             echo "✅ Airflow images built"
@@ -621,26 +621,25 @@ jobs:
             local IMAGE_NAME=$1
             echo "Cleaning up old versions of ${IMAGE_NAME}..."
             
-            # Get all version tags (v* pattern) sorted by creation date (newest first)
-            # Keep only the 2 most recent version tags (latest + 1 previous)
-            # Delete all older version tags
             ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
               "bash -c '
-                # Get all version tags, sorted by creation date (newest first)
-                TAGS=\$(${DOCKER_CMD} images ${IMAGE_NAME} --format \"{{.Tag}}\" --filter \"reference=${IMAGE_NAME}:v*\" | sort -r)
+                # Get all version tags (v* pattern only), sorted by creation date (newest first)
+                # Explicitly exclude \"latest\" tag
+                TAGS=\$(${DOCKER_CMD} images ${IMAGE_NAME} --format \"{{.Tag}}\" | grep \"^v\" | sort -r)
                 
-                # Count total version tags
+                # Count total version tags (excluding latest)
                 TAG_COUNT=\$(echo \"\$TAGS\" | grep -v \"^$\" | wc -l)
                 
                 if [ \"\$TAG_COUNT\" -gt 2 ]; then
-                  # Keep first 2 tags (latest versions), delete the rest
+                  # Keep first 2 version tags (most recent), delete the rest
                   echo \"\$TAGS\" | tail -n +3 | while read tag; do
-                    if [ -n \"\$tag\" ]; then
+                    if [ -n \"\$tag\" ] && [ \"\$tag\" != \"latest\" ]; then
                       echo \"  Removing old tag: ${IMAGE_NAME}:\$tag\"
-                      ${DOCKER_CMD} rmi \"${IMAGE_NAME}:\$tag\" 2>/dev/null || true
+                      # Use docker image rm with specific tag to avoid affecting other tags
+                      ${DOCKER_CMD} image rm \"${IMAGE_NAME}:\$tag\" 2>/dev/null || true
                     fi
                   done
-                  echo \"  Kept 2 most recent version tags\"
+                  echo \"  Kept 2 most recent version tags (plus latest)\"
                 else
                   echo \"  Only \$TAG_COUNT version tag(s) found, nothing to clean\"
                 fi
@@ -667,6 +666,27 @@ jobs:
           
           echo ""
           echo "✅ Image cleanup complete"
+          
+          # Ensure latest tags exist after cleanup
+          echo ""
+          echo "Ensuring latest tags exist..."
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+            "bash -c '
+              for IMAGE in infra-backend infra-frontend infra-airflow-webserver infra-airflow-scheduler; do
+                if ! ${DOCKER_CMD} image inspect \"\${IMAGE}:latest\" > /dev/null 2>&1; then
+                  echo \"Creating \${IMAGE}:latest from most recent version...\"
+                  MOST_RECENT=\$(${DOCKER_CMD} images \${IMAGE} --format \"{{.Tag}}\" | grep \"^v\" | sort -r | head -n 1)
+                  if [ -n \"\$MOST_RECENT\" ]; then
+                    ${DOCKER_CMD} tag \"\${IMAGE}:\$MOST_RECENT\" \"\${IMAGE}:latest\"
+                    echo \"  ✅ Created \${IMAGE}:latest from \${IMAGE}:\$MOST_RECENT\"
+                  else
+                    echo \"  ⚠️  Warning: No version tags found for \${IMAGE}\"
+                  fi
+                else
+                  echo \"  ✅ \${IMAGE}:latest exists\"
+                fi
+              done
+            '"
 
       - name: Deploy on VM
         run: |
