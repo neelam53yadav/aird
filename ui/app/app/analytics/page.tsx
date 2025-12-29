@@ -15,6 +15,7 @@ import {
   ArrowDown
 } from 'lucide-react'
 import AppLayout from '@/components/layout/AppLayout'
+import { StatCardSkeleton } from '@/components/ui/skeleton'
 import { apiClient } from '@/lib/api-client'
 import { useSession } from 'next-auth/react'
 
@@ -108,8 +109,18 @@ export default function AnalyticsPage() {
   if (loading) {
     return (
       <AppLayout>
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <div className="p-6 bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-50/30 min-h-screen">
+          <div className="max-w-7xl mx-auto">
+            <div className="mb-8">
+              <div className="h-10 bg-gray-200 rounded-xl w-1/3 mb-2 animate-pulse"></div>
+              <div className="h-6 bg-gray-200 rounded w-1/2 animate-pulse"></div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+              {[...Array(4)].map((_, i) => (
+                <StatCardSkeleton key={i} />
+              ))}
+            </div>
+          </div>
         </div>
       </AppLayout>
     )
@@ -117,122 +128,154 @@ export default function AnalyticsPage() {
 
   return (
     <AppLayout>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Analytics Dashboard</h1>
-          <p className="text-gray-600 mt-2">Monitor your data pipeline performance and insights</p>
-        </div>
-
-        {/* Key Metrics */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white shadow rounded-lg p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <Database className="h-8 w-8 text-blue-500" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Total Products</p>
-                <p className="text-2xl font-semibold text-gray-900">{analytics?.totalProducts || 0}</p>
-              </div>
-            </div>
+      <div className="p-6 bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-50/30 min-h-screen">
+        <div className="max-w-7xl mx-auto">
+          <div className="mb-8">
+            <h1 className="text-4xl font-bold text-gray-900 mb-2 tracking-tight">Analytics Dashboard</h1>
+            <p className="text-lg text-gray-600">Monitor your data pipeline performance and insights</p>
           </div>
 
-          <div className="bg-white shadow rounded-lg p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <BarChart3 className="h-8 w-8 text-green-500" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Data Sources</p>
-                <p className="text-2xl font-semibold text-gray-900">{analytics?.totalDataSources || 0}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white shadow rounded-lg p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <Zap className="h-8 w-8 text-purple-500" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Pipeline Runs</p>
-                <p className="text-2xl font-semibold text-gray-900">{analytics?.totalPipelineRuns || 0}</p>
+          {/* Enhanced Key Metrics */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5">
+              <div className="flex items-center">
+                <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl p-3 mr-4 shadow-sm">
+                  <Database className="h-6 w-6 text-white" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-600 mb-1">Total Products</p>
+                  <p className="text-3xl font-bold text-gray-900">{analytics?.totalProducts || 0}</p>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="bg-white shadow rounded-lg p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <TrendingUp className="h-8 w-8 text-orange-500" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Success Rate</p>
-                <p className="text-2xl font-semibold text-gray-900">{analytics?.successRate || 0}%</p>
+            <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5">
+              <div className="flex items-center">
+                <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl p-3 mr-4 shadow-sm">
+                  <BarChart3 className="h-6 w-6 text-white" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-600 mb-1">Data Sources</p>
+                  <p className="text-3xl font-bold text-gray-900">{analytics?.totalDataSources || 0}</p>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
 
-        {/* Performance Metrics */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          <div className="bg-white shadow rounded-lg p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Performance Overview</h3>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">Average Processing Time</span>
-                <span className="text-sm font-medium text-gray-900">{analytics?.avgProcessingTime || 0} minutes</span>
+            <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5">
+              <div className="flex items-center">
+                <div className="bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl p-3 mr-4 shadow-sm">
+                  <Zap className="h-6 w-6 text-white" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-600 mb-1">Pipeline Runs</p>
+                  <p className="text-3xl font-bold text-gray-900">{analytics?.totalPipelineRuns || 0}</p>
+                </div>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">Data Quality Score</span>
-                <div className="flex items-center">
-                  <span className="text-sm font-medium text-gray-900 mr-2">{analytics?.dataQualityScore || 0}%</span>
-                  <ArrowUp className="h-4 w-4 text-green-500" />
+            </div>
+
+            <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5">
+              <div className="flex items-center">
+                <div className="bg-gradient-to-br from-orange-500 to-amber-600 rounded-xl p-3 mr-4 shadow-sm">
+                  <TrendingUp className="h-6 w-6 text-white" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-600 mb-1">Success Rate</p>
+                  <p className="text-3xl font-bold text-gray-900">{analytics?.successRate || 0}%</p>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="bg-white shadow rounded-lg p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Monthly Trends</h3>
-            <div className="space-y-3">
+        {/* Enhanced Performance Metrics */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-6">Performance Overview</h3>
+            <div className="space-y-6">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-gray-700">Average Processing Time</span>
+                  <span className="text-lg font-bold text-gray-900">{analytics?.avgProcessingTime || 0} min</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2.5">
+                  <div 
+                    className="bg-gradient-to-r from-blue-500 to-indigo-600 h-2.5 rounded-full transition-all"
+                    style={{ width: `${Math.min((analytics?.avgProcessingTime || 0) / 60 * 100, 100)}%` }}
+                  ></div>
+                </div>
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-gray-700">Data Quality Score</span>
+                  <div className="flex items-center">
+                    <span className="text-lg font-bold text-gray-900 mr-2">{analytics?.dataQualityScore || 0}%</span>
+                    <ArrowUp className="h-4 w-4 text-green-500" />
+                  </div>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2.5">
+                  <div 
+                    className="bg-gradient-to-r from-green-500 to-emerald-600 h-2.5 rounded-full transition-all"
+                    style={{ width: `${analytics?.dataQualityScore || 0}%` }}
+                  ></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-6">Monthly Trends</h3>
+            <div className="space-y-4">
               {analytics?.monthlyStats?.slice(-3).map((stat, index) => (
-                <div key={stat.month} className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">{stat.month}</span>
-                  <div className="flex items-center space-x-4">
-                    <span className="text-xs text-gray-500">{stat.pipelineRuns} runs</span>
-                    <span className="text-xs text-gray-500">{stat.dataProcessed}TB</span>
-                    <span className="text-xs text-gray-500">{stat.qualityScore}%</span>
+                <div key={stat.month} className="border-2 border-gray-100 rounded-lg p-4 hover:border-blue-300 transition-colors">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-semibold text-gray-900">{stat.month}</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div className="bg-blue-50 rounded-md p-2 text-center">
+                      <div className="font-semibold text-blue-700">{stat.pipelineRuns}</div>
+                      <div className="text-blue-600">Runs</div>
+                    </div>
+                    <div className="bg-green-50 rounded-md p-2 text-center">
+                      <div className="font-semibold text-green-700">{stat.dataProcessed}TB</div>
+                      <div className="text-green-600">Data</div>
+                    </div>
+                    <div className="bg-purple-50 rounded-md p-2 text-center">
+                      <div className="font-semibold text-purple-700">{stat.qualityScore}%</div>
+                      <div className="text-purple-600">Quality</div>
+                    </div>
                   </div>
                 </div>
               )) || (
-                <div className="text-sm text-gray-500">No monthly data available</div>
+                <div className="text-center py-8 text-gray-500">
+                  <BarChart3 className="h-12 w-12 mx-auto mb-2 text-gray-400" />
+                  <p>No monthly data available</p>
+                </div>
               )}
             </div>
           </div>
         </div>
 
-        {/* Recent Activity */}
-        <div className="bg-white shadow rounded-lg">
-          <div className="px-6 py-4 border-b border-gray-200">
+        {/* Enhanced Recent Activity */}
+        <div className="bg-white rounded-xl shadow-md border border-gray-100">
+          <div className="px-6 py-4 border-b-2 border-gray-100 bg-gradient-to-r from-gray-50 to-blue-50/30">
             <h3 className="text-lg font-semibold text-gray-900">Recent Activity</h3>
           </div>
-          <div className="divide-y divide-gray-200">
+          <div className="divide-y divide-gray-100">
             {analytics?.recentActivity?.map((activity) => (
-              <div key={activity.id} className="px-6 py-4">
+              <div key={activity.id} className="px-6 py-4 hover:bg-blue-50/30 transition-colors">
                 <div className="flex items-start">
-                  <div className="flex-shrink-0">
+                  <div className="flex-shrink-0 mt-0.5">
                     {getStatusIcon(activity.status)}
                   </div>
-                  <div className="ml-3 flex-1">
-                    <p className="text-sm text-gray-900">{activity.message}</p>
+                  <div className="ml-4 flex-1">
+                    <p className="text-sm font-medium text-gray-900">{activity.message}</p>
                     <p className="text-xs text-gray-500 mt-1">{formatTimestamp(activity.timestamp)}</p>
                   </div>
                 </div>
               </div>
             )) || (
-              <div className="px-6 py-4">
-                <div className="text-sm text-gray-500">No recent activity</div>
+              <div className="px-6 py-8 text-center">
+                <Activity className="h-12 w-12 text-gray-400 mx-auto mb-2" />
+                <p className="text-sm text-gray-500">No recent activity</p>
               </div>
             )}
           </div>
