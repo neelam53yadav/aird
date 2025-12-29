@@ -281,66 +281,131 @@ jobs:
       - name: Detect changed files and determine which services to rebuild
         id: detect-changes
         run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Detecting changed files..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          
           # Get the base commit (for push events, use the previous commit)
           if [ "${{ github.event_name }}" == "push" ]; then
             BASE_SHA="${{ github.event.before }}"
             HEAD_SHA="${{ github.sha }}"
+            echo "Push event detected"
+            echo "  Base SHA: ${BASE_SHA}"
+            echo "  Head SHA: ${HEAD_SHA}"
           else
-            # For workflow_dispatch or PR, compare with main branch
-            BASE_SHA="origin/main"
+            # For workflow_dispatch, compare with the branch's previous commit
+            BASE_SHA="HEAD~1"
             HEAD_SHA="HEAD"
+            echo "Manual/workflow_dispatch event detected"
+            echo "  Comparing: ${BASE_SHA}..${HEAD_SHA}"
           fi
           
-          # Fetch base commit if needed
-          git fetch --depth=1 origin main 2>/dev/null || true
+          # Fetch more history to ensure we have the commits
+          echo "Fetching git history..."
+          git fetch --unshallow --no-tags 2>/dev/null || git fetch --depth=50 origin ${{ github.ref_name }} 2>/dev/null || true
           
-          # Get list of changed files
-          CHANGED_FILES=$(git diff --name-only ${BASE_SHA}..${HEAD_SHA} 2>/dev/null || git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "")
+          # Try multiple methods to get changed files
+          CHANGED_FILES=""
+          
+          # Method 1: git diff with commit range
+          if [ -n "${BASE_SHA}" ] && [ -n "${HEAD_SHA}" ]; then
+            echo "Method 1: Trying git diff ${BASE_SHA}..${HEAD_SHA}..."
+            CHANGED_FILES=$(git diff --name-only ${BASE_SHA}..${HEAD_SHA} 2>&1)
+            if [ $? -eq 0 ] && [ -n "$CHANGED_FILES" ]; then
+              echo "✅ Method 1 succeeded"
+            else
+              echo "⚠️  Method 1 failed or no changes"
+              CHANGED_FILES=""
+            fi
+          fi
+          
+          # Method 2: git diff-tree (more reliable for commits)
+          if [ -z "$CHANGED_FILES" ] && [ -n "${BASE_SHA}" ] && [ -n "${HEAD_SHA}" ]; then
+            echo "Method 2: Trying git diff-tree..."
+            CHANGED_FILES=$(git diff-tree --no-commit-id --name-only -r ${BASE_SHA} ${HEAD_SHA} 2>&1)
+            if [ $? -eq 0 ] && [ -n "$CHANGED_FILES" ]; then
+              echo "✅ Method 2 succeeded"
+            else
+              echo "⚠️  Method 2 failed or no changes"
+              CHANGED_FILES=""
+            fi
+          fi
+          
+          # Method 3: git log with --name-only (fallback)
+          if [ -z "$CHANGED_FILES" ] && [ -n "${BASE_SHA}" ] && [ -n "${HEAD_SHA}" ]; then
+            echo "Method 3: Trying git log --name-only..."
+            CHANGED_FILES=$(git log --name-only --pretty=format: ${BASE_SHA}..${HEAD_SHA} 2>&1 | grep -v "^$" | sort -u)
+            if [ -n "$CHANGED_FILES" ]; then
+              echo "✅ Method 3 succeeded"
+            else
+              echo "⚠️  Method 3 failed or no changes"
+              CHANGED_FILES=""
+            fi
+          fi
+          
+          # Method 4: Last resort - check if commits are different
+          if [ -z "$CHANGED_FILES" ]; then
+            echo "Method 4: Checking if commits are different..."
+            if [ "${BASE_SHA}" != "${HEAD_SHA}" ]; then
+              echo "⚠️  Commits are different but couldn't detect files. Will rebuild all services to be safe."
+              echo "rebuild_backend=true" >> $GITHUB_OUTPUT
+              echo "rebuild_frontend=true" >> $GITHUB_OUTPUT
+              echo "rebuild_airflow=true" >> $GITHUB_OUTPUT
+              echo "skip_build=false" >> $GITHUB_OUTPUT
+              exit 0
+            else
+              echo "✅ Commits are the same - no changes detected"
+            fi
+          fi
           
           if [ -z "$CHANGED_FILES" ]; then
-            echo "No changed files detected, will rebuild all services"
-            echo "rebuild_backend=true" >> $GITHUB_OUTPUT
-            echo "rebuild_frontend=true" >> $GITHUB_OUTPUT
-            echo "rebuild_airflow=true" >> $GITHUB_OUTPUT
-            echo "skip_build=false" >> $GITHUB_OUTPUT
+            echo ""
+            echo "No changed files detected - skipping build"
+            echo "rebuild_backend=false" >> $GITHUB_OUTPUT
+            echo "rebuild_frontend=false" >> $GITHUB_OUTPUT
+            echo "rebuild_airflow=false" >> $GITHUB_OUTPUT
+            echo "skip_build=true" >> $GITHUB_OUTPUT
             exit 0
           fi
           
-          echo "Changed files:"
-          echo "$CHANGED_FILES"
+          echo ""
+          echo "Changed files detected:"
+          echo "$CHANGED_FILES" | sed 's/^/  /'
+          echo ""
           
           # Check for backend changes (including migration files)
           BACKEND_CHANGED=false
           if echo "$CHANGED_FILES" | grep -qE "^backend/(src|Dockerfile|requirements|alembic)"; then
             BACKEND_CHANGED=true
-            echo "Backend source files changed"
+            echo "✅ Backend source files changed"
           fi
           
-          # Force backend rebuild if migration files changed (need to rebuild image with new migrations)
+          # Force backend rebuild if migration files changed
           if echo "$CHANGED_FILES" | grep -qE "^backend/alembic/versions/"; then
             BACKEND_CHANGED=true
-            echo "Backend migration files changed - forcing rebuild"
+            echo "✅ Backend migration files changed - forcing rebuild"
           fi
           
           # Check for frontend changes
           FRONTEND_CHANGED=false
           if echo "$CHANGED_FILES" | grep -qE "^ui/(app|lib|components|Dockerfile|package\.json|next\.config|tsconfig)"; then
             FRONTEND_CHANGED=true
-            echo "Frontend source files changed"
+            echo "✅ Frontend source files changed"
           fi
           
           # Check for Airflow changes
           AIRFLOW_CHANGED=false
           if echo "$CHANGED_FILES" | grep -qE "^infra/airflow"; then
             AIRFLOW_CHANGED=true
-            echo "Airflow files changed"
+            echo "✅ Airflow files changed"
           fi
           
           # Check for docker-compose changes (affects all services)
           COMPOSE_CHANGED=false
           if echo "$CHANGED_FILES" | grep -qE "^infra/docker-compose\.prod\.yml"; then
             COMPOSE_CHANGED=true
-            echo "Docker Compose config changed - will rebuild all services"
+            echo "✅ Docker Compose config changed - will rebuild all services"
           fi
           
           # Determine which services to rebuild
@@ -355,29 +420,20 @@ jobs:
             REBUILD_AIRFLOW=$AIRFLOW_CHANGED
           fi
           
-          # Check if we should skip build entirely (only docs/unrelated files changed)
-          SKIP_BUILD=false
-          if [ "$REBUILD_BACKEND" = false ] && [ "$REBUILD_FRONTEND" = false ] && [ "$REBUILD_AIRFLOW" = false ]; then
-            # Check if only unrelated files changed
-            UNRELATED_ONLY=$(echo "$CHANGED_FILES" | grep -vE "^(backend|ui|infra)" || echo "")
-            if [ -n "$UNRELATED_ONLY" ] && [ -z "$(echo "$CHANGED_FILES" | grep -E "^(backend|ui|infra)")" ]; then
-              SKIP_BUILD=true
-              echo "Only unrelated files changed - skipping build"
-            fi
-          fi
-          
           # Set outputs
           echo "rebuild_backend=$REBUILD_BACKEND" >> $GITHUB_OUTPUT
           echo "rebuild_frontend=$REBUILD_FRONTEND" >> $GITHUB_OUTPUT
           echo "rebuild_airflow=$REBUILD_AIRFLOW" >> $GITHUB_OUTPUT
-          echo "skip_build=$SKIP_BUILD" >> $GITHUB_OUTPUT
+          echo "skip_build=false" >> $GITHUB_OUTPUT
           
           echo ""
-          echo "Build plan:"
-          echo "  Backend: $REBUILD_BACKEND"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Build Plan:"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "  Backend:   $REBUILD_BACKEND"
           echo "  Frontend: $REBUILD_FRONTEND"
-          echo "  Airflow: $REBUILD_AIRFLOW"
-          echo "  Skip build: $SKIP_BUILD"
+          echo "  Airflow:  $REBUILD_AIRFLOW"
+          echo ""
 
       - name: Prepare VM directory
         id: prepare-vm-dir
@@ -473,8 +529,13 @@ jobs:
           fi
 
       - name: Build Docker images on VM
-        # Always rebuild if backend changed (even if images exist) to ensure migrations are updated
-        if: steps.detect-changes.outputs.skip_build != 'true' && (steps.check-images.outputs.images_exist != 'true' || steps.detect-changes.outputs.rebuild_backend == 'true')
+        # Only build if files changed for that service OR if images don't exist
+        if: steps.detect-changes.outputs.skip_build != 'true' && (
+          steps.detect-changes.outputs.rebuild_backend == 'true' ||
+          steps.detect-changes.outputs.rebuild_frontend == 'true' ||
+          steps.detect-changes.outputs.rebuild_airflow == 'true' ||
+          steps.check-images.outputs.images_exist != 'true'
+        )
         run: |
           DEPLOY_PATH="${{ steps.prepare-vm-dir.outputs.deploy_path }}"
           DEPLOY_PATH_EXPANDED=$(ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} "echo ${DEPLOY_PATH}")
@@ -495,6 +556,7 @@ jobs:
           REBUILD_BACKEND="${{ steps.detect-changes.outputs.rebuild_backend }}"
           REBUILD_FRONTEND="${{ steps.detect-changes.outputs.rebuild_frontend }}"
           REBUILD_AIRFLOW="${{ steps.detect-changes.outputs.rebuild_airflow }}"
+          IMAGES_EXIST="${{ steps.check-images.outputs.images_exist }}"
           
           # Determine if we need sudo for docker commands
           DOCKER_CMD="docker"
@@ -509,43 +571,106 @@ jobs:
             "${DOCKER_CMD} system prune -f || true && ${DOCKER_CMD} builder prune -af || true"
           echo ""
           
-          # Build backend if needed
-          if [ "$REBUILD_BACKEND" = "true" ]; then
-            echo "Building backend image on VM..."
+          # Build backend if needed (changed OR doesn't exist)
+          if [ "$REBUILD_BACKEND" = "true" ] || [ "$IMAGES_EXIST" != "true" ]; then
+            echo "🔨 Building backend image..."
             ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
               "cd ${DEPLOY_PATH_EXPANDED} && \
                ${DOCKER_CMD} build -t infra-backend:latest -t infra-backend:${IMAGE_TAG} -f backend/Dockerfile backend/"
             echo "✅ Backend image built"
+          else
+            echo "⏭️  Skipping backend build (no changes detected)"
           fi
           
-          # Build frontend if needed
-          if [ "$REBUILD_FRONTEND" = "true" ]; then
-            echo "Building frontend image on VM..."
-            # Get VM IP to construct API URL for build args
+          # Build frontend if needed (changed OR doesn't exist)
+          if [ "$REBUILD_FRONTEND" = "true" ] || [ "$IMAGES_EXIST" != "true" ]; then
+            echo "🔨 Building frontend image..."
             VM_IP="${{ steps.get-vm-ip.outputs.vm_ip }}"
             API_URL="http://${VM_IP}:8000"
             ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${VM_IP} \
               "cd ${DEPLOY_PATH_EXPANDED} && \
                ${DOCKER_CMD} build --build-arg NEXT_PUBLIC_API_URL=\"${API_URL}\" --build-arg NEXT_PUBLIC_API_BASE=\"${API_URL}\" -t infra-frontend:latest -t infra-frontend:${IMAGE_TAG} -f ui/Dockerfile ui/"
             echo "✅ Frontend image built"
+          else
+            echo "⏭️  Skipping frontend build (no changes detected)"
           fi
           
-          # Build Airflow if needed
-          if [ "$REBUILD_AIRFLOW" = "true" ]; then
-            echo "Building Airflow images on VM..."
+          # Build Airflow if needed (changed OR doesn't exist)
+          if [ "$REBUILD_AIRFLOW" = "true" ] || [ "$IMAGES_EXIST" != "true" ]; then
+            echo "🔨 Building Airflow images..."
             ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
               "cd ${DEPLOY_PATH_EXPANDED} && \
                ${DOCKER_CMD} build -t infra-airflow-webserver:latest -t infra-airflow-webserver:${IMAGE_TAG} -f infra/airflow/Dockerfile infra/airflow/ && \
                ${DOCKER_CMD} tag infra-airflow-webserver:latest infra-airflow-scheduler:latest && \
                ${DOCKER_CMD} tag infra-airflow-webserver:${IMAGE_TAG} infra-airflow-scheduler:${IMAGE_TAG}"
             echo "✅ Airflow images built"
+          else
+            echo "⏭️  Skipping Airflow build (no changes detected)"
+          fi
+
+      - name: Cleanup old Docker images
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Cleaning up old Docker images (keeping latest and one previous version)..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          
+          # Determine if we need sudo for docker commands
+          DOCKER_CMD="docker"
+          if ! ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} "docker ps" > /dev/null 2>&1; then
+            DOCKER_CMD="sudo docker"
           fi
           
-          # Cleanup old/unused images on VM (keep last 3 versions)
+          # Function to cleanup old version tags for a specific image
+          cleanup_image_versions() {
+            local IMAGE_NAME=$1
+            echo "Cleaning up old versions of ${IMAGE_NAME}..."
+            
+            # Get all version tags (v* pattern) sorted by creation date (newest first)
+            # Keep only the 2 most recent version tags (latest + 1 previous)
+            # Delete all older version tags
+            ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+              "bash -c '
+                # Get all version tags, sorted by creation date (newest first)
+                TAGS=\$(${DOCKER_CMD} images ${IMAGE_NAME} --format \"{{.Tag}}\" --filter \"reference=${IMAGE_NAME}:v*\" | sort -r)
+                
+                # Count total version tags
+                TAG_COUNT=\$(echo \"\$TAGS\" | grep -v \"^$\" | wc -l)
+                
+                if [ \"\$TAG_COUNT\" -gt 2 ]; then
+                  # Keep first 2 tags (latest versions), delete the rest
+                  echo \"\$TAGS\" | tail -n +3 | while read tag; do
+                    if [ -n \"\$tag\" ]; then
+                      echo \"  Removing old tag: ${IMAGE_NAME}:\$tag\"
+                      ${DOCKER_CMD} rmi \"${IMAGE_NAME}:\$tag\" 2>/dev/null || true
+                    fi
+                  done
+                  echo \"  Kept 2 most recent version tags\"
+                else
+                  echo \"  Only \$TAG_COUNT version tag(s) found, nothing to clean\"
+                fi
+              '"
+          }
+          
+          # Cleanup each service's old version tags (excluding qdrant)
+          cleanup_image_versions "infra-backend"
+          cleanup_image_versions "infra-frontend"
+          cleanup_image_versions "infra-airflow-webserver"
+          cleanup_image_versions "infra-airflow-scheduler"
+          
+          # Also remove dangling images and unused images older than 7 days (but keep qdrant)
           echo ""
-          echo "Cleaning up old Docker images on VM..."
+          echo "Removing dangling and unused images (keeping qdrant)..."
           ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
-            "${DOCKER_CMD} image prune -f || true"
+            "${DOCKER_CMD} image prune -f --filter 'until=168h' || true"
+          
+          # Show disk usage after cleanup
+          echo ""
+          echo "Docker disk usage after cleanup:"
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+            "${DOCKER_CMD} system df"
+          
+          echo ""
           echo "✅ Image cleanup complete"
 
       - name: Deploy on VM
