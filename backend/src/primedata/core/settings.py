@@ -39,11 +39,17 @@ class Settings(BaseSettings):
     MLFLOW_BACKEND_STORE_URI: str = "postgresql://primedata:primedata123@localhost:5433/primedata"
     MLFLOW_DEFAULT_ARTIFACT_ROOT: str = "s3://mlflow-artifacts"
 
-    # MinIO Configuration
+    # Storage Configuration
+    USE_GCS: bool = False  # Set to True to use GCS instead of MinIO
+    
+    # MinIO Configuration (for local development)
     MINIO_HOST: str = "localhost:9000"
     MINIO_ACCESS_KEY: str = "minioadmin"
     MINIO_SECRET_KEY: str = "minioadmin123"
     MINIO_SECURE: bool = False
+
+    # GCS Configuration (for production, uses Application Default Credentials)
+    GCS_PROJECT_ID: Optional[str] = None  # GCP Project ID (optional, for reference)
 
     # Qdrant Configuration
     QDRANT_HOST: str = "localhost"

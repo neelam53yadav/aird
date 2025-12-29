@@ -39,10 +39,15 @@ class FolderConnector(BaseConnector):
         self.max_file_size = config.get("max_file_size", 100 * 1024 * 1024)  # 100MB
 
     def validate_config(self) -> Tuple[bool, str]:
-        """Validate folder connector configuration."""
+        """Validate folder connector configuration.
+        
+        If no root_path is provided, this indicates upload mode and validation passes.
+        """
+        # If no path provided, this is upload mode - validation passes
         if not self.root_path:
-            return False, "Root path is required"
-
+            return True, "Configuration is valid (upload mode)"
+        
+        # Path mode - validate the server-side path
         if not isinstance(self.root_path, str):
             return False, "Root path must be a string"
 
@@ -63,8 +68,16 @@ class FolderConnector(BaseConnector):
         return True, "Configuration is valid"
 
     def test_connection(self) -> Tuple[bool, str]:
-        """Test connection by checking if the root path is accessible."""
+        """Test connection by checking if the root path is accessible.
+        
+        If no path is provided, this indicates upload mode and returns success.
+        """
         try:
+            # If no path provided, this is upload mode - no path validation needed
+            if not self.root_path:
+                return True, "Folder datasource configured for file uploads. Use the upload endpoint to add files."
+            
+            # Path mode - validate the server-side path
             if not os.path.exists(self.root_path):
                 return False, f"Path does not exist: {self.root_path}"
 
@@ -168,12 +181,27 @@ class FolderConnector(BaseConnector):
         return files
 
     def sync_full(self, output_bucket: str, output_prefix: str) -> Dict[str, Any]:
-        """Read all files from the directory and upload to MinIO."""
+        """Read all files from the directory and upload to MinIO/GCS.
+        
+        If no root_path is provided (upload mode), returns empty result.
+        Files should be uploaded via the upload-files API endpoint instead.
+        """
         start_time = time.time()
         files_processed = 0
         bytes_transferred = 0
         errors = 0
         details = {"files_processed": [], "files_failed": [], "files_skipped": []}
+
+        # If no path provided, this is upload mode - no files to sync
+        if not self.root_path:
+            logger.info("Folder connector in upload mode - no files to sync. Use upload-files endpoint to add files.")
+            return {
+                "files": 0,
+                "bytes": 0,
+                "errors": 0,
+                "duration": time.time() - start_time,
+                "details": {"message": "Upload mode - use upload-files endpoint to add files"}
+            }
 
         logger.info(f"Starting folder sync from {self.root_path}")
 

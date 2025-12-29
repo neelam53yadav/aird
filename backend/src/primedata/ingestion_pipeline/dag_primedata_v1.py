@@ -29,6 +29,9 @@ sys.path.append("/opt/airflow/dags/primedata")
 
 from primedata.connectors.folder import FolderConnector
 from primedata.connectors.web import WebConnector
+from primedata.connectors.s3 import S3Connector
+from primedata.connectors.azure_blob import AzureBlobConnector
+from primedata.connectors.google_drive import GoogleDriveConnector
 from primedata.db.database import SessionLocal, get_db
 from primedata.db.models import DataSource, DqViolation, PipelineRun, Product, ProductStatus
 from primedata.dq.validator import DataQualityValidator
@@ -241,6 +244,18 @@ def ingest_from_datasources(**context) -> Dict[str, Any]:
                             config["include"] = ["*"]
 
                     connector = FolderConnector(config)
+                    result = connector.sync_full("primedata-raw", raw_prefix_path)
+
+                elif ds.type.value == "aws_s3":
+                    connector = S3Connector(ds.config)
+                    result = connector.sync_full("primedata-raw", raw_prefix_path)
+
+                elif ds.type.value == "azure_blob":
+                    connector = AzureBlobConnector(ds.config)
+                    result = connector.sync_full("primedata-raw", raw_prefix_path)
+
+                elif ds.type.value == "google_drive":
+                    connector = GoogleDriveConnector(ds.config)
                     result = connector.sync_full("primedata-raw", raw_prefix_path)
 
                 else:

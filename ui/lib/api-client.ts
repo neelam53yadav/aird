@@ -310,7 +310,42 @@ class ApiClient {
   }
 
   async testConnection(datasourceId: string): Promise<ApiResponse> {
-    return this.post(`/api/v1/datasources/${datasourceId}/test`)
+    return this.post(`/api/v1/datasources/${datasourceId}/test-connection`)
+  }
+
+  async uploadFilesToDataSource(datasourceId: string, files: File[]): Promise<ApiResponse> {
+    const formData = new FormData()
+    files.forEach(file => {
+      formData.append('files', file)
+    })
+    
+    // Use fetch directly since we need FormData
+    try {
+      const url = `${this.baseUrl}/api/v1/datasources/${datasourceId}/upload-files`
+      const response = await fetch(url, {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+      })
+      
+      const status = response.status
+      if (!response.ok) {
+        const errorText = await response.text()
+        return {
+          error: `Upload failed: ${errorText}`,
+          status,
+        }
+      }
+      
+      const data = await response.json()
+      return { data, status }
+    } catch (error) {
+      console.error('File upload failed:', error)
+      return {
+        error: error instanceof Error ? error.message : 'Network error',
+        status: 0,
+      }
+    }
   }
 
   async testConfig(type: string, config: any): Promise<ApiResponse> {
