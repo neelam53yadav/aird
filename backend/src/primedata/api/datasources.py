@@ -517,11 +517,16 @@ async def sync_full(
                         new_key = f"{output_prefix}{filename}"
 
                         # Copy file to new version location if versions differ
+                        file_checksum = raw_file.file_checksum  # Use existing checksum if available
                         if version != current_version:
                             try:
                                 # Copy from old location to new location
                                 old_content = minio_client.get_bytes("primedata-raw", old_key)
                                 if old_content:
+                                    # Calculate checksum from content if not already available
+                                    if not file_checksum:
+                                        file_checksum = calculate_checksum(old_content, algorithm="sha256")
+
                                     minio_client.put_bytes(
                                         "primedata-raw",
                                         new_key,
@@ -533,6 +538,8 @@ async def sync_full(
                                 logger.warning(f"Failed to copy file {old_key} to {new_key}: {e}")
                                 # Continue anyway - we'll use the old key
                                 new_key = old_key
+                                # If we couldn't copy, use the old file's checksum
+                                file_checksum = raw_file.file_checksum
 
                         files_processed.append(
                             {
@@ -540,6 +547,7 @@ async def sync_full(
                                 "key": new_key,  # Use new key for new version
                                 "size": raw_file.file_size or 0,
                                 "content_type": raw_file.content_type or "application/octet-stream",
+                                "checksum": file_checksum,  # Include checksum in file_info
                             }
                         )
                         total_bytes += raw_file.file_size or 0
@@ -631,6 +639,25 @@ async def sync_full(
                 )
 
                 if not existing:
+                    # Calculate checksum from file in storage
+                    file_checksum = file_info.get("checksum")  # Check if connector provided checksum
+                    if not file_checksum and minio_key:
+                        try:
+                            # Download file to calculate checksum
+                            file_content = minio_client.get_bytes("primedata-raw", minio_key)
+                            if file_content:
+                                file_checksum = calculate_checksum(file_content, algorithm="sha256")
+                            else:
+                                # Fallback: use a placeholder if we can't read the file
+                                logger.warning(f"Could not read file {minio_key} to calculate checksum")
+                                file_checksum = ""  # This will fail, but at least we tried
+                        except Exception as e:
+                            logger.warning(f"Failed to calculate checksum for {minio_key}: {e}")
+                            file_checksum = ""  # This will fail, but at least we tried
+
+                    if not file_checksum:
+                        raise ValueError(f"Could not determine checksum for file {minio_key}")
+
                     raw_file = RawFile(
                         workspace_id=datasource.workspace_id,
                         product_id=datasource.product_id,
@@ -643,6 +670,7 @@ async def sync_full(
                         file_size=file_info.get("size", 0),
                         content_type=file_info.get("content_type", "application/octet-stream"),
                         status=RawFileStatus.INGESTED,
+                        file_checksum=file_checksum,
                     )
                     db.add(raw_file)
                     files_created += 1
@@ -675,6 +703,24 @@ async def sync_full(
                 )
 
                 if not existing:
+                    # Calculate checksum from file in storage
+                    file_checksum = url_info.get("checksum")  # Check if connector provided checksum
+                    if not file_checksum:
+                        try:
+                            # Download file to calculate checksum
+                            file_content = minio_client.get_bytes("primedata-raw", minio_key)
+                            if file_content:
+                                file_checksum = calculate_checksum(file_content, algorithm="sha256")
+                            else:
+                                logger.warning(f"Could not read file {minio_key} to calculate checksum")
+                                file_checksum = ""
+                        except Exception as e:
+                            logger.warning(f"Failed to calculate checksum for {minio_key}: {e}")
+                            file_checksum = ""
+
+                    if not file_checksum:
+                        raise ValueError(f"Could not determine checksum for file {minio_key}")
+
                     raw_file = RawFile(
                         workspace_id=datasource.workspace_id,
                         product_id=datasource.product_id,
@@ -687,6 +733,7 @@ async def sync_full(
                         file_size=url_info.get("size", 0),
                         content_type="text/html",  # Web connector stores HTML
                         status=RawFileStatus.INGESTED,
+                        file_checksum=file_checksum,
                     )
                     db.add(raw_file)
                     files_created += 1
