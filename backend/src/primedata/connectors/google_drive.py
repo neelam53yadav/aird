@@ -4,14 +4,14 @@ Google Drive connector for reading files from Google Drive.
 
 import logging
 import time
-from typing import Any, Dict, List, Tuple
 from io import BytesIO
+from typing import Any, Dict, List, Tuple
 
-from google.oauth2.credentials import Credentials
 from google.oauth2 import service_account
+from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload
 from googleapiclient.errors import HttpError
+from googleapiclient.http import MediaIoBaseDownload
 
 from ..storage.minio_client import minio_client
 from ..storage.paths import safe_filename
