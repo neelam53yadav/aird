@@ -9,6 +9,7 @@ const nextConfig = {
   },
   env: {
     NEXT_PUBLIC_API_BASE: process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000',
+    NEXT_PUBLIC_AIRFLOW_URL: process.env.NEXT_PUBLIC_AIRFLOW_URL || 'http://localhost:8080',
   },
 }
 

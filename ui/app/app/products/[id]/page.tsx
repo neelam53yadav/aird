@@ -1292,7 +1292,7 @@ export default function ProductDetailPage() {
                                   <div className="flex space-x-2">
                                     {run.dag_run_id && (
                                       <a
-                                        href={`http://localhost:8080/dags/primedata_simple/grid?dag_run_id=${run.dag_run_id}`}
+                                        href={`${process.env.NEXT_PUBLIC_AIRFLOW_URL || 'http://localhost:8080'}/dags/primedata_simple/grid?dag_run_id=${run.dag_run_id}`}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         className="text-blue-600 hover:text-blue-900"
