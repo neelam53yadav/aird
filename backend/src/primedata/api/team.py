@@ -208,9 +208,7 @@ async def update_member_role(
 
     # Find the membership
     membership = (
-        db.query(WorkspaceMember)
-        .filter(WorkspaceMember.id == member_id, WorkspaceMember.workspace_id == workspace_id)
-        .first()
+        db.query(WorkspaceMember).filter(WorkspaceMember.id == member_id, WorkspaceMember.workspace_id == workspace_id).first()
     )
 
     if not membership:
@@ -285,9 +283,7 @@ async def remove_workspace_member(
 
     # Find the membership
     membership = (
-        db.query(WorkspaceMember)
-        .filter(WorkspaceMember.id == member_id, WorkspaceMember.workspace_id == workspace_id)
-        .first()
+        db.query(WorkspaceMember).filter(WorkspaceMember.id == member_id, WorkspaceMember.workspace_id == workspace_id).first()
     )
 
     if not membership:
@@ -311,4 +307,3 @@ async def remove_workspace_member(
     logger.info(f"Removed member {member_id} ({user_email}) from workspace {workspace_id}")
 
     return {"status": "success", "message": f"Member {user_email} has been removed from the workspace"}
-
