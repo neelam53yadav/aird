@@ -7,10 +7,13 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 from primedata.api.billing import check_billing_limits
 from primedata.connectors.folder import FolderConnector
 from primedata.connectors.web import WebConnector
+from primedata.connectors.s3 import S3Connector
+from primedata.connectors.azure_blob import AzureBlobConnector
+from primedata.connectors.google_drive import GoogleDriveConnector
 from primedata.core.scope import ensure_product_access, ensure_workspace_access
 from primedata.core.security import get_current_user
 from primedata.db.database import get_db
@@ -209,6 +212,14 @@ def _test_connector_config(datasource_type: DataSourceType, config: Dict[str, An
             return success, message
 
         elif datasource_type.value == "folder":
+            # Check if this is upload mode (no path provided) or path mode
+            has_path = config.get("path") or config.get("root_path")
+            
+            if not has_path:
+                # Upload mode - no path needed, files will be uploaded via API
+                return True, "Folder datasource configured for file uploads. Use the upload endpoint to add files."
+            
+            # Path mode - test the server-side path
             # Convert 'path' to 'root_path' format expected by FolderConnector
             test_config = config.copy()
             if "path" in test_config and "root_path" not in test_config:
@@ -226,6 +237,21 @@ def _test_connector_config(datasource_type: DataSourceType, config: Dict[str, An
                     test_config["include"] = ["*"]  # Default to all files
 
             connector = FolderConnector(test_config)
+            success, message = connector.test_connection()
+            return success, message
+
+        elif datasource_type.value == "aws_s3":
+            connector = S3Connector(config)
+            success, message = connector.test_connection()
+            return success, message
+
+        elif datasource_type.value == "azure_blob":
+            connector = AzureBlobConnector(config)
+            success, message = connector.test_connection()
+            return success, message
+
+        elif datasource_type.value == "google_drive":
+            connector = GoogleDriveConnector(config)
             success, message = connector.test_connection()
             return success, message
 
@@ -340,6 +366,18 @@ async def sync_full(
                     config["include"] = ["*"]  # Default to all files
 
             connector = FolderConnector(config)
+            result = connector.sync_full("primedata-raw", output_prefix)
+
+        elif datasource.type.value == "aws_s3":
+            connector = S3Connector(datasource.config)
+            result = connector.sync_full("primedata-raw", output_prefix)
+
+        elif datasource.type.value == "azure_blob":
+            connector = AzureBlobConnector(datasource.config)
+            result = connector.sync_full("primedata-raw", output_prefix)
+
+        elif datasource.type.value == "google_drive":
+            connector = GoogleDriveConnector(datasource.config)
             result = connector.sync_full("primedata-raw", output_prefix)
 
         else:
@@ -485,6 +523,118 @@ async def sync_full(
         logger = logging.getLogger(__name__)
         logger.error(f"Sync failed: {e}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Sync failed: {str(e)}")
+
+
+@router.post("/{datasource_id}/upload-files")
+async def upload_files(
+    datasource_id: UUID,
+    files: List[UploadFile] = File(...),
+    request: Request = None,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Upload files to a folder-type datasource.
+    Files are stored directly in MinIO/GCS and RawFile records are created.
+    This bypasses the need for a server-side path.
+    """
+    # Get the data source
+    datasource = db.query(DataSource).filter(DataSource.id == datasource_id).first()
+    if not datasource:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Data source not found")
+
+    # Only allow for folder type
+    if datasource.type != DataSourceType.FOLDER:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"File upload only supported for folder datasources"
+        )
+
+    # Ensure user has access
+    ensure_product_access(db, request, datasource.product_id)
+
+    # Get product version
+    product = db.query(Product).filter(Product.id == datasource.product_id).first()
+    if not product:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+
+    version = product.current_version or 1
+    output_prefix = raw_prefix(datasource.workspace_id, datasource.product_id, version)
+
+    uploaded_files = []
+    errors = []
+
+    for file in files:
+        try:
+            content = await file.read()
+            file_size = len(content)
+            
+            # Generate safe key
+            safe_key = safe_filename(file.filename)
+            key = f"{output_prefix}{safe_key}"
+
+            # Determine content type
+            content_type = file.content_type or "application/octet-stream"
+
+            # Upload directly to MinIO/GCS
+            success = minio_client.put_bytes("primedata-raw", key, content, content_type)
+
+            if success:
+                # Create RawFile record (same as sync-full does)
+                file_stem = Path(file.filename).stem
+                filename = Path(file.filename).name
+
+                # Check if file already exists
+                existing = (
+                    db.query(RawFile)
+                    .filter(
+                        RawFile.product_id == datasource.product_id,
+                        RawFile.version == version,
+                        RawFile.file_stem == file_stem
+                    )
+                    .first()
+                )
+
+                if not existing:
+                    raw_file = RawFile(
+                        workspace_id=datasource.workspace_id,
+                        product_id=datasource.product_id,
+                        data_source_id=datasource.id,
+                        version=version,
+                        filename=filename,
+                        file_stem=file_stem,
+                        minio_key=key,
+                        minio_bucket="primedata-raw",
+                        file_size=file_size,
+                        content_type=content_type,
+                        status=RawFileStatus.INGESTED,
+                    )
+                    db.add(raw_file)
+                    uploaded_files.append({
+                        "filename": filename,
+                        "size": file_size,
+                        "key": key
+                    })
+                else:
+                    errors.append(f"File {filename} already exists")
+            else:
+                errors.append(f"Failed to upload {file.filename}")
+
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error uploading file {file.filename}: {e}")
+            errors.append(f"Error uploading {file.filename}: {str(e)}")
+
+    db.commit()
+
+    return {
+        "success": len(errors) == 0,
+        "uploaded_count": len(uploaded_files),
+        "error_count": len(errors),
+        "uploaded_files": uploaded_files,
+        "errors": errors
+    }
 
 
 @router.delete("/{datasource_id}")

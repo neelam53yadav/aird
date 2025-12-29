@@ -32,6 +32,9 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
       MINIO_SECURE: ${MINIO_SECURE:-true}
+      # GCS Configuration (for production)
+      USE_GCS: ${USE_GCS:-true}
+      GCS_PROJECT_ID: ${GCS_PROJECT_ID:-project-f3c8a334-a3f2-4f66-a06}
       QDRANT_HOST: qdrant
       QDRANT_PORT: '6333'
       QDRANT_GRPC_PORT: '6334'
@@ -77,6 +80,9 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
       MINIO_SECURE: ${MINIO_SECURE:-true}
+      # GCS Configuration (for production)
+      USE_GCS: ${USE_GCS:-true}
+      GCS_PROJECT_ID: ${GCS_PROJECT_ID:-project-f3c8a334-a3f2-4f66-a06}
       QDRANT_HOST: qdrant
       QDRANT_PORT: '6333'
       QDRANT_GRPC_PORT: '6334'
@@ -108,6 +114,9 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
       MINIO_SECURE: ${MINIO_SECURE:-true}
+      # GCS Configuration (for production)
+      USE_GCS: ${USE_GCS:-true}
+      GCS_PROJECT_ID: ${GCS_PROJECT_ID:-project-f3c8a334-a3f2-4f66-a06}
       QDRANT_HOST: qdrant
       QDRANT_PORT: '6333'
       QDRANT_GRPC_PORT: '6334'

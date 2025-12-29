@@ -78,6 +78,9 @@ class DataSourceType(str, Enum):
     CONFLUENCE = "confluence"
     SHAREPOINT = "sharepoint"
     FOLDER = "folder"
+    AWS_S3 = "aws_s3"
+    AZURE_BLOB = "azure_blob"
+    GOOGLE_DRIVE = "google_drive"
 
 
 class BillingPlan(str, Enum):

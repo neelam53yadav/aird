@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Database, Globe, HardDrive, FileText, Folder, Share } from 'lucide-react'
+import { ArrowLeft, Database, Globe, HardDrive, FileText, Folder, Share, Cloud, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -71,13 +71,51 @@ const DATA_SOURCE_TYPES = [
   {
     id: 'folder',
     name: 'Local Folder',
-    description: 'Import files from local directory',
+    description: 'Import files from local directory or upload files',
     icon: Folder,
     implemented: true,
     configFields: [
-      { name: 'path', label: 'Folder Path', type: 'text', required: true, placeholder: 'Enter full server folder path (e.g., /var/data/documents or C:\\data\\documents)' },
+      { name: 'path', label: 'Folder Path', type: 'text', required: false, placeholder: 'Enter full server folder path (optional - leave empty to upload files)' },
       { name: 'file_types', label: 'File Types (comma-separated)', type: 'text', required: false },
       { name: 'recursive', label: 'Include Subfolders', type: 'checkbox', required: false },
+    ]
+  },
+  {
+    id: 'aws_s3',
+    name: 'AWS S3',
+    description: 'Connect to AWS S3 buckets',
+    icon: Cloud,
+    implemented: true,
+    configFields: [
+      { name: 'bucket_name', label: 'Bucket Name', type: 'text', required: true },
+      { name: 'access_key_id', label: 'AWS Access Key ID', type: 'text', required: true },
+      { name: 'secret_access_key', label: 'AWS Secret Access Key', type: 'password', required: true },
+      { name: 'region', label: 'Region', type: 'text', required: false, placeholder: 'us-east-1' },
+      { name: 'prefix', label: 'Prefix/Path', type: 'text', required: false },
+    ]
+  },
+  {
+    id: 'azure_blob',
+    name: 'Azure Blob Storage',
+    description: 'Connect to Azure Blob Storage containers',
+    icon: Cloud,
+    implemented: true,
+    configFields: [
+      { name: 'storage_account_name', label: 'Storage Account Name', type: 'text', required: true },
+      { name: 'container_name', label: 'Container Name', type: 'text', required: true },
+      { name: 'account_key', label: 'Account Key', type: 'password', required: true },
+      { name: 'prefix', label: 'Prefix/Path', type: 'text', required: false },
+    ]
+  },
+  {
+    id: 'google_drive',
+    name: 'Google Drive',
+    description: 'Connect to Google Drive folders',
+    icon: Folder,
+    implemented: true,
+    configFields: [
+      { name: 'folder_id', label: 'Folder ID', type: 'text', required: false, placeholder: 'Leave empty for root' },
+      { name: 'credentials', label: 'OAuth Credentials (JSON)', type: 'textarea', required: true, placeholder: 'Paste OAuth credentials JSON here' },
     ]
   },
 ]
@@ -98,6 +136,8 @@ export default function NewDataSourcePage() {
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
   const [workspaceId, setWorkspaceId] = useState<string | null>(null)
   const [loadingProduct, setLoadingProduct] = useState(true)
+  const [uploadMode, setUploadMode] = useState<'path' | 'upload'>('upload')
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   
   // Modal states
   const [showResultModal, setShowResultModal] = useState(false)
@@ -267,69 +307,134 @@ export default function NewDataSourcePage() {
       return
     }
     
-    // Basic validation for required fields
-    const requiredFields = selectedDataSourceType?.configFields.filter(field => field.required) || []
-    const newFieldErrors: Record<string, string> = {}
-    let firstInvalidField: string | null = null
-    
-    for (const field of requiredFields) {
-      const value = config[field.name]
-      const isEmpty = !value || 
-        (typeof value === 'string' && !value.trim()) ||
-        (typeof value === 'number' && isNaN(value)) ||
-        (Array.isArray(value) && value.length === 0)
+    // Special validation for folder datasource with file upload
+    if (selectedType === 'folder' && uploadMode === 'upload') {
+      if (selectedFiles.length === 0) {
+        setError('Please select at least one file to upload')
+        setLoading(false)
+        return
+      }
+    } else {
+      // Basic validation for required fields
+      const requiredFields = selectedDataSourceType?.configFields.filter(field => field.required) || []
+      const newFieldErrors: Record<string, string> = {}
+      let firstInvalidField: string | null = null
       
-      if (isEmpty) {
-        newFieldErrors[field.name] = `Please enter ${field.label.toLowerCase()}`
-        if (!firstInvalidField) {
-          firstInvalidField = field.name
+      for (const field of requiredFields) {
+        const value = config[field.name]
+        const isEmpty = !value || 
+          (typeof value === 'string' && !value.trim()) ||
+          (typeof value === 'number' && isNaN(value)) ||
+          (Array.isArray(value) && value.length === 0)
+        
+        if (isEmpty) {
+          newFieldErrors[field.name] = `Please enter ${field.label.toLowerCase()}`
+          if (!firstInvalidField) {
+            firstInvalidField = field.name
+          }
         }
       }
-    }
-    
-    if (Object.keys(newFieldErrors).length > 0) {
-      setFieldErrors(newFieldErrors)
-      setLoading(false)
       
-      // Focus on the first invalid field
-      if (firstInvalidField) {
-        setTimeout(() => {
-          const element = document.getElementById(firstInvalidField!)
-          if (element) {
-            element.focus()
-          }
-        }, 100)
+      if (Object.keys(newFieldErrors).length > 0) {
+        setFieldErrors(newFieldErrors)
+        setLoading(false)
+        
+        // Focus on the first invalid field
+        if (firstInvalidField) {
+          setTimeout(() => {
+            const element = document.getElementById(firstInvalidField!)
+            if (element) {
+              element.focus()
+            }
+          }, 100)
+        }
+        return
       }
-      return
     }
 
     try {
-      const response = await apiClient.createDataSource({
-        workspace_id: workspaceId,
-        product_id: productId,
-        type: selectedType!,
-        config: config,
-        name: name.trim()
-      })
-
-      if (response.error) {
-        setResultModalData({
-          type: 'error',
-          title: 'Creation Failed',
-          message: response.error
+      // Handle folder datasource with file upload
+      if (selectedType === 'folder' && uploadMode === 'upload' && selectedFiles.length > 0) {
+        // Create datasource without path
+        const createResponse = await apiClient.createDataSource({
+          workspace_id: workspaceId,
+          product_id: productId,
+          type: 'folder',
+          config: {
+            // No path for upload mode
+            file_types: config.file_types || '',
+            recursive: config.recursive || false
+          },
+          name: name.trim()
         })
-        setShowResultModal(true)
+        
+        if (createResponse.error) {
+          setResultModalData({
+            type: 'error',
+            title: 'Creation Failed',
+            message: createResponse.error
+          })
+          setShowResultModal(true)
+          setLoading(false)
+          return
+        }
+        
+        // Upload files
+        if (createResponse.data) {
+          const datasourceId = createResponse.data.id
+          const uploadResponse = await apiClient.uploadFilesToDataSource(
+            datasourceId,
+            selectedFiles
+          )
+          
+          if (uploadResponse.error) {
+            setResultModalData({
+              type: 'error',
+              title: 'Upload Failed',
+              message: uploadResponse.error
+            })
+            setShowResultModal(true)
+          } else {
+            setResultModalData({
+              type: 'success',
+              title: 'Data Source Created',
+              message: `Data source created and ${uploadResponse.data?.uploaded_count || 0} file(s) uploaded successfully`
+            })
+            setShowResultModal(true)
+            setTimeout(() => {
+              router.push(`/app/products/${productId}`)
+            }, 1500)
+          }
+        }
       } else {
-        setResultModalData({
-          type: 'success',
-          title: 'Data Source Created',
-          message: 'Data source has been successfully created'
+        // Regular datasource creation
+        const response = await apiClient.createDataSource({
+          workspace_id: workspaceId,
+          product_id: productId,
+          type: selectedType!,
+          config: config,
+          name: name.trim()
         })
-        setShowResultModal(true)
-        // Redirect back to product detail page after a short delay
-        setTimeout(() => {
-          router.push(`/app/products/${productId}`)
-        }, 1500)
+
+        if (response.error) {
+          setResultModalData({
+            type: 'error',
+            title: 'Creation Failed',
+            message: response.error
+          })
+          setShowResultModal(true)
+        } else {
+          setResultModalData({
+            type: 'success',
+            title: 'Data Source Created',
+            message: 'Data source has been successfully created'
+          })
+          setShowResultModal(true)
+          // Redirect back to product detail page after a short delay
+          setTimeout(() => {
+            router.push(`/app/products/${productId}`)
+          }, 1500)
+        }
       }
     } catch (err) {
       setResultModalData({
@@ -514,19 +619,89 @@ export default function NewDataSourcePage() {
                   )}
                 </div>
 
-                {/* Configuration Fields */}
-                {selectedDataSourceType?.configFields.map((field) => (
-                  <div key={field.name}>
-                    <Label htmlFor={field.name} className="text-sm font-medium text-gray-700">
-                      {field.label}
-                      {field.required && <span className="text-red-500 ml-1">*</span>}
+                {/* Folder datasource: Mode selector */}
+                {selectedType === 'folder' && (
+                  <div className="mb-4">
+                    <Label className="block text-sm font-medium text-gray-700 mb-2">
+                      Data Source Mode
                     </Label>
-                    {renderConfigField(field)}
-                    {fieldErrors[field.name] && (
-                      <p className="text-sm text-red-600 mt-1">{fieldErrors[field.name]}</p>
+                    <div className="flex space-x-4">
+                      <label className="flex items-center">
+                        <input
+                          type="radio"
+                          name="folderMode"
+                          value="upload"
+                          checked={uploadMode === 'upload'}
+                          onChange={(e) => setUploadMode(e.target.value as 'path' | 'upload')}
+                          className="mr-2"
+                        />
+                        Upload Files from Local System
+                      </label>
+                      <label className="flex items-center">
+                        <input
+                          type="radio"
+                          name="folderMode"
+                          value="path"
+                          checked={uploadMode === 'path'}
+                          onChange={(e) => setUploadMode(e.target.value as 'path' | 'upload')}
+                          className="mr-2"
+                        />
+                        Server Folder Path
+                      </label>
+                    </div>
+                  </div>
+                )}
+
+                {/* Folder datasource: File upload UI */}
+                {selectedType === 'folder' && uploadMode === 'upload' ? (
+                  <div className="mb-4">
+                    <Label htmlFor="files" className="block text-sm font-medium text-gray-700 mb-2">
+                      Select Files <span className="text-red-500">*</span>
+                    </Label>
+                    <input
+                      type="file"
+                      id="files"
+                      multiple
+                      onChange={(e) => {
+                        if (e.target.files) {
+                          setSelectedFiles(Array.from(e.target.files))
+                        }
+                      }}
+                      className="block w-full text-sm text-gray-500
+                        file:mr-4 file:py-2 file:px-4
+                        file:rounded-full file:border-0
+                        file:text-sm file:font-semibold
+                        file:bg-blue-50 file:text-blue-700
+                        hover:file:bg-blue-100"
+                    />
+                    {selectedFiles.length > 0 && (
+                      <div className="mt-2">
+                        <p className="text-sm text-gray-600">
+                          {selectedFiles.length} file(s) selected
+                        </p>
+                        <ul className="mt-1 text-sm text-gray-500 list-disc list-inside max-h-32 overflow-y-auto">
+                          {selectedFiles.map((file, idx) => (
+                            <li key={idx}>{file.name} ({(file.size / 1024).toFixed(2)} KB)</li>
+                          ))}
+                        </ul>
+                      </div>
                     )}
                   </div>
-                ))}
+                ) : (
+                  /* Configuration Fields */
+                  selectedDataSourceType?.configFields.map((field) => (
+                    <div key={field.name}>
+                      <Label htmlFor={field.name} className="text-sm font-medium text-gray-700">
+                        {field.label}
+                        {field.required && <span className="text-red-500 ml-1">*</span>}
+                      </Label>
+                      {renderConfigField(field)}
+                      {fieldErrors[field.name] && (
+                        <p className="text-sm text-red-600 mt-1">{fieldErrors[field.name]}</p>
+                      )}
+                    </div>
+                  ))
+                )}
               </div>
             </div>
 
