@@ -411,6 +411,7 @@ async def trigger_pipeline(
             product_id=request.product_id,
             version=version,
             status=PipelineRunStatus.QUEUED,
+            started_at=datetime.now(timezone.utc),  # Explicitly set started_at with timezone
             metrics={},
         )
         db.add(pipeline_run)
