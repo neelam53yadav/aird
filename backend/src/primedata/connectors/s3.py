@@ -1,6 +1,7 @@
 """
 AWS S3 connector for reading files from S3 buckets.
 """
+
 import logging
 import time
 from typing import Any, Dict, List, Tuple
@@ -20,7 +21,7 @@ class S3Connector(BaseConnector):
 
     def __init__(self, config: Dict[str, Any]):
         """Initialize S3 connector.
-        
+
         Expected config:
         {
             'bucket_name': str,        # S3 bucket name
@@ -42,13 +43,10 @@ class S3Connector(BaseConnector):
         self.include_patterns = config.get("include", ["*"])
         self.exclude_patterns = config.get("exclude", [])
         self.max_file_size = config.get("max_file_size", 100 * 1024 * 1024)  # 100MB
-        
+
         # Initialize S3 client
         self.s3_client = boto3.client(
-            's3',
-            aws_access_key_id=self.access_key_id,
-            aws_secret_access_key=self.secret_access_key,
-            region_name=self.region
+            "s3", aws_access_key_id=self.access_key_id, aws_secret_access_key=self.secret_access_key, region_name=self.region
         )
 
     def validate_config(self) -> Tuple[bool, str]:
@@ -68,10 +66,10 @@ class S3Connector(BaseConnector):
             self.s3_client.head_bucket(Bucket=self.bucket_name)
             return True, f"Successfully connected to S3 bucket: {self.bucket_name}"
         except ClientError as e:
-            error_code = e.response.get('Error', {}).get('Code', 'Unknown')
-            if error_code == '404':
+            error_code = e.response.get("Error", {}).get("Code", "Unknown")
+            if error_code == "404":
                 return False, f"S3 bucket not found: {self.bucket_name}"
-            elif error_code == '403':
+            elif error_code == "403":
                 return False, f"Access denied to S3 bucket: {self.bucket_name}"
             else:
                 return False, f"Error connecting to S3: {str(e)}"
@@ -88,72 +86,50 @@ class S3Connector(BaseConnector):
 
         try:
             # List objects in S3 bucket
-            paginator = self.s3_client.get_paginator('list_objects_v2')
+            paginator = self.s3_client.get_paginator("list_objects_v2")
             pages = paginator.paginate(Bucket=self.bucket_name, Prefix=self.prefix)
 
             for page in pages:
-                if 'Contents' not in page:
+                if "Contents" not in page:
                     continue
-                    
-                for obj in page['Contents']:
+
+                for obj in page["Contents"]:
                     try:
-                        key = obj['Key']
-                        file_size = obj['Size']
-                        
+                        key = obj["Key"]
+                        file_size = obj["Size"]
+
                         # Skip if too large
                         if file_size > self.max_file_size:
-                            details["files_skipped"].append({
-                                "key": key,
-                                "reason": f"File too large: {file_size} bytes"
-                            })
+                            details["files_skipped"].append({"key": key, "reason": f"File too large: {file_size} bytes"})
                             continue
-                        
+
                         # Download from S3
                         response = self.s3_client.get_object(Bucket=self.bucket_name, Key=key)
-                        content = response['Body'].read()
-                        
+                        content = response["Body"].read()
+
                         # Upload to MinIO/GCS
                         safe_key = safe_filename(key)
                         minio_key = f"{output_prefix}{safe_key}"
-                        
+
                         success = minio_client.put_bytes(
-                            output_bucket,
-                            minio_key,
-                            content,
-                            response.get('ContentType', 'application/octet-stream')
+                            output_bucket, minio_key, content, response.get("ContentType", "application/octet-stream")
                         )
-                        
+
                         if success:
                             files_processed += 1
                             bytes_transferred += len(content)
-                            details["files_processed"].append({
-                                "key": key,
-                                "minio_key": minio_key,
-                                "size": len(content)
-                            })
+                            details["files_processed"].append({"key": key, "minio_key": minio_key, "size": len(content)})
                         else:
                             errors += 1
-                            details["files_failed"].append({
-                                "key": key,
-                                "error": "Failed to upload to storage"
-                            })
+                            details["files_failed"].append({"key": key, "error": "Failed to upload to storage"})
                     except Exception as e:
                         errors += 1
-                        details["files_failed"].append({
-                            "key": obj.get('Key', 'unknown'),
-                            "error": str(e)
-                        })
+                        details["files_failed"].append({"key": obj.get("Key", "unknown"), "error": str(e)})
                         logger.error(f"Error processing S3 object: {e}")
 
         except Exception as e:
             logger.error(f"Error during S3 sync: {e}")
-            return {
-                "files": 0,
-                "bytes": 0,
-                "errors": 1,
-                "duration": time.time() - start_time,
-                "details": {"error": str(e)}
-            }
+            return {"files": 0, "bytes": 0, "errors": 1, "duration": time.time() - start_time, "details": {"error": str(e)}}
 
         duration = time.time() - start_time
         return {
@@ -161,7 +137,7 @@ class S3Connector(BaseConnector):
             "bytes": bytes_transferred,
             "errors": errors,
             "duration": duration,
-            "details": details
+            "details": details,
         }
 
     def _get_config_schema(self) -> Dict[str, Any]:
@@ -195,4 +171,3 @@ class S3Connector(BaseConnector):
             },
             "required": ["bucket_name", "access_key_id", "secret_access_key"],
         }
-

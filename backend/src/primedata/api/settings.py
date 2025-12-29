@@ -113,4 +113,3 @@ async def update_workspace_settings(
     return SettingsResponse(
         workspace_id=str(workspace_id), openai_api_key=masked_key, openai_api_key_configured=bool(openai_key)
     )
-

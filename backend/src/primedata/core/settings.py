@@ -41,7 +41,7 @@ class Settings(BaseSettings):
 
     # Storage Configuration
     USE_GCS: bool = False  # Set to True to use GCS instead of MinIO
-    
+
     # MinIO Configuration (for local development)
     MINIO_HOST: str = "localhost:9000"
     MINIO_ACCESS_KEY: str = "minioadmin"

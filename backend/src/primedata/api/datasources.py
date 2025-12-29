@@ -214,11 +214,11 @@ def _test_connector_config(datasource_type: DataSourceType, config: Dict[str, An
         elif datasource_type.value == "folder":
             # Check if this is upload mode (no path provided) or path mode
             has_path = config.get("path") or config.get("root_path")
-            
+
             if not has_path:
                 # Upload mode - no path needed, files will be uploaded via API
                 return True, "Folder datasource configured for file uploads. Use the upload endpoint to add files."
-            
+
             # Path mode - test the server-side path
             # Convert 'path' to 'root_path' format expected by FolderConnector
             test_config = config.copy()
@@ -317,7 +317,7 @@ async def sync_full(
     2. Creates RawFile records in the database
     3. Updates product version if needed
     4. Updates data source last_cursor with sync details
-    
+
     For folder datasources in upload mode (no root_path), queries existing
     uploaded files from the current version and processes them for the new version.
     """
@@ -355,45 +355,36 @@ async def sync_full(
             # Convert 'path' to 'root_path' format expected by FolderConnector
             config = datasource.config.copy()
             root_path = config.get("root_path") or config.get("path", "")
-            
+
             # Special handling for upload mode (no root_path configured)
             if not root_path:
                 import logging
+
                 logger = logging.getLogger(__name__)
                 logger.info(f"Folder datasource {datasource_id} in upload mode - querying existing uploaded files")
-                
+
                 # Query existing RawFile records for this datasource
                 # Check all versions, not just current_version, since files might have been uploaded
                 # before current_version was set, or to version 1 when current_version was None
                 # First try current_version, then try version 1, then try any version
                 current_version = product.current_version or 1
-                
+
                 # Try to find files in current_version first
                 existing_files = (
-                    db.query(RawFile)
-                    .filter(
-                        RawFile.data_source_id == datasource_id,
-                        RawFile.version == current_version
-                    )
-                    .all()
+                    db.query(RawFile).filter(RawFile.data_source_id == datasource_id, RawFile.version == current_version).all()
                 )
-                
+
                 logger.info(f"Querying for files in version {current_version}: found {len(existing_files)} files")
-                
+
                 # If no files found in current_version, try version 1 (common case when product is new)
                 if len(existing_files) == 0 and current_version != 1:
                     existing_files = (
-                        db.query(RawFile)
-                        .filter(
-                            RawFile.data_source_id == datasource_id,
-                            RawFile.version == 1
-                        )
-                        .all()
+                        db.query(RawFile).filter(RawFile.data_source_id == datasource_id, RawFile.version == 1).all()
                     )
                     logger.info(f"No files in version {current_version}, trying version 1: found {len(existing_files)} files")
                     if len(existing_files) > 0:
                         current_version = 1  # Update to use version 1 for the rest of the logic
-                
+
                 # If still no files, try any version (last resort)
                 if len(existing_files) == 0:
                     any_version_files = (
@@ -408,20 +399,19 @@ async def sync_full(
                         current_version = any_version_files[0].version
                         existing_files = (
                             db.query(RawFile)
-                            .filter(
-                                RawFile.data_source_id == datasource_id,
-                                RawFile.version == current_version
-                            )
+                            .filter(RawFile.data_source_id == datasource_id, RawFile.version == current_version)
                             .all()
                         )
-                        logger.info(f"No files in version 1, found files in version {current_version}: {len(existing_files)} files")
-                
+                        logger.info(
+                            f"No files in version 1, found files in version {current_version}: {len(existing_files)} files"
+                        )
+
                 logger.info(f"Final: Found {len(existing_files)} files uploaded to version {current_version}")
-                
+
                 # Convert RawFile records to sync result format
                 files_processed = []
                 total_bytes = 0
-                
+
                 for raw_file in existing_files:
                     # For the new version, we need to copy the file to the new version's prefix
                     # Generate new key with new version prefix
@@ -429,12 +419,12 @@ async def sync_full(
                     # Extract filename from old key
                     old_prefix = raw_prefix(datasource.workspace_id, datasource.product_id, current_version)
                     if old_key.startswith(old_prefix):
-                        filename = old_key[len(old_prefix):]
+                        filename = old_key[len(old_prefix) :]
                     else:
                         filename = Path(old_key).name
-                    
+
                     new_key = f"{output_prefix}{filename}"
-                    
+
                     # Copy file to new version location if versions differ
                     if version != current_version:
                         try:
@@ -442,25 +432,24 @@ async def sync_full(
                             old_content = minio_client.get_bytes("primedata-raw", old_key)
                             if old_content:
                                 minio_client.put_bytes(
-                                    "primedata-raw", 
-                                    new_key, 
-                                    old_content, 
-                                    raw_file.content_type or "application/octet-stream"
+                                    "primedata-raw", new_key, old_content, raw_file.content_type or "application/octet-stream"
                                 )
                                 logger.info(f"Copied file from {old_key} to {new_key}")
                         except Exception as e:
                             logger.warning(f"Failed to copy file {old_key} to {new_key}: {e}")
                             # Continue anyway - we'll use the old key
                             new_key = old_key
-                    
-                    files_processed.append({
-                        "path": raw_file.filename,  # Use filename as path
-                        "key": new_key,  # Use new key for new version
-                        "size": raw_file.file_size or 0,
-                        "content_type": raw_file.content_type or "application/octet-stream"
-                    })
+
+                    files_processed.append(
+                        {
+                            "path": raw_file.filename,  # Use filename as path
+                            "key": new_key,  # Use new key for new version
+                            "size": raw_file.file_size or 0,
+                            "content_type": raw_file.content_type or "application/octet-stream",
+                        }
+                    )
                     total_bytes += raw_file.file_size or 0
-                
+
                 # Create result in the same format as connector.sync_full
                 result = {
                     "files": len(files_processed),
@@ -471,8 +460,8 @@ async def sync_full(
                         "files_processed": files_processed,
                         "files_failed": [],
                         "files_skipped": [],
-                        "message": f"Found {len(files_processed)} previously uploaded files from version {current_version}"
-                    }
+                        "message": f"Found {len(files_processed)} previously uploaded files from version {current_version}",
+                    },
                 }
             else:
                 # Normal folder sync from server path
@@ -671,8 +660,7 @@ async def upload_files(
     # Only allow for folder type
     if datasource.type != DataSourceType.FOLDER:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"File upload only supported for folder datasources"
+            status_code=status.HTTP_400_BAD_REQUEST, detail=f"File upload only supported for folder datasources"
         )
 
     # Ensure user has access
@@ -685,10 +673,13 @@ async def upload_files(
 
     version = product.current_version or 1
     output_prefix = raw_prefix(datasource.workspace_id, datasource.product_id, version)
-    
+
     import logging
+
     logger = logging.getLogger(__name__)
-    logger.info(f"Uploading {len(files)} files to datasource {datasource_id}, product {datasource.product_id}, version {version}")
+    logger.info(
+        f"Uploading {len(files)} files to datasource {datasource_id}, product {datasource.product_id}, version {version}"
+    )
 
     uploaded_files = []
     errors = []
@@ -697,7 +688,7 @@ async def upload_files(
         try:
             content = await file.read()
             file_size = len(content)
-            
+
             # Generate safe key
             safe_key = safe_filename(file.filename)
             key = f"{output_prefix}{safe_key}"
@@ -717,9 +708,7 @@ async def upload_files(
                 existing = (
                     db.query(RawFile)
                     .filter(
-                        RawFile.product_id == datasource.product_id,
-                        RawFile.version == version,
-                        RawFile.file_stem == file_stem
+                        RawFile.product_id == datasource.product_id, RawFile.version == version, RawFile.file_stem == file_stem
                     )
                     .first()
                 )
@@ -739,12 +728,10 @@ async def upload_files(
                         status=RawFileStatus.INGESTED,
                     )
                     db.add(raw_file)
-                    logger.info(f"Created RawFile record for {filename} (version {version}, datasource {datasource_id}, key: {key})")
-                    uploaded_files.append({
-                        "filename": filename,
-                        "size": file_size,
-                        "key": key
-                    })
+                    logger.info(
+                        f"Created RawFile record for {filename} (version {version}, datasource {datasource_id}, key: {key})"
+                    )
+                    uploaded_files.append({"filename": filename, "size": file_size, "key": key})
                 else:
                     logger.warning(f"File {filename} already exists in version {version}")
                     errors.append(f"File {filename} already exists")
@@ -753,6 +740,7 @@ async def upload_files(
 
         except Exception as e:
             import logging
+
             logger = logging.getLogger(__name__)
             logger.error(f"Error uploading file {file.filename}: {e}")
             errors.append(f"Error uploading {file.filename}: {str(e)}")
@@ -764,7 +752,7 @@ async def upload_files(
         "uploaded_count": len(uploaded_files),
         "error_count": len(errors),
         "uploaded_files": uploaded_files,
-        "errors": errors
+        "errors": errors,
     }
 
 
