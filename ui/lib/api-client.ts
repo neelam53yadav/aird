@@ -69,6 +69,24 @@ export type BillingLimitsResponse = {
   }
 }
 
+export type CheckoutSessionResponse = {
+  checkout_url: string
+  session_id: string
+}
+
+export type BillingPortalResponse = {
+  portal_url: string
+}
+
+export type TeamMemberResponse = {
+  id: string
+  user_id: string
+  email: string
+  name: string
+  role: string
+  created_at: string
+}
+
 export type ACL = {
   id?: string
   name?: string
@@ -431,6 +449,41 @@ class ApiClient {
 
   async createWorkspace(): Promise<ApiResponse> {
     return this.post('/api/v1/workspaces', {})
+  }
+
+  // Billing API
+  async getBillingLimits(workspaceId: string): Promise<ApiResponse<BillingLimitsResponse>> {
+    return this.get(`/api/v1/billing/limits?workspace_id=${workspaceId}`)
+  }
+
+  async createCheckoutSession(workspaceId: string, plan: string): Promise<ApiResponse<CheckoutSessionResponse>> {
+    return this.post('/api/v1/billing/checkout-session', { workspace_id: workspaceId, plan })
+  }
+
+  async getCustomerPortal(workspaceId: string): Promise<ApiResponse<BillingPortalResponse>> {
+    return this.get(`/api/v1/billing/portal?workspace_id=${workspaceId}`)
+  }
+
+  // Team Management API
+  async getWorkspaceMembers(workspaceId: string): Promise<ApiResponse<TeamMemberResponse[]>> {
+    return this.get(`/api/v1/workspaces/${workspaceId}/members`)
+  }
+
+  async inviteWorkspaceMember(workspaceId: string, email: string, role: string): Promise<ApiResponse<TeamMemberResponse>> {
+    return this.post(`/api/v1/workspaces/${workspaceId}/members/invite`, { email, role })
+  }
+
+  async updateMemberRole(workspaceId: string, memberId: string, role: string): Promise<ApiResponse<TeamMemberResponse>> {
+    return this.patch(`/api/v1/workspaces/${workspaceId}/members/${memberId}`, { role })
+  }
+
+  async removeWorkspaceMember(workspaceId: string, memberId: string): Promise<ApiResponse> {
+    return this.delete(`/api/v1/workspaces/${workspaceId}/members/${memberId}`)
+  }
+
+  // User Profile API
+  async updateUserProfile(data: { first_name?: string; last_name?: string; timezone?: string }): Promise<ApiResponse> {
+    return this.put('/api/v1/users/me', data)
   }
 
   // Settings API
