@@ -387,6 +387,7 @@ async def sync_full(
 
                 # If still no files, try any version (last resort)
                 if len(existing_files) == 0:
+                    logger.info("No files found in current_version or version 1, trying any version...")
                     any_version_files = (
                         db.query(RawFile)
                         .filter(RawFile.data_source_id == datasource_id)
@@ -394,75 +395,167 @@ async def sync_full(
                         .limit(1)
                         .all()
                     )
+                    logger.info(f"Query for any version returned {len(any_version_files)} file(s)")
+
                     if any_version_files:
                         # Use the version of the most recent file
-                        current_version = any_version_files[0].version
+                        found_file = any_version_files[0]
+                        current_version = found_file.version
+                        logger.info(
+                            f"Found file in version {current_version}: {found_file.filename} (key: {found_file.minio_key})"
+                        )
+
                         existing_files = (
                             db.query(RawFile)
                             .filter(RawFile.data_source_id == datasource_id, RawFile.version == current_version)
                             .all()
                         )
-                        logger.info(
-                            f"No files in version 1, found files in version {current_version}: {len(existing_files)} files"
-                        )
+                        logger.info(f"Query for all files in version {current_version} returned {len(existing_files)} file(s)")
+                    else:
+                        logger.warning(f"No files found for datasource {datasource_id} in any version!")
+                        # Check if ANY files exist for this datasource at all
+                        total_files = db.query(RawFile).filter(RawFile.data_source_id == datasource_id).count()
+                        logger.warning(f"Total files for datasource {datasource_id}: {total_files}")
 
                 logger.info(f"Final: Found {len(existing_files)} files uploaded to version {current_version}")
 
-                # Convert RawFile records to sync result format
-                files_processed = []
-                total_bytes = 0
+                if len(existing_files) == 0:
+                    logger.warning(f"No RawFile records found for datasource {datasource_id}. Checking storage directly...")
+                    # Fallback: List files directly from storage (in case files exist but RawFile records don't)
+                    try:
+                        storage_objects = minio_client.list_objects("primedata-raw", output_prefix)
+                        logger.info(f"Found {len(storage_objects)} files in storage with prefix {output_prefix}")
 
-                for raw_file in existing_files:
-                    # For the new version, we need to copy the file to the new version's prefix
-                    # Generate new key with new version prefix
-                    old_key = raw_file.minio_key
-                    # Extract filename from old key
-                    old_prefix = raw_prefix(datasource.workspace_id, datasource.product_id, current_version)
-                    if old_key.startswith(old_prefix):
-                        filename = old_key[len(old_prefix) :]
-                    else:
-                        filename = Path(old_key).name
+                        if len(storage_objects) > 0:
+                            # Convert storage objects to files_processed format
+                            files_processed = []
+                            total_bytes = 0
 
-                    new_key = f"{output_prefix}{filename}"
+                            for obj in storage_objects:
+                                object_key = obj.get("name", "")
+                                if object_key.startswith(output_prefix):
+                                    filename = object_key[len(output_prefix) :]
+                                else:
+                                    filename = Path(object_key).name
 
-                    # Copy file to new version location if versions differ
-                    if version != current_version:
-                        try:
-                            # Copy from old location to new location
-                            old_content = minio_client.get_bytes("primedata-raw", old_key)
-                            if old_content:
-                                minio_client.put_bytes(
-                                    "primedata-raw", new_key, old_content, raw_file.content_type or "application/octet-stream"
+                                file_size = obj.get("size", 0)
+                                files_processed.append(
+                                    {
+                                        "path": filename,
+                                        "key": object_key,
+                                        "size": file_size,
+                                        "content_type": obj.get("content_type", "application/octet-stream"),
+                                    }
                                 )
-                                logger.info(f"Copied file from {old_key} to {new_key}")
-                        except Exception as e:
-                            logger.warning(f"Failed to copy file {old_key} to {new_key}: {e}")
-                            # Continue anyway - we'll use the old key
-                            new_key = old_key
+                                total_bytes += file_size
 
-                    files_processed.append(
-                        {
-                            "path": raw_file.filename,  # Use filename as path
-                            "key": new_key,  # Use new key for new version
-                            "size": raw_file.file_size or 0,
-                            "content_type": raw_file.content_type or "application/octet-stream",
+                            logger.info(
+                                f"Found {len(files_processed)} files in storage (no RawFile records). Creating result."
+                            )
+
+                            result = {
+                                "files": len(files_processed),
+                                "bytes": total_bytes,
+                                "errors": 0,
+                                "duration": 0.0,
+                                "details": {
+                                    "files_processed": files_processed,
+                                    "files_failed": [],
+                                    "files_skipped": [],
+                                    "message": f"Found {len(files_processed)} files in storage (no database records found)",
+                                },
+                            }
+                        else:
+                            logger.error(
+                                f"No files found in storage or database for datasource {datasource_id}. Files may not have been uploaded yet."
+                            )
+                            # Return empty result
+                            result = {
+                                "files": 0,
+                                "bytes": 0,
+                                "errors": 0,
+                                "duration": 0.0,
+                                "details": {
+                                    "files_processed": [],
+                                    "files_failed": [],
+                                    "files_skipped": [],
+                                    "message": "No files found. Please upload files first using the upload endpoint.",
+                                },
+                            }
+                    except Exception as e:
+                        logger.error(f"Error listing files from storage: {e}", exc_info=True)
+                        # Return empty result
+                        result = {
+                            "files": 0,
+                            "bytes": 0,
+                            "errors": 0,
+                            "duration": 0.0,
+                            "details": {
+                                "files_processed": [],
+                                "files_failed": [],
+                                "files_skipped": [],
+                                "message": f"Error checking storage: {str(e)}",
+                            },
                         }
-                    )
-                    total_bytes += raw_file.file_size or 0
+                else:
+                    # Convert RawFile records to sync result format
+                    files_processed = []
+                    total_bytes = 0
 
-                # Create result in the same format as connector.sync_full
-                result = {
-                    "files": len(files_processed),
-                    "bytes": total_bytes,
-                    "errors": 0,
-                    "duration": 0.0,
-                    "details": {
-                        "files_processed": files_processed,
-                        "files_failed": [],
-                        "files_skipped": [],
-                        "message": f"Found {len(files_processed)} previously uploaded files from version {current_version}",
-                    },
-                }
+                    for raw_file in existing_files:
+                        # For the new version, we need to copy the file to the new version's prefix
+                        # Generate new key with new version prefix
+                        old_key = raw_file.minio_key
+                        # Extract filename from old key
+                        old_prefix = raw_prefix(datasource.workspace_id, datasource.product_id, current_version)
+                        if old_key.startswith(old_prefix):
+                            filename = old_key[len(old_prefix) :]
+                        else:
+                            filename = Path(old_key).name
+
+                        new_key = f"{output_prefix}{filename}"
+
+                        # Copy file to new version location if versions differ
+                        if version != current_version:
+                            try:
+                                # Copy from old location to new location
+                                old_content = minio_client.get_bytes("primedata-raw", old_key)
+                                if old_content:
+                                    minio_client.put_bytes(
+                                        "primedata-raw",
+                                        new_key,
+                                        old_content,
+                                        raw_file.content_type or "application/octet-stream",
+                                    )
+                                    logger.info(f"Copied file from {old_key} to {new_key}")
+                            except Exception as e:
+                                logger.warning(f"Failed to copy file {old_key} to {new_key}: {e}")
+                                # Continue anyway - we'll use the old key
+                                new_key = old_key
+
+                        files_processed.append(
+                            {
+                                "path": raw_file.filename,  # Use filename as path
+                                "key": new_key,  # Use new key for new version
+                                "size": raw_file.file_size or 0,
+                                "content_type": raw_file.content_type or "application/octet-stream",
+                            }
+                        )
+                        total_bytes += raw_file.file_size or 0
+
+                    # Create result in the same format as connector.sync_full
+                    result = {
+                        "files": len(files_processed),
+                        "bytes": total_bytes,
+                        "errors": 0,
+                        "duration": 0.0,
+                        "details": {
+                            "files_processed": files_processed,
+                            "files_failed": [],
+                            "files_skipped": [],
+                            "message": f"Found {len(files_processed)} previously uploaded files from version {current_version}",
+                        },
+                    }
             else:
                 # Normal folder sync from server path
                 if "path" in config and "root_path" not in config:
