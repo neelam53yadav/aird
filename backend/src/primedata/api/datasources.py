@@ -313,10 +313,13 @@ async def sync_full(
     Perform full synchronization of a data source.
 
     This endpoint:
-    1. Syncs files from the data source to MinIO
+    1. Syncs files from the data source to storage (GCS or MinIO)
     2. Creates RawFile records in the database
     3. Updates product version if needed
     4. Updates data source last_cursor with sync details
+    
+    For folder datasources in upload mode (no root_path), queries existing
+    uploaded files from the current version and processes them for the new version.
     """
     # Get the data source
     datasource = db.query(DataSource).filter(DataSource.id == datasource_id).first()
@@ -351,22 +354,102 @@ async def sync_full(
         elif datasource.type.value == "folder":
             # Convert 'path' to 'root_path' format expected by FolderConnector
             config = datasource.config.copy()
-            if "path" in config and "root_path" not in config:
-                config["root_path"] = config["path"]
+            root_path = config.get("root_path") or config.get("path", "")
+            
+            # Special handling for upload mode (no root_path configured)
+            if not root_path:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.info(f"Folder datasource {datasource_id} in upload mode - querying existing uploaded files")
+                
+                # Query existing RawFile records for this datasource
+                # Use the current version (where files were uploaded), not the new version
+                current_version = product.current_version or 1
+                existing_files = (
+                    db.query(RawFile)
+                    .filter(
+                        RawFile.data_source_id == datasource_id,
+                        RawFile.version == current_version
+                    )
+                    .all()
+                )
+                
+                logger.info(f"Found {len(existing_files)} files uploaded to version {current_version}")
+                
+                # Convert RawFile records to sync result format
+                files_processed = []
+                total_bytes = 0
+                
+                for raw_file in existing_files:
+                    # For the new version, we need to copy the file to the new version's prefix
+                    # Generate new key with new version prefix
+                    old_key = raw_file.minio_key
+                    # Extract filename from old key
+                    old_prefix = raw_prefix(datasource.workspace_id, datasource.product_id, current_version)
+                    if old_key.startswith(old_prefix):
+                        filename = old_key[len(old_prefix):]
+                    else:
+                        filename = Path(old_key).name
+                    
+                    new_key = f"{output_prefix}{filename}"
+                    
+                    # Copy file to new version location if versions differ
+                    if version != current_version:
+                        try:
+                            # Copy from old location to new location
+                            old_content = minio_client.get_bytes("primedata-raw", old_key)
+                            if old_content:
+                                minio_client.put_bytes(
+                                    "primedata-raw", 
+                                    new_key, 
+                                    old_content, 
+                                    raw_file.content_type or "application/octet-stream"
+                                )
+                                logger.info(f"Copied file from {old_key} to {new_key}")
+                        except Exception as e:
+                            logger.warning(f"Failed to copy file {old_key} to {new_key}: {e}")
+                            # Continue anyway - we'll use the old key
+                            new_key = old_key
+                    
+                    files_processed.append({
+                        "path": raw_file.filename,  # Use filename as path
+                        "key": new_key,  # Use new key for new version
+                        "size": raw_file.file_size or 0,
+                        "content_type": raw_file.content_type or "application/octet-stream"
+                    })
+                    total_bytes += raw_file.file_size or 0
+                
+                # Create result in the same format as connector.sync_full
+                result = {
+                    "files": len(files_processed),
+                    "bytes": total_bytes,
+                    "errors": 0,
+                    "duration": 0.0,
+                    "details": {
+                        "files_processed": files_processed,
+                        "files_failed": [],
+                        "files_skipped": [],
+                        "message": f"Found {len(files_processed)} previously uploaded files from version {current_version}"
+                    }
+                }
+            else:
+                # Normal folder sync from server path
+                if "path" in config and "root_path" not in config:
+                    config["root_path"] = config["path"]
 
-            # Convert 'file_types' to 'include' patterns
-            if "file_types" in config and "include" not in config:
-                file_types = config["file_types"]
-                if isinstance(file_types, str):
-                    # Split comma-separated file types
-                    config["include"] = [ft.strip() for ft in file_types.split(",") if ft.strip()]
-                elif isinstance(file_types, list):
-                    config["include"] = file_types
-                else:
-                    config["include"] = ["*"]  # Default to all files
+                # Convert 'file_types' to 'include' patterns
+                if "file_types" in config and "include" not in config:
+                    file_types = config["file_types"]
+                    if isinstance(file_types, str):
+                        # Split comma-separated file types
+                        config["include"] = [ft.strip() for ft in file_types.split(",") if ft.strip()]
+                    elif isinstance(file_types, list):
+                        config["include"] = file_types
+                    else:
+                        config["include"] = ["*"]  # Default to all files
 
-            connector = FolderConnector(config)
-            result = connector.sync_full("primedata-raw", output_prefix)
+                connector = FolderConnector(config)
+                result = connector.sync_full("primedata-raw", output_prefix)
 
         elif datasource.type.value == "aws_s3":
             connector = S3Connector(datasource.config)

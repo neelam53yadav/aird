@@ -120,6 +120,8 @@ services:
       QDRANT_HOST: qdrant
       QDRANT_PORT: '6333'
       QDRANT_GRPC_PORT: '6334'
+      AIRFLOW_HOST: airflow-webserver
+      AIRFLOW_PORT: '8080'
       CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost:3000"]}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}

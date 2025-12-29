@@ -45,9 +45,29 @@ class MinIOClient:
                     "Install it with: pip install google-cloud-storage"
                 )
             
+            # Check if GOOGLE_APPLICATION_CREDENTIALS points to a file that exists
+            # If not, unset it so the client uses the VM's service account via metadata server
+            creds_file = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+            if creds_file and not os.path.exists(creds_file):
+                logger.warning(
+                    f"GOOGLE_APPLICATION_CREDENTIALS points to non-existent file: {creds_file}. "
+                    "Unsetting to use VM service account via metadata server."
+                )
+                # Temporarily unset the environment variable
+                if "GOOGLE_APPLICATION_CREDENTIALS" in os.environ:
+                    del os.environ["GOOGLE_APPLICATION_CREDENTIALS"]
+            
             try:
-                self.gcs_client = gcs_storage.Client()
-                self.project_id = os.getenv("GCS_PROJECT_ID")
+                # Get project ID from environment or let GCS client detect it
+                project_id = os.getenv("GCS_PROJECT_ID")
+                
+                # Initialize GCS client - it will use:
+                # 1. GOOGLE_APPLICATION_CREDENTIALS file if set and exists
+                # 2. VM service account via metadata server (when running on GCP)
+                # 3. gcloud ADC if configured locally
+                self.gcs_client = gcs_storage.Client(project=project_id)
+                self.project_id = project_id
+                
                 if self.project_id:
                     logger.info(f"Initialized GCS client for project: {self.project_id}")
                 else:
@@ -55,7 +75,7 @@ class MinIOClient:
             except DefaultCredentialsError as e:
                 raise ValueError(
                     "GCS credentials not found. Ensure Application Default Credentials are configured. "
-                    "When running on GCP, the service account will be used automatically. "
+                    "When running on GCP, the VM service account will be used automatically via metadata server. "
                     f"Error: {str(e)}"
                 )
             self.client = None  # MinIO client not used for GCS
