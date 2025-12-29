@@ -9,11 +9,11 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 from primedata.api.billing import check_billing_limits
-from primedata.connectors.folder import FolderConnector
-from primedata.connectors.web import WebConnector
-from primedata.connectors.s3 import S3Connector
 from primedata.connectors.azure_blob import AzureBlobConnector
+from primedata.connectors.folder import FolderConnector
 from primedata.connectors.google_drive import GoogleDriveConnector
+from primedata.connectors.s3 import S3Connector
+from primedata.connectors.web import WebConnector
 from primedata.core.scope import ensure_product_access, ensure_workspace_access
 from primedata.core.security import get_current_user
 from primedata.db.database import get_db

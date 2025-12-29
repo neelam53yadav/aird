@@ -85,8 +85,9 @@ async def check_database() -> Dict[str, Any]:
 async def check_qdrant() -> Dict[str, Any]:
     """Check Qdrant connectivity."""
     try:
-        import httpx
         import os
+
+        import httpx
 
         # Use Docker service name or localhost for local dev
         qdrant_host = os.getenv("QDRANT_HOST", "qdrant")
@@ -168,8 +169,9 @@ async def check_storage() -> Dict[str, Any]:
 async def check_airflow() -> Dict[str, Any]:
     """Check Airflow connectivity."""
     try:
-        import httpx
         import os
+
+        import httpx
 
         # Use Docker service name or localhost for local dev
         airflow_host = os.getenv("AIRFLOW_HOST", "airflow-webserver")

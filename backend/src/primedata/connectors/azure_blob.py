@@ -6,8 +6,8 @@ import logging
 import time
 from typing import Any, Dict, List, Tuple
 
-from azure.storage.blob import BlobServiceClient
 from azure.core.exceptions import AzureError
+from azure.storage.blob import BlobServiceClient
 
 from ..storage.minio_client import minio_client
 from ..storage.paths import safe_filename

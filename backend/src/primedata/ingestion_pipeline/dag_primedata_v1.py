@@ -27,11 +27,11 @@ from airflow.utils.dates import days_ago
 
 sys.path.append("/opt/airflow/dags/primedata")
 
-from primedata.connectors.folder import FolderConnector
-from primedata.connectors.web import WebConnector
-from primedata.connectors.s3 import S3Connector
 from primedata.connectors.azure_blob import AzureBlobConnector
+from primedata.connectors.folder import FolderConnector
 from primedata.connectors.google_drive import GoogleDriveConnector
+from primedata.connectors.s3 import S3Connector
+from primedata.connectors.web import WebConnector
 from primedata.db.database import SessionLocal, get_db
 from primedata.db.models import DataSource, DqViolation, PipelineRun, Product, ProductStatus
 from primedata.dq.validator import DataQualityValidator

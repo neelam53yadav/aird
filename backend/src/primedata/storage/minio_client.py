@@ -15,8 +15,8 @@ logger = logging.getLogger(__name__)
 
 # Try to import google-cloud-storage (optional, only needed for GCS)
 try:
-    from google.cloud import storage as gcs_storage
     from google.auth.exceptions import DefaultCredentialsError
+    from google.cloud import storage as gcs_storage
 
     GCS_AVAILABLE = True
 except ImportError:
@@ -267,7 +267,7 @@ class MinIOClient:
 
             if self.use_gcs:
                 # Generate signed URL for GCS
-                from datetime import timedelta, datetime
+                from datetime import datetime, timedelta
 
                 gcs_bucket = self.gcs_client.bucket(bucket)
                 blob = gcs_bucket.blob(key)
