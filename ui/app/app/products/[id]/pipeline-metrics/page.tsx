@@ -186,7 +186,8 @@ export default function PipelineMetricsPage() {
 
   return (
     <AppLayout>
-      <div className="p-6">
+      <div className="p-6 bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-50/30 min-h-screen">
+        <div className="max-w-7xl mx-auto">
         {/* Breadcrumb Navigation */}
         <div className="flex items-center mb-6">
           <Link href="/app/products" className="flex items-center text-sm text-gray-500 hover:text-gray-700 transition-colors">
@@ -204,14 +205,19 @@ export default function PipelineMetricsPage() {
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Pipeline Metrics</h1>
-              <p className="text-gray-600 mt-1">
-                Detailed metrics for each pipeline version of {product?.name}
-              </p>
+            <div className="flex items-center">
+              <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl p-3 mr-4 shadow-lg">
+                <BarChart3 className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900">Pipeline Metrics</h1>
+                <p className="text-gray-600 mt-1">
+                  Detailed metrics for each pipeline version of {product?.name}
+                </p>
+              </div>
             </div>
             {product?.promoted_version && (
-              <div className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-purple-100 text-purple-800">
+              <div className="inline-flex items-center px-4 py-2 rounded-full text-sm font-bold bg-gradient-to-r from-purple-500 to-indigo-600 text-white shadow-md">
                 🚀 Production Version: v{product.promoted_version}
               </div>
             )}
@@ -221,7 +227,7 @@ export default function PipelineMetricsPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Pipeline Runs List */}
           <div className="lg:col-span-1">
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="bg-white rounded-xl shadow-lg border-2 border-gray-100 p-6">
               <div className="mb-4">
                 <h2 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
                   <BarChart3 className="h-5 w-5" />
@@ -294,7 +300,7 @@ export default function PipelineMetricsPage() {
             ) : versionMetrics && versionMetrics.has_mlflow_data ? (
               <div className="space-y-6">
                 {/* Header */}
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <div className="bg-white rounded-xl shadow-lg border-2 border-gray-100 p-6">
                   <div className="flex items-center justify-between">
                     <div>
                       <h2 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
@@ -325,49 +331,57 @@ export default function PipelineMetricsPage() {
                 </div>
 
                 {/* Key Metrics */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                    <div className="flex items-center space-x-2">
-                      <Database className="h-5 w-5 text-blue-600" />
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5">
+                    <div className="flex items-center">
+                      <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl p-3 mr-4 shadow-sm">
+                        <Database className="h-6 w-6 text-white" />
+                      </div>
                       <div>
-                        <p className="text-sm font-medium text-gray-600">Chunks</p>
-                        <p className="text-2xl font-bold text-gray-900">
+                        <p className="text-sm font-medium text-gray-600 mb-1">Chunks</p>
+                        <p className="text-3xl font-bold text-gray-900">
                           {versionMetrics.latest_run?.chunk_count || 0}
                         </p>
                       </div>
                     </div>
                   </div>
 
-                  <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                    <div className="flex items-center space-x-2">
-                      <Zap className="h-5 w-5 text-green-600" />
+                  <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5">
+                    <div className="flex items-center">
+                      <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl p-3 mr-4 shadow-sm">
+                        <Zap className="h-6 w-6 text-white" />
+                      </div>
                       <div>
-                        <p className="text-sm font-medium text-gray-600">Vectors</p>
-                        <p className="text-2xl font-bold text-gray-900">
+                        <p className="text-sm font-medium text-gray-600 mb-1">Vectors</p>
+                        <p className="text-3xl font-bold text-gray-900">
                           {versionMetrics.latest_run?.vector_count || 0}
                         </p>
                       </div>
                     </div>
                   </div>
 
-                  <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                    <div className="flex items-center space-x-2">
-                      <Clock className="h-5 w-5 text-orange-600" />
+                  <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5">
+                    <div className="flex items-center">
+                      <div className="bg-gradient-to-br from-orange-500 to-red-600 rounded-xl p-3 mr-4 shadow-sm">
+                        <Clock className="h-6 w-6 text-white" />
+                      </div>
                       <div>
-                        <p className="text-sm font-medium text-gray-600">Processing Time</p>
-                        <p className="text-2xl font-bold text-gray-900">
+                        <p className="text-sm font-medium text-gray-600 mb-1">Processing Time</p>
+                        <p className="text-3xl font-bold text-gray-900">
                           {formatDuration(versionMetrics.latest_run?.processing_time_seconds || 0)}
                         </p>
                       </div>
                     </div>
                   </div>
 
-                  <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                    <div className="flex items-center space-x-2">
-                      <BarChart3 className="h-5 w-5 text-purple-600" />
+                  <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5">
+                    <div className="flex items-center">
+                      <div className="bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl p-3 mr-4 shadow-sm">
+                        <BarChart3 className="h-6 w-6 text-white" />
+                      </div>
                       <div>
-                        <p className="text-sm font-medium text-gray-600">Avg Chunk Size</p>
-                        <p className="text-2xl font-bold text-gray-900">
+                        <p className="text-sm font-medium text-gray-600 mb-1">Avg Chunk Size</p>
+                        <p className="text-3xl font-bold text-gray-900">
                           {Math.round(versionMetrics.latest_run?.avg_chunk_size || 0)}
                         </p>
                       </div>
@@ -376,7 +390,7 @@ export default function PipelineMetricsPage() {
                 </div>
 
                 {/* Configuration Details */}
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <div className="bg-white rounded-xl shadow-lg border-2 border-gray-100 p-6">
                   <div className="mb-4">
                     <h3 className="text-lg font-semibold text-gray-900">Configuration</h3>
                   </div>
@@ -409,7 +423,7 @@ export default function PipelineMetricsPage() {
                 </div>
 
                 {/* Run Details */}
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <div className="bg-white rounded-xl shadow-lg border-2 border-gray-100 p-6">
                   <div className="mb-4">
                     <h3 className="text-lg font-semibold text-gray-900">Run Details</h3>
                   </div>
@@ -456,7 +470,7 @@ export default function PipelineMetricsPage() {
 
                 {/* Run Summary - Show when there are multiple runs or mixed status */}
                 {versionMetrics.run_summary && (versionMetrics.run_summary.total_runs > 1 || versionMetrics.run_summary.has_mixed_status) && (
-                  <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                  <div className="bg-white rounded-xl shadow-lg border-2 border-gray-100 p-6">
                     <div className="mb-4">
                       <h3 className="text-lg font-semibold text-gray-900">Run Summary</h3>
                       <p className="text-sm text-gray-600">Breakdown of all runs for this version</p>
@@ -502,6 +516,7 @@ export default function PipelineMetricsPage() {
               </div>
             )}
           </div>
+        </div>
         </div>
       </div>
     </AppLayout>
