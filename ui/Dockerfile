@@ -14,11 +14,13 @@ FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 
-# Accept API URL as build arguments
+# Accept API URL and Airflow URL as build arguments
 ARG NEXT_PUBLIC_API_URL
 ARG NEXT_PUBLIC_API_BASE
+ARG NEXT_PUBLIC_AIRFLOW_URL
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 ENV NEXT_PUBLIC_API_BASE=${NEXT_PUBLIC_API_BASE}
+ENV NEXT_PUBLIC_AIRFLOW_URL=${NEXT_PUBLIC_AIRFLOW_URL}
 
 # Copy all source files needed for build
 # This includes lib/, app/, components/, etc.
