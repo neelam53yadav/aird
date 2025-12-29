@@ -1370,7 +1370,7 @@ def task_policy(**context) -> Dict[str, Any]:
                     minio_key=f"policy_result_{product_id}_v{version}",
                     file_size=0,
                     checksum=metadata_checksum,  # Calculate checksum from metadata JSON
-                    minio_etag=None,
+                    minio_etag=metadata_checksum,  # Use checksum as ETag since there's no file
                     input_artifacts=(
                         [
                             {
