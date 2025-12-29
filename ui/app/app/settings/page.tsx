@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Settings, User, Bell, Shield, Database, Key, Save, Eye, EyeOff, CheckCircle, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import AppLayout from '@/components/layout/AppLayout'
@@ -111,6 +111,7 @@ export default function SettingsPage() {
       // Load both workspace settings and user profile
       Promise.all([loadWorkspaceSettings(), fetchUserProfile()]).catch((error) => {
         console.error('Failed to load settings:', error)
+        setLoading(false)
       })
     } else {
       setLoading(false)
