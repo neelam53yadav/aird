@@ -530,12 +530,7 @@ jobs:
 
       - name: Build Docker images on VM
         # Only build if files changed for that service OR if images don't exist
-        if: steps.detect-changes.outputs.skip_build != 'true' && (
-          steps.detect-changes.outputs.rebuild_backend == 'true' ||
-          steps.detect-changes.outputs.rebuild_frontend == 'true' ||
-          steps.detect-changes.outputs.rebuild_airflow == 'true' ||
-          steps.check-images.outputs.images_exist != 'true'
-        )
+        if: steps.detect-changes.outputs.skip_build != 'true' && (steps.detect-changes.outputs.rebuild_backend == 'true' || steps.detect-changes.outputs.rebuild_frontend == 'true' || steps.detect-changes.outputs.rebuild_airflow == 'true' || steps.check-images.outputs.images_exist != 'true')
         run: |
           DEPLOY_PATH="${{ steps.prepare-vm-dir.outputs.deploy_path }}"
           DEPLOY_PATH_EXPANDED=$(ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} "echo ${DEPLOY_PATH}")
