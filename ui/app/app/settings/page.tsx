@@ -1,5 +1,6 @@
 'use client'
 
+import React from 'react'
 import { useState, useEffect } from 'react'
 import { Settings, User, Bell, Shield, Database, Key, Save, Eye, EyeOff, CheckCircle, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -125,7 +126,7 @@ export default function SettingsPage() {
       
       if (section === 'profile') {
         // Save profile changes to database
-        const response = await apiClient.put('/api/v1/user/profile', {
+        const response = await apiClient.updateUserProfile({
           first_name: settings.firstName,
           last_name: settings.lastName,
           timezone: settings.timezone
