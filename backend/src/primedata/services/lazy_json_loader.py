@@ -139,4 +139,3 @@ def save_product_json_field_with_auto_storage(
     except Exception as e:
         logger.error(f"Error saving {field_name} for product {product.id}: {e}", exc_info=True)
         return False
-

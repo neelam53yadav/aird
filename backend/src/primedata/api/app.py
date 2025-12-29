@@ -87,7 +87,7 @@ async def check_qdrant() -> Dict[str, Any]:
     try:
         import httpx
         import os
-        
+
         # Use Docker service name or localhost for local dev
         qdrant_host = os.getenv("QDRANT_HOST", "qdrant")
         qdrant_port = os.getenv("QDRANT_PORT", "6333")
@@ -106,45 +106,42 @@ async def check_storage() -> Dict[str, Any]:
     """Check storage connectivity (GCS or MinIO)."""
     try:
         import os
-        
+
         use_gcs = os.getenv("USE_GCS", "false").lower() == "true"
-        
+
         if use_gcs:
             # Check GCS by verifying bucket access
             try:
                 from primedata.storage.minio_client import minio_client
-                
+
                 # Try to list objects in the primary bucket to verify connectivity
                 buckets = ["primedata-raw", "primedata-clean", "primedata-chunk"]
                 accessible_buckets = 0
-                
+
                 for bucket_name in buckets:
                     try:
                         # Check if bucket exists and is accessible
                         # Access the gcs_client directly (it's initialized in __init__)
-                        if hasattr(minio_client, 'gcs_client') and minio_client.gcs_client:
+                        if hasattr(minio_client, "gcs_client") and minio_client.gcs_client:
                             bucket = minio_client.gcs_client.bucket(bucket_name)
                             if bucket.exists():
                                 accessible_buckets += 1
                     except Exception:
                         pass
-                
+
                 if accessible_buckets > 0:
                     return {
-                        "status": "healthy", 
-                        "message": f"GCS is accessible ({accessible_buckets}/{len(buckets)} buckets accessible)"
+                        "status": "healthy",
+                        "message": f"GCS is accessible ({accessible_buckets}/{len(buckets)} buckets accessible)",
                     }
                 else:
-                    return {
-                        "status": "degraded", 
-                        "message": "GCS client initialized but buckets may not be accessible"
-                    }
+                    return {"status": "degraded", "message": "GCS client initialized but buckets may not be accessible"}
             except Exception as e:
                 return {"status": "unhealthy", "message": f"GCS connection failed: {str(e)}"}
         else:
             # Check MinIO for local development
             import httpx
-            
+
             minio_host = os.getenv("MINIO_HOST", "minio")
             if ":" in minio_host:
                 # If MINIO_HOST includes port, use it as-is
@@ -173,7 +170,7 @@ async def check_airflow() -> Dict[str, Any]:
     try:
         import httpx
         import os
-        
+
         # Use Docker service name or localhost for local dev
         airflow_host = os.getenv("AIRFLOW_HOST", "airflow-webserver")
         airflow_port = os.getenv("AIRFLOW_PORT", "8080")
@@ -196,9 +193,10 @@ async def health_check():
 
     # Process results
     import os
+
     use_gcs = os.getenv("USE_GCS", "false").lower() == "true"
     storage_name = "gcs" if use_gcs else "minio"
-    
+
     service_results = {
         "database": (
             services[0] if not isinstance(services[0], Exception) else {"status": "unhealthy", "message": str(services[0])}

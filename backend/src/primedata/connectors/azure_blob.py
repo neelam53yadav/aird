@@ -1,6 +1,7 @@
 """
 Azure Blob Storage connector for reading files from Azure containers.
 """
+
 import logging
 import time
 from typing import Any, Dict, List, Tuple
@@ -20,7 +21,7 @@ class AzureBlobConnector(BaseConnector):
 
     def __init__(self, config: Dict[str, Any]):
         """Initialize Azure Blob connector.
-        
+
         Expected config:
         {
             'storage_account_name': str,  # Azure storage account name
@@ -42,7 +43,7 @@ class AzureBlobConnector(BaseConnector):
         self.include_patterns = config.get("include", ["*"])
         self.exclude_patterns = config.get("exclude", [])
         self.max_file_size = config.get("max_file_size", 100 * 1024 * 1024)  # 100MB
-        
+
         # Initialize Azure Blob client
         if self.connection_string:
             self.blob_service_client = BlobServiceClient.from_connection_string(self.connection_string)
@@ -81,66 +82,42 @@ class AzureBlobConnector(BaseConnector):
 
         try:
             container_client = self.blob_service_client.get_container_client(self.container_name)
-            
+
             # List blobs
             blobs = container_client.list_blobs(name_starts_with=self.prefix)
-            
+
             for blob in blobs:
                 try:
                     if blob.size > self.max_file_size:
-                        details["files_skipped"].append({
-                            "name": blob.name,
-                            "reason": f"File too large: {blob.size} bytes"
-                        })
+                        details["files_skipped"].append({"name": blob.name, "reason": f"File too large: {blob.size} bytes"})
                         continue
-                    
+
                     # Download blob
                     blob_client = container_client.get_blob_client(blob.name)
                     content = blob_client.download_blob().readall()
-                    
+
                     # Upload to MinIO/GCS
                     safe_key = safe_filename(blob.name)
                     minio_key = f"{output_prefix}{safe_key}"
-                    
-                    content_type = blob.content_settings.content_type or 'application/octet-stream'
-                    success = minio_client.put_bytes(
-                        output_bucket,
-                        minio_key,
-                        content,
-                        content_type
-                    )
-                    
+
+                    content_type = blob.content_settings.content_type or "application/octet-stream"
+                    success = minio_client.put_bytes(output_bucket, minio_key, content, content_type)
+
                     if success:
                         files_processed += 1
                         bytes_transferred += len(content)
-                        details["files_processed"].append({
-                            "name": blob.name,
-                            "minio_key": minio_key,
-                            "size": len(content)
-                        })
+                        details["files_processed"].append({"name": blob.name, "minio_key": minio_key, "size": len(content)})
                     else:
                         errors += 1
-                        details["files_failed"].append({
-                            "name": blob.name,
-                            "error": "Failed to upload to storage"
-                        })
+                        details["files_failed"].append({"name": blob.name, "error": "Failed to upload to storage"})
                 except Exception as e:
                     errors += 1
-                    details["files_failed"].append({
-                        "name": blob.name,
-                        "error": str(e)
-                    })
+                    details["files_failed"].append({"name": blob.name, "error": str(e)})
                     logger.error(f"Error processing Azure blob: {e}")
 
         except Exception as e:
             logger.error(f"Error during Azure Blob sync: {e}")
-            return {
-                "files": 0,
-                "bytes": 0,
-                "errors": 1,
-                "duration": time.time() - start_time,
-                "details": {"error": str(e)}
-            }
+            return {"files": 0, "bytes": 0, "errors": 1, "duration": time.time() - start_time, "details": {"error": str(e)}}
 
         duration = time.time() - start_time
         return {
@@ -148,7 +125,7 @@ class AzureBlobConnector(BaseConnector):
             "bytes": bytes_transferred,
             "errors": errors,
             "duration": duration,
-            "details": details
+            "details": details,
         }
 
     def _get_config_schema(self) -> Dict[str, Any]:
@@ -182,4 +159,3 @@ class AzureBlobConnector(BaseConnector):
             },
             "required": ["container_name"],
         }
-

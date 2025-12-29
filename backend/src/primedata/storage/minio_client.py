@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 try:
     from google.cloud import storage as gcs_storage
     from google.auth.exceptions import DefaultCredentialsError
+
     GCS_AVAILABLE = True
 except ImportError:
     GCS_AVAILABLE = False
@@ -25,26 +26,25 @@ except ImportError:
 
 class MinIOClient:
     """MinIO client wrapper with PrimeData-specific operations.
-    
+
     Supports both MinIO (local development) and GCS (production) via Application Default Credentials.
     Set USE_GCS=true to use GCS instead of MinIO.
     """
 
     def __init__(self):
         """Initialize storage client from environment variables.
-        
+
         Supports both MinIO (local) and GCS (Google Cloud Storage) via Application Default Credentials.
         """
         self.use_gcs = os.getenv("USE_GCS", "false").lower() == "true"
-        
+
         if self.use_gcs:
             # Initialize GCS client using Application Default Credentials
             if not GCS_AVAILABLE:
                 raise ImportError(
-                    "google-cloud-storage is required for GCS support. "
-                    "Install it with: pip install google-cloud-storage"
+                    "google-cloud-storage is required for GCS support. " "Install it with: pip install google-cloud-storage"
                 )
-            
+
             # Check if GOOGLE_APPLICATION_CREDENTIALS points to a file that exists
             # If not, unset it so the client uses the VM's service account via metadata server
             creds_file = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
@@ -56,18 +56,18 @@ class MinIOClient:
                 # Temporarily unset the environment variable
                 if "GOOGLE_APPLICATION_CREDENTIALS" in os.environ:
                     del os.environ["GOOGLE_APPLICATION_CREDENTIALS"]
-            
+
             try:
                 # Get project ID from environment or let GCS client detect it
                 project_id = os.getenv("GCS_PROJECT_ID")
-                
+
                 # Initialize GCS client - it will use:
                 # 1. GOOGLE_APPLICATION_CREDENTIALS file if set and exists
                 # 2. VM service account via metadata server (when running on GCP)
                 # 3. gcloud ADC if configured locally
                 self.gcs_client = gcs_storage.Client(project=project_id)
                 self.project_id = project_id
-                
+
                 if self.project_id:
                     logger.info(f"Initialized GCS client for project: {self.project_id}")
                 else:
@@ -94,7 +94,7 @@ class MinIOClient:
 
     def _ensure_buckets(self):
         """Ensure all required buckets exist.
-        
+
         For MinIO: Creates buckets if they don't exist.
         For GCS: Only checks if buckets exist (buckets must be created manually in GCP).
         """
@@ -152,7 +152,7 @@ class MinIOClient:
         """
         try:
             self._ensure_buckets()
-            
+
             if self.use_gcs:
                 # Upload to GCS
                 gcs_bucket = self.gcs_client.bucket(bucket)
@@ -163,6 +163,7 @@ class MinIOClient:
             else:
                 # Upload to MinIO
                 from io import BytesIO
+
                 data_stream = BytesIO(data)
                 self.client.put_object(
                     bucket, key, data_stream, length=len(data), content_type=content_type or "application/octet-stream"
@@ -208,7 +209,7 @@ class MinIOClient:
         try:
             self._ensure_buckets()
             objects = []
-            
+
             if self.use_gcs:
                 # List objects from GCS
                 gcs_bucket = self.gcs_client.bucket(bucket)
@@ -263,23 +264,25 @@ class MinIOClient:
         """
         try:
             self._ensure_buckets()
-            
+
             if self.use_gcs:
                 # Generate signed URL for GCS
                 from datetime import timedelta, datetime
+
                 gcs_bucket = self.gcs_client.bucket(bucket)
                 blob = gcs_bucket.blob(key)
-                
+
                 # GCS signed URL parameters
                 url = blob.generate_signed_url(
                     expiration=datetime.utcnow() + timedelta(seconds=expiry),
                     method="GET",
-                    response_disposition="inline" if inline else "attachment"
+                    response_disposition="inline" if inline else "attachment",
                 )
                 return url
             else:
                 # Generate presigned URL for MinIO
                 from datetime import timedelta
+
                 response_headers = None
                 if inline:
                     response_headers = {"response-content-disposition": "inline"}
@@ -308,7 +311,7 @@ class MinIOClient:
         try:
             logger.info(f"[MinIOClient.get_object] Attempting to get object: bucket={bucket}, key={key}")
             self._ensure_buckets()
-            
+
             if self.use_gcs:
                 # Download from GCS
                 logger.info(f"[MinIOClient.get_object] Using GCS, downloading blob...")
@@ -355,7 +358,7 @@ class MinIOClient:
         """
         try:
             self._ensure_buckets()
-            
+
             if self.use_gcs:
                 # Upload to GCS
                 gcs_bucket = self.gcs_client.bucket(bucket)
@@ -365,6 +368,7 @@ class MinIOClient:
             else:
                 # Upload to MinIO
                 from io import BytesIO
+
                 data_stream = BytesIO(data)
                 self.client.put_object(bucket, key, data_stream, len(data), content_type=content_type)
                 return True
@@ -387,7 +391,7 @@ class MinIOClient:
         """
         try:
             self._ensure_buckets()
-            
+
             if self.use_gcs:
                 # Check existence in GCS
                 gcs_bucket = self.gcs_client.bucket(bucket)
