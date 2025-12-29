@@ -18,6 +18,7 @@ from primedata.core.scope import ensure_product_access, ensure_workspace_access
 from primedata.core.security import get_current_user
 from primedata.db.database import get_db
 from primedata.db.models import DataSource, DataSourceType, Product, RawFile, RawFileStatus
+from primedata.ingestion_pipeline.artifact_registry import calculate_checksum
 from primedata.storage.minio_client import minio_client
 from primedata.storage.paths import raw_prefix, safe_filename
 from pydantic import BaseModel
@@ -782,6 +783,9 @@ async def upload_files(
             content = await file.read()
             file_size = len(content)
 
+            # Calculate checksum for integrity validation
+            file_checksum = calculate_checksum(content, algorithm="sha256")
+
             # Generate safe key
             safe_key = safe_filename(file.filename)
             key = f"{output_prefix}{safe_key}"
@@ -819,6 +823,7 @@ async def upload_files(
                         file_size=file_size,
                         content_type=content_type,
                         status=RawFileStatus.INGESTED,
+                        file_checksum=file_checksum,
                     )
                     db.add(raw_file)
                     logger.info(
