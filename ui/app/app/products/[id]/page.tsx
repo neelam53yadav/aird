@@ -1337,7 +1337,7 @@ export default function ProductDetailPage() {
             {/* Pipeline Artifacts Section */}
             {product.current_version > 0 && (
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <div className="flex justify-between items-center mb-4">
+                <div className="flex justify-between items-center mb-6">
                   <div>
                     <h2 className="text-lg font-semibold text-gray-900">Pipeline Artifacts</h2>
                     <p className="text-sm text-gray-600 mt-1">Generated artifacts from successful pipeline runs</p>
@@ -1347,6 +1347,7 @@ export default function ProductDetailPage() {
                     size="sm"
                     onClick={loadPipelineArtifacts}
                     disabled={loadingArtifacts}
+                    className="border-2 hover:border-blue-300 hover:bg-blue-50"
                   >
                     {loadingArtifacts ? (
                       <>
@@ -1363,104 +1364,132 @@ export default function ProductDetailPage() {
                 </div>
                 
                 {loadingArtifacts ? (
-                  <TableSkeleton rows={3} cols={4} />
+                  <TableSkeleton rows={5} cols={5} />
                 ) : pipelineArtifacts.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">No artifacts yet</h3>
-                    <p className="text-gray-600">Run a pipeline to generate artifacts like fingerprint, trust reports, and validation summaries.</p>
+                  <div className="text-center py-12 bg-gradient-to-br from-gray-50 to-blue-50 rounded-lg border-2 border-dashed border-gray-200">
+                    <div className="bg-white rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4 shadow-sm">
+                      <Package className="h-8 w-8 text-gray-400" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">No artifacts yet</h3>
+                    <p className="text-gray-600 max-w-md mx-auto">Run a pipeline to generate artifacts like fingerprint, trust reports, and validation summaries.</p>
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                    {(() => {
-                      // Group artifacts by stage
-                      const artifactsByStage: Record<string, any[]> = {}
-                      pipelineArtifacts.forEach((artifact) => {
-                        const stage = artifact.stage_name || 'other'
-                        if (!artifactsByStage[stage]) {
-                          artifactsByStage[stage] = []
-                        }
-                        artifactsByStage[stage].push(artifact)
-                      })
+                  <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gradient-to-r from-gray-50 to-blue-50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                            Artifact
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                            Stage
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                            Type
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                            Size
+                          </th>
+                          <th className="px-6 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                            Actions
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {pipelineArtifacts.map((artifact) => {
+                          // Stage display names and colors
+                          const stageInfo: Record<string, { name: string; color: string }> = {
+                            preprocess: { name: 'Preprocess', color: 'bg-blue-100 text-blue-800' },
+                            scoring: { name: 'Scoring', color: 'bg-purple-100 text-purple-800' },
+                            fingerprint: { name: 'Fingerprint', color: 'bg-indigo-100 text-indigo-800' },
+                            validation: { name: 'Validation', color: 'bg-green-100 text-green-800' },
+                            policy: { name: 'Policy', color: 'bg-yellow-100 text-yellow-800' },
+                            reporting: { name: 'Reporting', color: 'bg-red-100 text-red-800' },
+                            indexing: { name: 'Indexing', color: 'bg-cyan-100 text-cyan-800' },
+                            validate_data_quality: { name: 'Data Quality', color: 'bg-orange-100 text-orange-800' },
+                            finalize: { name: 'Finalize', color: 'bg-gray-100 text-gray-800' },
+                          }
 
-                      // Stage display names
-                      const stageDisplayNames: Record<string, string> = {
-                        preprocess: 'Preprocess',
-                        scoring: 'Scoring',
-                        fingerprint: 'Fingerprint',
-                        validation: 'Validation',
-                        policy: 'Policy',
-                        reporting: 'Reporting',
-                        indexing: 'Indexing',
-                        validate_data_quality: 'Data Quality',
-                        finalize: 'Finalize',
-                      }
+                          const stage = stageInfo[artifact.stage_name] || { 
+                            name: artifact.stage_name?.replace(/_/g, ' ') || 'Unknown', 
+                            color: 'bg-gray-100 text-gray-800' 
+                          }
 
-                      // Get artifact icon
-                      const getArtifactIcon = (type: string) => {
-                        switch (type?.toLowerCase()) {
-                          case 'pdf':
-                            return <FileText className="h-5 w-5 text-red-500" />
-                          case 'json':
-                            return <FileJson className="h-5 w-5 text-yellow-500" />
-                          case 'jsonl':
-                            return <FileCode className="h-5 w-5 text-blue-500" />
-                          case 'csv':
-                            return <FileCsv className="h-5 w-5 text-green-500" />
-                          default:
-                            return <FileText className="h-5 w-5 text-gray-500" />
-                        }
-                      }
+                          // Get artifact icon
+                          const getArtifactIcon = (type: string) => {
+                            switch (type?.toLowerCase()) {
+                              case 'pdf':
+                                return <FileText className="h-4 w-4 text-red-500" />
+                              case 'json':
+                                return <FileJson className="h-4 w-4 text-yellow-500" />
+                              case 'jsonl':
+                                return <FileCode className="h-4 w-4 text-blue-500" />
+                              case 'csv':
+                                return <FileCsv className="h-4 w-4 text-green-500" />
+                              case 'vector':
+                                return <Layers className="h-4 w-4 text-indigo-500" />
+                              default:
+                                return <FileText className="h-4 w-4 text-gray-500" />
+                            }
+                          }
 
-                      return Object.entries(artifactsByStage).map(([stage, artifacts]) => (
-                        <div key={stage} className="border border-gray-200 rounded-lg overflow-hidden">
-                          <div className="bg-gradient-to-r from-gray-50 to-blue-50 px-4 py-3 border-b border-gray-200">
-                            <h3 className="text-sm font-semibold text-gray-900 capitalize">
-                              {stageDisplayNames[stage] || stage.replace(/_/g, ' ')}
-                            </h3>
-                          </div>
-                          <div className="divide-y divide-gray-200">
-                            {artifacts.map((artifact) => (
-                              <div key={artifact.id} className="px-4 py-3 hover:bg-gray-50 transition-colors">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center space-x-3 flex-1">
-                                    {getArtifactIcon(artifact.artifact_type)}
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-sm font-medium text-gray-900">
-                                        {artifact.display_name || artifact.artifact_name.replace(/_/g, ' ')}
-                                      </p>
-                                      {artifact.description && (
-                                        <p className="text-xs text-gray-500 mt-0.5">{artifact.description}</p>
-                                      )}
-                                      <div className="flex items-center space-x-4 mt-1">
-                                        <span className="text-xs text-gray-500">
-                                          {(artifact.file_size / 1024).toFixed(1)} KB
-                                        </span>
-                                        <span className="text-xs text-gray-400">•</span>
-                                        <span className="text-xs text-gray-500 uppercase">
-                                          {artifact.artifact_type}
-                                        </span>
-                                      </div>
-                                    </div>
+                          // Format file size
+                          const formatFileSize = (bytes: number) => {
+                            if (bytes < 1024) return `${bytes} B`
+                            if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+                            return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+                          }
+
+                          return (
+                            <tr key={artifact.id} className="hover:bg-blue-50/50 transition-colors">
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="flex items-center space-x-3">
+                                  {getArtifactIcon(artifact.artifact_type)}
+                                  <div>
+                                    <p className="text-sm font-medium text-gray-900">
+                                      {artifact.display_name || artifact.artifact_name.replace(/_/g, ' ')}
+                                    </p>
+                                    {artifact.description && (
+                                      <p className="text-xs text-gray-500 mt-0.5">{artifact.description}</p>
+                                    )}
                                   </div>
-                                  {artifact.download_url && (
-                                    <a
-                                      href={artifact.download_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                      className="ml-4 text-blue-600 hover:text-blue-900 flex items-center space-x-1"
-                                    >
-                                      <Download className="h-4 w-4" />
-                                      <span className="text-sm">Download</span>
-                                    </a>
-                                  )}
                                 </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ))
-                    })()}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${stage.color}`}>
+                                  {stage.name}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span className="text-sm text-gray-600 uppercase font-mono">
+                                  {artifact.artifact_type}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span className="text-sm text-gray-600">
+                                  {formatFileSize(artifact.file_size)}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-right">
+                                {artifact.download_url ? (
+                                  <a
+                                    href={artifact.download_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-blue-700 bg-blue-50 rounded-md hover:bg-blue-100 transition-colors"
+                                  >
+                                    <Download className="h-4 w-4 mr-1.5" />
+                                    Download
+                                  </a>
+                                ) : (
+                                  <span className="text-sm text-gray-400">N/A</span>
+                                )}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 )}
               </div>
