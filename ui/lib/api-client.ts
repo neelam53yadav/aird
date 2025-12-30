@@ -275,11 +275,16 @@ class ApiClient {
       let status = response.status
 
       // If we get 401, try refreshing token and retry once
-      if (status === 401 && cookieToken) {
-        console.log('Got 401, attempting token refresh and retry...')
+      if (status === 401) {
+        console.log('Got 401, attempting token refresh and retry...', {
+          hadToken: !!cookieToken,
+          url,
+        })
         try {
           const { exchangeToken } = await import('@/lib/auth-utils')
           const refreshed = await exchangeToken()
+          
+          console.log('Token refresh result:', { refreshed })
           
           if (refreshed) {
             // Re-read the cookie after refresh
@@ -290,6 +295,11 @@ class ApiClient {
               const newValue = newCookie.split('=').slice(1).join('=')
               const newToken = newValue ? decodeURIComponent(newValue) : null
               
+              console.log('New token after refresh:', {
+                hasNewToken: !!newToken,
+                newTokenLength: newToken?.length || 0,
+              })
+              
               if (newToken) {
                 // Update headers with new token
                 headers['Authorization'] = `Bearer ${newToken}`
@@ -299,8 +309,15 @@ class ApiClient {
                 console.log('Retrying request with refreshed token...')
                 response = await fetch(url, options)
                 status = response.status
+                console.log('Retry result:', { status, ok: response.ok })
+              } else {
+                console.warn('Token refresh succeeded but no new token found in cookie')
               }
+            } else {
+              console.warn('Token refresh succeeded but cookie not found')
             }
+          } else {
+            console.warn('Token refresh returned false - may need to re-authenticate')
           }
         } catch (refreshError) {
           console.error('Token refresh failed on 401:', refreshError)
