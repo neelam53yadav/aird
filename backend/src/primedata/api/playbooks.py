@@ -171,7 +171,10 @@ async def list_available_playbooks(
 
 @router.get("/{playbook_id}", response_model=PlaybookResponse)
 async def get_playbook(
-    playbook_id: str, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user), request: Request
+    playbook_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Get playbook configuration by ID.
