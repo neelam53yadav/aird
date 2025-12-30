@@ -206,6 +206,12 @@ def verify_rs256_token(token: str) -> Optional[Dict[str, Any]]:
             except: pass
             # #endregion
             return None
+    except Exception as e:
+        # Catch any unexpected errors in the outer try block
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Unexpected error in verify_rs256_token: {e}")
+        return None
 
 
 def get_current_user(token: str = Depends(lambda: None)) -> Dict[str, Any]:
