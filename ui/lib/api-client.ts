@@ -164,11 +164,21 @@ class ApiClient {
   ): Promise<ApiResponse<T>> {
     try {
       // Ensure path starts with /api/v1 or includes the full path
-      const url = path.startsWith('http') 
-        ? path 
-        : path.startsWith('/') 
-          ? `${this.baseUrl}${path}`
-          : `${this.baseUrl}/api/v1/${path}`
+      // Normalize trailing slash for root endpoints to avoid 307 redirects
+      let normalizedPath = path
+      if (path.startsWith('/api/v1/') && !path.includes('?') && !path.includes('#')) {
+        const pathParts = path.split('/').filter(p => p)
+        // If it's a root endpoint (e.g., /api/v1/products), ensure trailing slash
+        if (pathParts.length === 3 && !path.endsWith('/')) {
+          normalizedPath = path + '/'
+        }
+      }
+      
+      const url = normalizedPath.startsWith('http') 
+        ? normalizedPath 
+        : normalizedPath.startsWith('/') 
+          ? `${this.baseUrl}${normalizedPath}`
+          : `${this.baseUrl}/api/v1/${normalizedPath}`
 
       // Read token from cookie (handle URL encoding)
       // Cookie is NOT httpOnly so we can read it for cross-origin requests
@@ -309,7 +319,7 @@ class ApiClient {
 
   // Products API
   async getProducts(): Promise<ApiResponse> {
-    return this.get('/api/v1/products')
+    return this.get('/api/v1/products/')  // Add trailing slash to avoid 307 redirect
   }
 
   async getProduct(productId: string): Promise<ApiResponse> {
