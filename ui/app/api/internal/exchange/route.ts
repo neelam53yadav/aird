@@ -19,54 +19,46 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    let backendToken: string | null = null
+    // ALWAYS get a fresh token from backend, don't use cached token
+    // This ensures we get a token signed with current keys (important when keys change)
+    const cookies = request.cookies
+    const nextAuthToken = cookies.get('next-auth.session-token')?.value || 
+                         cookies.get('__Secure-next-auth.session-token')?.value ||
+                         cookies.get('authjs.session-token')?.value ||
+                         cookies.get('__Secure-authjs.session-token')?.value
 
-    // Check if backend token is already stored (for credentials provider)
-    backendToken = (decodedToken as any).backend_access_token
-
-    // If not found, exchange NextAuth token with backend (for OAuth providers like Google)
-    if (!backendToken) {
-      // Get the raw NextAuth JWT token from cookies
-      // NextAuth uses different cookie names in dev vs production
-      const cookies = request.cookies
-      const nextAuthToken = cookies.get('next-auth.session-token')?.value || 
-                           cookies.get('__Secure-next-auth.session-token')?.value ||
-                           cookies.get('authjs.session-token')?.value ||
-                           cookies.get('__Secure-authjs.session-token')?.value
-
-      if (!nextAuthToken) {
-        console.error("NextAuth session token not found in cookies")
-        console.log("Available cookies:", Array.from(cookies.getAll()).map(c => c.name))
-        return NextResponse.json(
-          { error: "NextAuth session token not found" },
-          { status: 401 }
-        )
-      }
-
-      // Call backend session exchange endpoint
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000"
-      const exchangeResponse = await fetch(`${apiUrl}/api/v1/auth/session/exchange`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          token: nextAuthToken, // Send NextAuth JWT to backend
-        }),
-      })
-
-      if (!exchangeResponse.ok) {
-        const errorData = await exchangeResponse.json().catch(() => ({ detail: "Exchange failed" }))
-        console.error("Backend session exchange failed:", exchangeResponse.status, errorData)
-        return NextResponse.json(
-          { error: errorData.detail || "Backend token exchange failed" },
-          { status: exchangeResponse.status || 500 }
-        )
-      }
-
-      const exchangeData = await exchangeResponse.json()
-      backendToken = exchangeData.access_token
+    if (!nextAuthToken) {
+      console.error("NextAuth session token not found in cookies")
+      console.log("Available cookies:", Array.from(cookies.getAll()).map(c => c.name))
+      return NextResponse.json(
+        { error: "NextAuth session token not found" },
+        { status: 401 }
+      )
     }
+
+    // Always call backend to get a fresh token (signed with current keys)
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000"
+    const exchangeResponse = await fetch(`${apiUrl}/api/v1/auth/session/exchange`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        token: nextAuthToken, // Send NextAuth JWT to backend
+      }),
+    })
+
+    if (!exchangeResponse.ok) {
+      const errorData = await exchangeResponse.json().catch(() => ({ detail: "Exchange failed" }))
+      console.error("Backend session exchange failed:", exchangeResponse.status, errorData)
+      return NextResponse.json(
+        { error: errorData.detail || "Backend token exchange failed" },
+        { status: exchangeResponse.status || 500 }
+      )
+    }
+
+    const exchangeData = await exchangeResponse.json()
+    const backendToken = exchangeData.access_token
 
     if (!backendToken) {
       console.error("No backend access token found after exchange")
