@@ -386,36 +386,56 @@ export default function ProductDetailPage() {
         return
       }
 
-      if (artifact.download_url) {
-        const response = await fetch(artifact.download_url)
-        if (response.ok) {
-          const contentType = response.headers.get('content-type') || ''
-          
-          if (contentType.includes('application/json') || artifact.artifact_type?.toLowerCase() === 'json') {
-            const json = await response.json()
-            setArtifactContent(JSON.stringify(json, null, 2))
-          } else if (contentType.includes('text/csv') || artifact.artifact_type?.toLowerCase() === 'csv') {
-            const text = await response.text()
-            setArtifactContent(text)
-          } else if (contentType.includes('application/pdf') || artifact.artifact_type?.toLowerCase() === 'pdf') {
-            // For PDF, open in new tab instead of modal
-            window.open(artifact.download_url, '_blank')
-            setViewingArtifact(null)
-            setLoadingArtifactContent(false)
-            return
-          } else {
-            // For JSONL or other text formats
-            const text = await response.text()
-            setArtifactContent(text)
-          }
-        }
+      if (!artifact.download_url) {
+        addToast({
+          type: 'error',
+          message: 'No download URL available for this artifact',
+        })
+        setLoadingArtifactContent(false)
+        return
+      }
+
+      const response = await fetch(artifact.download_url, {
+        method: 'GET',
+        headers: {
+          'Accept': '*/*',
+        },
+        // Don't send credentials for presigned URLs (they're public)
+        credentials: 'omit',
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch artifact: ${response.status} ${response.statusText}`)
+      }
+
+      const contentType = response.headers.get('content-type') || ''
+      
+      if (contentType.includes('application/json') || artifact.artifact_type?.toLowerCase() === 'json') {
+        const json = await response.json()
+        setArtifactContent(JSON.stringify(json, null, 2))
+      } else if (contentType.includes('text/csv') || artifact.artifact_type?.toLowerCase() === 'csv') {
+        const text = await response.text()
+        setArtifactContent(text)
+      } else if (contentType.includes('application/pdf') || artifact.artifact_type?.toLowerCase() === 'pdf') {
+        // For PDF, open in new tab instead of modal
+        window.open(artifact.download_url, '_blank')
+        setViewingArtifact(null)
+        setLoadingArtifactContent(false)
+        return
+      } else {
+        // For JSONL or other text formats
+        const text = await response.text()
+        setArtifactContent(text)
       }
     } catch (err) {
       console.error('Failed to load artifact content:', err)
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load artifact content'
       addToast({
         type: 'error',
-        message: 'Failed to load artifact content',
+        message: errorMessage,
       })
+      // Set error content to show in modal
+      setArtifactContent(`Error loading artifact: ${errorMessage}\n\nDownload URL: ${artifact.download_url || 'N/A'}`)
     } finally {
       setLoadingArtifactContent(false)
     }
@@ -1472,7 +1492,15 @@ export default function ProductDetailPage() {
                                 <div className="flex items-center justify-end space-x-2">
                                   {artifact.artifact_type?.toLowerCase() === 'vector' ? (
                                     <a
-                                      href={`${process.env.NEXT_PUBLIC_QDRANT_URL || 'http://localhost:6333'}/dashboard`}
+                                      href={(() => {
+                                        // Derive Qdrant URL from current host (same host, port 6333)
+                                        if (typeof window !== 'undefined') {
+                                          const currentHost = window.location.hostname
+                                          return `http://${currentHost}:6333/dashboard`
+                                        }
+                                        // Fallback to environment variable or default
+                                        return process.env.NEXT_PUBLIC_QDRANT_URL || 'http://34.28.26.21:6333/dashboard'
+                                      })()}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-indigo-700 bg-indigo-50 rounded-md hover:bg-indigo-100 transition-colors"
