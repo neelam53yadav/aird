@@ -89,21 +89,6 @@ def get_current_user(token: str = Depends(lambda: None)) -> Dict[str, Any]:
     Raises:
         HTTPException: If authentication fails
     """
-    from primedata.core.settings import get_settings
-
-    settings = get_settings()
-
-    # Skip authentication if disabled in development
-    if settings.DISABLE_AUTH:
-        return {
-            "sub": "550e8400-e29b-41d4-a716-446655440000",  # Valid UUID
-            "email": "dev@example.com",
-            "name": "Development User",
-            "roles": ["admin"],
-            "workspaces": ["550e8400-e29b-41d4-a716-446655440001"],  # Valid UUID
-            "default_workspace_id": "550e8400-e29b-41d4-a716-446655440001",
-        }
-
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

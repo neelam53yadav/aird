@@ -47,25 +47,7 @@ export default function NewProductPage() {
           return
         }
         
-        // If no workspaces from API, try to get from existing products
-        const productsResponse = await apiClient.getProducts()
-        if (productsResponse.data && productsResponse.data.length > 0) {
-          // Use the workspace from the first product as default
-          setWorkspaceId(productsResponse.data[0].workspace_id)
-          setLoadingWorkspace(false)
-          return
-        }
-        
-        // If still no workspace, try to create one (for production mode)
-        const DISABLE_AUTH = process.env.NEXT_PUBLIC_DISABLE_AUTH === 'true' || process.env.NODE_ENV === 'development'
-        if (DISABLE_AUTH) {
-          // Dev mode: use hardcoded workspace ID (backend will auto-create)
-          setWorkspaceId('550e8400-e29b-41d4-a716-446655440001')
-          setLoadingWorkspace(false)
-          return
-        }
-        
-        // Production mode: create workspace if it doesn't exist
+        // If no workspaces, create a new one
         try {
           const createResponse = await apiClient.createWorkspace()
           if (createResponse.data && createResponse.data.id) {
@@ -82,12 +64,8 @@ export default function NewProductPage() {
         setError('No workspace found. Please contact support.')
         setLoadingWorkspace(false)
       } catch (err) {
-        console.error('Failed to get workspace:', err)
-        // Don't show error - try to proceed with default workspace
-        const DISABLE_AUTH = process.env.NEXT_PUBLIC_DISABLE_AUTH === 'true' || process.env.NODE_ENV === 'development'
-        if (DISABLE_AUTH) {
-          setWorkspaceId('550e8400-e29b-41d4-a716-446655440001')
-        }
+        console.error('Error fetching workspace:', err)
+        setError('Failed to load workspace. Please refresh the page.')
         setLoadingWorkspace(false)
       }
     }

@@ -144,29 +144,29 @@ def register_stage_artifacts(
         processed_files = result.metrics.get("processed_file_list", [])
         for file_stem in processed_files:
             # Construct MinIO key for processed JSONL
-            minio_key = f"ws/{workspace_id}/prod/{product_id}/v/{version}/clean/{file_stem}.jsonl"
+            storage_key = f"ws/{workspace_id}/prod/{product_id}/v/{version}/clean/{file_stem}.jsonl"
 
             # Get file info using unified stat_object method
             try:
                 from primedata.storage.minio_client import minio_client
 
-                stat_info = minio_client.stat_object("primedata-clean", minio_key)
+                stat_info = minio_client.stat_object("primedata-clean", storage_key)
                 if not stat_info:
-                    logger.warning(f"Could not get file info for {minio_key}")
+                    logger.warning(f"Could not get file info for {storage_key}")
                     continue
 
                 file_size = stat_info["size"]
-                minio_etag = stat_info["etag"]
+                storage_etag = stat_info["etag"]
 
                 # Calculate checksum from file content
-                file_data = minio_client.get_bytes("primedata-clean", minio_key)
+                file_data = minio_client.get_bytes("primedata-clean", storage_key)
                 if not file_data:
-                    logger.warning(f"Could not download file for checksum calculation: {minio_key}")
+                    logger.warning(f"Could not download file for checksum calculation: {storage_key}")
                     continue
 
                 checksum = calculate_checksum(file_data, algorithm="sha256")
             except Exception as e:
-                logger.warning(f"Could not get file info for {minio_key}: {e}")
+                logger.warning(f"Could not get file info for {storage_key}: {e}")
                 continue
 
             artifact_id = register_artifact(
@@ -178,11 +178,11 @@ def register_stage_artifacts(
                 stage_name=stage_name,
                 artifact_type=ArtifactType.JSONL,
                 artifact_name=f"processed_chunks_{file_stem}",
-                minio_bucket="primedata-clean",
-                minio_key=minio_key,
+                storage_bucket="primedata-clean",
+                storage_key=storage_key,
                 file_size=file_size,
                 checksum=checksum,
-                minio_etag=minio_etag,
+                storage_etag=storage_etag,
                 input_artifact_ids=input_artifact_ids,  # Would be raw file artifact IDs
                 artifact_metadata={
                     "file_stem": file_stem,
@@ -207,7 +207,7 @@ def register_stage_artifacts(
                 logger.warning(f"Could not get metrics.json info")
             else:
                 file_size = stat_info["size"]
-                minio_etag = stat_info["etag"]
+                storage_etag = stat_info["etag"]
 
                 # Calculate checksum from file content
                 file_data = minio_client.get_bytes("primedata-clean", metrics_key)
@@ -225,11 +225,11 @@ def register_stage_artifacts(
                         stage_name=stage_name,
                         artifact_type=ArtifactType.JSON,
                         artifact_name="metrics",
-                        minio_bucket="primedata-clean",
-                        minio_key=metrics_key,
+                        storage_bucket="primedata-clean",
+                        storage_key=metrics_key,
                         file_size=file_size,
                         checksum=checksum,
-                        minio_etag=minio_etag,
+                        storage_etag=storage_etag,
                         input_artifact_ids=input_artifact_ids,  # Would be preprocess artifact IDs
                         artifact_metadata={
                             "total_chunks": result.metrics.get("total_chunks", 0),
@@ -253,7 +253,7 @@ def register_stage_artifacts(
                 logger.warning(f"Could not get fingerprint.json info")
             else:
                 file_size = stat_info["size"]
-                minio_etag = stat_info["etag"]
+                storage_etag = stat_info["etag"]
 
                 # Calculate checksum from file content
                 file_data = minio_client.get_bytes("primedata-exports", fingerprint_key)
@@ -271,11 +271,11 @@ def register_stage_artifacts(
                         stage_name=stage_name,
                         artifact_type=ArtifactType.JSON,
                         artifact_name="fingerprint",
-                        minio_bucket="primedata-exports",
-                        minio_key=fingerprint_key,
+                        storage_bucket="primedata-exports",
+                        storage_key=fingerprint_key,
                         file_size=file_size,
                         checksum=checksum,
-                        minio_etag=minio_etag,
+                        storage_etag=storage_etag,
                         input_artifact_ids=input_artifact_ids,  # scoring artifacts
                         artifact_metadata=result.metrics.get("fingerprint", {}),
                         retention_policy=RetentionPolicy.KEEP_FOREVER,  # Fingerprints are important
@@ -300,7 +300,7 @@ def register_stage_artifacts(
                     logger.warning(f"Could not get validation CSV info")
                 else:
                     file_size = stat_info["size"]
-                    minio_etag = stat_info["etag"]
+                    storage_etag = stat_info["etag"]
 
                     # Calculate checksum from file content
                     file_data = minio_client.get_bytes(bucket, key)
@@ -318,11 +318,11 @@ def register_stage_artifacts(
                             stage_name=stage_name,
                             artifact_type=ArtifactType.CSV,
                             artifact_name="validation_summary",
-                            minio_bucket=bucket,
-                            minio_key=key,
+                            storage_bucket=bucket,
+                            storage_key=key,
                             file_size=file_size,
                             checksum=checksum,
-                            minio_etag=minio_etag,
+                            storage_etag=storage_etag,
                             input_artifact_ids=input_artifact_ids,
                             artifact_metadata={
                                 "threshold": result.metrics.get("threshold", 70.0),
@@ -350,7 +350,7 @@ def register_stage_artifacts(
                     logger.warning(f"Could not get trust report PDF info")
                 else:
                     file_size = stat_info["size"]
-                    minio_etag = stat_info["etag"]
+                    storage_etag = stat_info["etag"]
 
                     # Calculate checksum from file content
                     file_data = minio_client.get_bytes(bucket, key)
@@ -368,11 +368,11 @@ def register_stage_artifacts(
                             stage_name=stage_name,
                             artifact_type=ArtifactType.PDF,
                             artifact_name="trust_report",
-                            minio_bucket=bucket,
-                            minio_key=key,
+                            storage_bucket=bucket,
+                            storage_key=key,
                             file_size=file_size,
                             checksum=checksum,
-                            minio_etag=minio_etag,
+                            storage_etag=storage_etag,
                             input_artifact_ids=input_artifact_ids,
                             artifact_metadata={
                                 "threshold": result.metrics.get("threshold", 70.0),
@@ -407,11 +407,11 @@ def register_stage_artifacts(
             stage_name=stage_name,
             artifact_type=ArtifactType.VECTOR,
             artifact_name="qdrant_vectors",
-            minio_bucket="qdrant",  # Special bucket name for Qdrant
-            minio_key=f"collection_ws_{workspace_id}_prod_{product_id}_v_{version}",
+            storage_bucket="qdrant",  # Special bucket name for Qdrant
+            storage_key=f"collection_ws_{workspace_id}_prod_{product_id}_v_{version}",
             file_size=0,  # Vectors are in Qdrant, not MinIO
             checksum=metadata_checksum,  # Calculate checksum from metadata JSON
-            minio_etag=metadata_checksum,  # Use checksum as ETag since there's no file
+            storage_etag=metadata_checksum,  # Use checksum as ETag since there's no file
             input_artifact_ids=input_artifact_ids,
             artifact_metadata=artifact_metadata_dict,
             retention_policy=RetentionPolicy.KEEP_FOREVER,  # Vectors are critical
@@ -705,7 +705,7 @@ def task_preprocess(**context) -> Dict[str, Any]:
         elif raw_file_records:
             # Log the actual files found for verification
             file_info = [
-                f"{rf.filename} (stem: {rf.file_stem}, status: {rf.status.value}, minio_key: {rf.minio_key})"
+                f"{rf.filename} (stem: {rf.file_stem}, status: {rf.status.value}, storage_key: {rf.storage_key})"
                 for rf in raw_file_records[:10]
             ]  # Log first 10 files
             logger.info(f"Raw files found for product {product_id}, version {version}:")
@@ -746,7 +746,7 @@ def task_preprocess(**context) -> Dict[str, Any]:
         for record in raw_file_records:
             # Check if file exists in MinIO
             try:
-                exists = minio_client.object_exists(record.minio_bucket, record.minio_key)
+                exists = minio_client.object_exists(record.storage_bucket, record.storage_key)
                 if exists:
                     validated_files.append(record.file_stem)
                     # Update status to processing
@@ -754,11 +754,11 @@ def task_preprocess(**context) -> Dict[str, Any]:
                         record.status = RawFileStatus.PROCESSING
                 else:
                     files_missing.append(record.file_stem)
-                    logger.warning(f"File missing in MinIO but exists in DB: {record.minio_key}")
+                    logger.warning(f"File missing in MinIO but exists in DB: {record.storage_key}")
                     record.status = RawFileStatus.FAILED
-                    record.error_message = f"File not found in MinIO: {record.minio_key}"
+                    record.error_message = f"File not found in MinIO: {record.storage_key}"
             except Exception as e:
-                logger.error(f"Error checking file existence for {record.minio_key}: {e}")
+                logger.error(f"Error checking file existence for {record.storage_key}: {e}")
                 files_missing.append(record.file_stem)
                 record.status = RawFileStatus.FAILED
                 record.error_message = f"Error validating file: {str(e)}"
@@ -783,17 +783,17 @@ def task_preprocess(**context) -> Dict[str, Any]:
             # Raise exception to mark Airflow task as FAILED
             raise RuntimeError(error_msg)
 
-        # Extract file stems and create mapping to minio_keys for accurate file retrieval
+        # Extract file stems and create mapping to storage_keys for accurate file retrieval
         raw_files = validated_files
 
-        # Create mapping: file_stem -> minio_key for accurate file retrieval
-        # This ensures we use the exact minio_key from database, not construct a path with .txt extension
-        file_stem_to_minio_key = {}
+        # Create mapping: file_stem -> storage_key for accurate file retrieval
+        # This ensures we use the exact storage_key from database, not construct a path with .txt extension
+        file_stem_to_storage_key = {}
         for record in raw_file_records:
             if record.file_stem in raw_files:
-                file_stem_to_minio_key[record.file_stem] = {
-                    "minio_key": record.minio_key,
-                    "minio_bucket": record.minio_bucket,
+                file_stem_to_storage_key[record.file_stem] = {
+                    "storage_key": record.storage_key,
+                    "storage_bucket": record.storage_bucket,
                     "filename": record.filename,
                 }
 
@@ -802,7 +802,7 @@ def task_preprocess(**context) -> Dict[str, Any]:
         )
         logger.info(f"Raw files will be read from MinIO using stored keys")
         logger.info(f"File stems to process: {raw_files}")
-        logger.info(f"file_stem_to_minio_key mapping: {file_stem_to_minio_key}")
+        logger.info(f"file_stem_to_storage_key mapping: {file_stem_to_storage_key}")
 
         # Create and execute preprocessing stage
         # Lazy import to avoid DAG import timeouts
@@ -851,7 +851,7 @@ def task_preprocess(**context) -> Dict[str, Any]:
             "storage": storage,
             "raw_files": raw_files,
             "playbook_id": playbook_id,
-            "file_stem_to_minio_key": file_stem_to_minio_key,  # Pass mapping for accurate file retrieval
+            "file_stem_to_storage_key": file_stem_to_storage_key,  # Pass mapping for accurate file retrieval
             "chunking_config": chunking_config,  # Pass product chunking config (including preprocessing_flags)
             "workspace_id": workspace_id,  # For loading custom playbooks
             "db": db,  # For loading custom playbooks
@@ -859,7 +859,7 @@ def task_preprocess(**context) -> Dict[str, Any]:
         logger.info(f"Executing PreprocessStage with context keys: {list(stage_context.keys())}")
         logger.info(f"Context storage type: {type(stage_context['storage']).__name__}")
         logger.info(f"Context raw_files: {stage_context['raw_files']}")
-        logger.info(f"Context file_stem_to_minio_key keys: {list(stage_context['file_stem_to_minio_key'].keys())}")
+        logger.info(f"Context file_stem_to_storage_key keys: {list(stage_context['file_stem_to_storage_key'].keys())}")
 
         try:
             result = preprocess_stage.execute(stage_context)
@@ -1432,11 +1432,11 @@ def task_policy(**context) -> Dict[str, Any]:
                     stage_name="policy",
                     artifact_type=ArtifactType.JSON,  # Policy result is JSON-like metadata
                     artifact_name="policy_evaluation",
-                    minio_bucket="none",  # No MinIO file
-                    minio_key=f"policy_result_{product_id}_v{version}",
+                    storage_bucket="none",  # No MinIO file
+                    storage_key=f"policy_result_{product_id}_v{version}",
                     file_size=0,
                     checksum=metadata_checksum,  # Calculate checksum from metadata JSON
-                    minio_etag=metadata_checksum,  # Use checksum as ETag since there's no file
+                    storage_etag=metadata_checksum,  # Use checksum as ETag since there's no file
                     input_artifacts=(
                         [
                             {
@@ -1894,7 +1894,7 @@ def task_finalize(**context) -> Dict[str, Any]:
                                         "name": artifact.artifact_name,
                                         "type": artifact.artifact_type.value,
                                         "size_bytes": artifact.file_size,
-                                        "minio_key": artifact.minio_key,
+                                        "storage_key": artifact.storage_key,
                                     }
                                 )
 

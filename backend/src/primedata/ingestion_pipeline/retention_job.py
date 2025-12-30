@@ -114,12 +114,12 @@ def apply_retention_policies(
     for artifact in deleted_artifacts:
         try:
             # Optionally delete from MinIO (if not already deleted)
-            if artifact.minio_bucket != "none" and artifact.minio_bucket != "qdrant":
+            if artifact.storage_bucket != "none" and artifact.storage_bucket != "qdrant":
                 try:
-                    minio_client.client.remove_object(artifact.minio_bucket, artifact.minio_key)
-                    logger.info(f"Deleted artifact from MinIO: {artifact.minio_bucket}/{artifact.minio_key}")
+                    minio_client.client.remove_object(artifact.storage_bucket, artifact.storage_key)
+                    logger.info(f"Deleted artifact from MinIO: {artifact.storage_bucket}/{artifact.storage_key}")
                 except Exception as e:
-                    logger.warning(f"Failed to delete artifact from MinIO {artifact.minio_bucket}/{artifact.minio_key}: {e}")
+                    logger.warning(f"Failed to delete artifact from MinIO {artifact.storage_bucket}/{artifact.storage_key}: {e}")
 
             # Mark as purged (hard delete from DB)
             artifact.status = ArtifactStatus.PURGED

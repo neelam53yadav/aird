@@ -61,7 +61,7 @@ class CreateExportResponse(BaseModel):
 async def create_export_bundle(
     product_id: str,
     request_body: CreateExportRequest,
-    request: Request = None,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
@@ -131,7 +131,7 @@ async def create_export_bundle(
 @router.get("", response_model=List[ExportBundleResponse])
 async def list_export_bundles(
     product_id: str = Query(..., description="Product ID to list exports for"),
-    request: Request = None,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):

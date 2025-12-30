@@ -124,7 +124,7 @@ async def create_datasource(
 @router.get("/", response_model=List[DataSourceResponse])
 async def list_datasources(
     product_id: Optional[UUID] = Query(None, description="Filter by product ID"),
-    request: Request = None,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
@@ -403,7 +403,7 @@ async def sync_full(
                         found_file = any_version_files[0]
                         current_version = found_file.version
                         logger.info(
-                            f"Found file in version {current_version}: {found_file.filename} (key: {found_file.minio_key})"
+                            f"Found file in version {current_version}: {found_file.filename} (key: {found_file.storage_key})"
                         )
 
                         existing_files = (
@@ -506,7 +506,7 @@ async def sync_full(
                     for raw_file in existing_files:
                         # For the new version, we need to copy the file to the new version's prefix
                         # Generate new key with new version prefix
-                        old_key = raw_file.minio_key
+                        old_key = raw_file.storage_key
                         # Extract filename from old key
                         old_prefix = raw_prefix(datasource.workspace_id, datasource.product_id, current_version)
                         if old_key.startswith(old_prefix):
@@ -616,16 +616,16 @@ async def sync_full(
             try:
                 # Extract file stem from the original path or MinIO key
                 file_path = file_info.get("path", "")
-                minio_key = file_info.get("key", "")
+                storage_key = file_info.get("key", "")
 
                 # Get file stem (filename without extension)
                 if file_path:
                     file_stem = Path(file_path).stem
                     filename = Path(file_path).name
-                elif minio_key:
-                    # Extract from MinIO key if path not available
-                    filename = Path(minio_key).name
-                    file_stem = Path(minio_key).stem
+                elif storage_key:
+                    # Extract from storage key if path not available
+                    filename = Path(storage_key).name
+                    file_stem = Path(storage_key).stem
                 else:
                     continue
 
@@ -665,8 +665,8 @@ async def sync_full(
                         version=version,
                         filename=filename,
                         file_stem=file_stem,
-                        minio_key=minio_key,
-                        minio_bucket="primedata-raw",
+                        storage_key=storage_key,
+                        storage_bucket="primedata-raw",
                         file_size=file_info.get("size", 0),
                         content_type=file_info.get("content_type", "application/octet-stream"),
                         status=RawFileStatus.INGESTED,
@@ -689,8 +689,8 @@ async def sync_full(
                 if not filename:
                     continue
 
-                # Generate MinIO key from prefix and filename
-                minio_key = f"{output_prefix}{filename}"
+                # Generate storage key from prefix and filename
+                storage_key = f"{output_prefix}{filename}"
                 file_stem = Path(filename).stem
 
                 # Check if file already exists (avoid duplicates)
@@ -708,18 +708,18 @@ async def sync_full(
                     if not file_checksum:
                         try:
                             # Download file to calculate checksum
-                            file_content = minio_client.get_bytes("primedata-raw", minio_key)
+                            file_content = minio_client.get_bytes("primedata-raw", storage_key)
                             if file_content:
                                 file_checksum = calculate_checksum(file_content, algorithm="sha256")
                             else:
-                                logger.warning(f"Could not read file {minio_key} to calculate checksum")
+                                logger.warning(f"Could not read file {storage_key} to calculate checksum")
                                 file_checksum = ""
                         except Exception as e:
-                            logger.warning(f"Failed to calculate checksum for {minio_key}: {e}")
+                            logger.warning(f"Failed to calculate checksum for {storage_key}: {e}")
                             file_checksum = ""
 
                     if not file_checksum:
-                        raise ValueError(f"Could not determine checksum for file {minio_key}")
+                        raise ValueError(f"Could not determine checksum for file {storage_key}")
 
                     raw_file = RawFile(
                         workspace_id=datasource.workspace_id,
@@ -728,8 +728,8 @@ async def sync_full(
                         version=version,
                         filename=filename,
                         file_stem=file_stem,
-                        minio_key=minio_key,
-                        minio_bucket="primedata-raw",
+                        storage_key=storage_key,
+                        storage_bucket="primedata-raw",
                         file_size=url_info.get("size", 0),
                         content_type="text/html",  # Web connector stores HTML
                         status=RawFileStatus.INGESTED,
@@ -784,7 +784,7 @@ async def sync_full(
 async def upload_files(
     datasource_id: UUID,
     files: List[UploadFile] = File(...),
-    request: Request = None,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
@@ -865,8 +865,8 @@ async def upload_files(
                         version=version,
                         filename=filename,
                         file_stem=file_stem,
-                        minio_key=key,
-                        minio_bucket="primedata-raw",
+                        storage_key=key,
+                        storage_bucket="primedata-raw",
                         file_size=file_size,
                         content_type=content_type,
                         status=RawFileStatus.INGESTED,

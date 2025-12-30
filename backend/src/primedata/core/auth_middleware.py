@@ -43,19 +43,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
             # This is critical for /api/v1/auth/session/exchange as it's the first-time auth endpoint
             return await call_next(request)
 
-        # Skip authentication if disabled in development
-        if self.settings.DISABLE_AUTH:
-            # Create a mock user for development
-            request.state.user = {
-                "sub": "550e8400-e29b-41d4-a716-446655440000",  # Valid UUID
-                "email": "dev@example.com",
-                "name": "Development User",
-                "roles": ["admin"],
-                "workspaces": ["550e8400-e29b-41d4-a716-446655440001"],  # Valid UUID
-                "default_workspace_id": "550e8400-e29b-41d4-a716-446655440001",
-            }
-            return await call_next(request)
-
         # Extract Bearer token
         auth_header = request.headers.get("authorization")
         if not auth_header or not auth_header.startswith("Bearer "):

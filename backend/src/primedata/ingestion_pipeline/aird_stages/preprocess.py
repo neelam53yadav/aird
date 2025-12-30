@@ -166,8 +166,8 @@ class PreprocessStage(AirdStage):
         playbook_id = initial_playbook_id
         self.logger.info(f"Starting preprocessing for {len(raw_files)} files, playbook={playbook_id}")
 
-        # Get file_stem to minio_key mapping if provided (for accurate file retrieval)
-        file_stem_to_minio_key = context.get("file_stem_to_minio_key", {})
+        # Get file_stem to storage_key mapping if provided (for accurate file retrieval)
+        file_stem_to_storage_key = context.get("file_stem_to_storage_key", {})
 
         all_records: List[Dict[str, Any]] = []
         total_sections = 0
@@ -182,32 +182,32 @@ class PreprocessStage(AirdStage):
             self.logger.info(f"[PreprocessStage] ====== Processing file: {file_stem} ======")
             std_logger.info(f"[PreprocessStage] ====== Processing file: {file_stem} ======")
             try:
-                # Load raw text - use exact minio_key if available
-                file_info = file_stem_to_minio_key.get(file_stem, {})
-                minio_key = file_info.get("minio_key")
-                minio_bucket = file_info.get("minio_bucket")
+                # Load raw text - use exact storage_key if available
+                file_info = file_stem_to_storage_key.get(file_stem, {})
+                storage_key = file_info.get("storage_key")
+                storage_bucket = file_info.get("storage_bucket")
                 filename = file_info.get("filename", f"{file_stem}.txt")
 
-                file_info_msg = f"[PreprocessStage] File info for {file_stem}: minio_key={minio_key}, minio_bucket={minio_bucket}, filename={filename}"
+                file_info_msg = f"[PreprocessStage] File info for {file_stem}: storage_key={storage_key}, storage_bucket={storage_bucket}, filename={filename}"
                 self.logger.info(file_info_msg)
                 std_logger.info(file_info_msg)
 
-                keys_msg = f"[PreprocessStage] Available file_stem_to_minio_key keys: {list(file_stem_to_minio_key.keys())}"
+                keys_msg = f"[PreprocessStage] Available file_stem_to_storage_key keys: {list(file_stem_to_storage_key.keys())}"
                 self.logger.info(keys_msg)
                 std_logger.info(keys_msg)
 
-                if minio_key:
-                    load_msg = f"[PreprocessStage] Loading raw file {file_stem} from exact MinIO key: {minio_key} (bucket: {minio_bucket or 'primedata-raw'})"
+                if storage_key:
+                    load_msg = f"[PreprocessStage] Loading raw file {file_stem} from exact MinIO key: {storage_key} (bucket: {storage_bucket or 'primedata-raw'})"
                     self.logger.info(load_msg)
                     std_logger.info(load_msg)
                     try:
                         self.logger.info(
-                            f"[PreprocessStage] About to call storage.get_raw_text(file_stem={file_stem}, minio_key={minio_key}, minio_bucket={minio_bucket})"
+                            f"[PreprocessStage] About to call storage.get_raw_text(file_stem={file_stem}, storage_key={storage_key}, storage_bucket={storage_bucket})"
                         )
                         std_logger.info(
-                            f"[PreprocessStage] About to call storage.get_raw_text(file_stem={file_stem}, minio_key={minio_key}, minio_bucket={minio_bucket})"
+                            f"[PreprocessStage] About to call storage.get_raw_text(file_stem={file_stem}, storage_key={storage_key}, storage_bucket={storage_bucket})"
                         )
-                        raw_text = storage.get_raw_text(file_stem, minio_key=minio_key, minio_bucket=minio_bucket)
+                        raw_text = storage.get_raw_text(file_stem, storage_key=storage_key, storage_bucket=storage_bucket)
                         self.logger.info(
                             f"[PreprocessStage] storage.get_raw_text() returned: {'None' if raw_text is None else f'{len(raw_text)} characters'}"
                         )
@@ -225,7 +225,7 @@ class PreprocessStage(AirdStage):
                         raw_text = None
                 else:
                     self.logger.warning(
-                        f"[PreprocessStage] No minio_key found for {file_stem} in file_stem_to_minio_key map. Using constructed path (.txt extension)"
+                        f"[PreprocessStage] No storage_key found for {file_stem} in file_stem_to_storage_key map. Using constructed path (.txt extension)"
                     )
                     try:
                         raw_text = storage.get_raw_text(file_stem)
@@ -259,8 +259,8 @@ class PreprocessStage(AirdStage):
                     else:
                         error_msg = (
                             f"[PreprocessStage] ❌ Raw text extraction FAILED for {file_stem}. "
-                            f"MinIO key: {minio_key if minio_key else 'constructed path'}, "
-                            f"Bucket: {minio_bucket or 'primedata-raw'}, "
+                            f"MinIO key: {storage_key if storage_key else 'constructed path'}, "
+                            f"Bucket: {storage_bucket or 'primedata-raw'}, "
                             f"Filename: {filename}. "
                             f"File may be missing from MinIO, corrupted, or in unsupported format. "
                             f"Supported formats: PDF, TXT, HTML, JSON, CSV"

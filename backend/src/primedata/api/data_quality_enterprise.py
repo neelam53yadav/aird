@@ -128,7 +128,7 @@ async def create_data_quality_rule(
     product_id: UUID,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
-    http_request: Request = None,
+    http_request: Request,
 ):
     """Create a new data quality rule with full audit trail."""
     try:
@@ -187,7 +187,7 @@ async def list_data_quality_rules(
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
-    http_request: Request = None,
+    http_request: Request,
 ):
     """List data quality rules with enterprise filtering and pagination."""
     try:
@@ -237,7 +237,7 @@ async def update_data_quality_rule(
     request: DataQualityRuleUpdateRequest,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
-    http_request: Request = None,
+    http_request: Request,
 ):
     """Update a data quality rule with audit trail."""
     try:
@@ -342,7 +342,7 @@ async def get_rule_audit_trail(
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
-    http_request: Request = None,
+    http_request: Request,
 ):
     """Get complete audit trail for a data quality rule."""
     try:
@@ -377,7 +377,7 @@ async def generate_compliance_report(
     workspace_id: UUID,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
-    http_request: Request = None,
+    http_request: Request,
 ):
     """Generate enterprise compliance reports."""
     try:
@@ -472,7 +472,7 @@ async def delete_data_quality_rule(
     reason: str = Query(..., description="Reason for deletion"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
-    http_request: Request = None,
+    http_request: Request,
 ):
     """Soft delete a data quality rule with audit trail."""
     try:

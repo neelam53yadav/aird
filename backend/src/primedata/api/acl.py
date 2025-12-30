@@ -98,7 +98,7 @@ async def create_acl(
 async def list_acls(
     user_id: Optional[UUID] = None,
     product_id: Optional[UUID] = None,
-    request: Request = None,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
@@ -148,7 +148,7 @@ async def delete_acls(
     acl_id: Optional[UUID] = None,
     user_id: Optional[UUID] = None,
     product_id: Optional[UUID] = None,
-    request: Request = None,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):

@@ -53,8 +53,20 @@ export default function AnalyticsPage() {
   const loadAnalytics = async () => {
     try {
       setLoading(true)
-      // Get workspace ID from session or use default for testing
-      const workspaceId = session?.user?.workspace_ids?.[0] || '550e8400-e29b-41d4-a716-446655440001'
+      
+      // Get workspace ID from session or fetch from API
+      let workspaceId = session?.user?.workspace_ids?.[0]
+      
+      if (!workspaceId) {
+        // Fetch workspaces from API
+        const workspacesResponse = await apiClient.getWorkspaces()
+        if (workspacesResponse.data && workspacesResponse.data.length > 0) {
+          workspaceId = workspacesResponse.data[0].id
+        } else {
+          setLoading(false)
+          return // No workspace available
+        }
+      }
       
       const response = await apiClient.get(`/api/v1/analytics/metrics?workspace_id=${workspaceId}`)
       const data = response.data

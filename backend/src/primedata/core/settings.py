@@ -17,10 +17,6 @@ class Settings(BaseSettings):
 
     # Environment
     ENV: str = "development"
-    DISABLE_AUTH: bool = True  # Set to True to disable authentication in development
-    TESTING_MODE: bool = False  # Set to True for testing mode
-    USE_DEV_USER: bool = True  # Set to True to use default dev user ID instead of authenticated user
-    DEV_USER_ID: str = "550e8400-e29b-41d4-a716-446655440000"  # Default user ID for development
 
     # Database
     DATABASE_URL: str = "postgresql+psycopg2://primedata:primedata123@localhost:5433/primedata"
@@ -75,6 +71,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+        extra = "ignore"  # Ignore extra fields from .env (for backward compatibility during migration)
 
 
 # Global settings instance
