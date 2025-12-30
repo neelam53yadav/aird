@@ -4,11 +4,11 @@ on:
   pull_request:
     branches:
       - main
-      - db-fixes
+      # - db-fixes
   push:
     branches:
       - main
-      - db-fixes
+      # - db-fixes
 
 jobs:
   lint-backend:
