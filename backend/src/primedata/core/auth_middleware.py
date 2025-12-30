@@ -47,25 +47,77 @@ class AuthMiddleware(BaseHTTPMiddleware):
             # This is critical for /api/v1/auth/session/exchange as it's the first-time auth endpoint
             return await call_next(request)
 
-        # Extract Bearer token
+        # Extract Bearer token from Authorization header OR cookie
         auth_header = request.headers.get("authorization")
+        
+        # Also check for token in cookie (for httpOnly cookies that JS can't read)
+        cookie_token = None
         if not auth_header or not auth_header.startswith("Bearer "):
-            return JSONResponse(
+            # Try to get token from cookie
+            cookie_header = request.headers.get("cookie", "")
+            if cookie_header:
+                for cookie in cookie_header.split("; "):
+                    if cookie.startswith("primedata_api_token="):
+                        cookie_token = cookie.split("=", 1)[1]
+                        break
+        
+        # Use Authorization header if present, otherwise fall back to cookie
+        token = None
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header[7:]  # Remove "Bearer " prefix
+        elif cookie_token:
+            token = cookie_token
+        
+        if not token:
+            
+            # Ensure CORS headers are included in error response
+            # Get allowed origins from settings
+            cors_origins = self.settings.CORS_ORIGINS
+            if isinstance(cors_origins, str):
+                cors_origins = [cors_origins]
+            elif not isinstance(cors_origins, list):
+                cors_origins = list(cors_origins) if cors_origins else []
+            
+            origin = request.headers.get("origin")
+            response = JSONResponse(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 content={"detail": "Authentication required"},
                 headers={"WWW-Authenticate": "Bearer"},
             )
+            # Add CORS headers if origin is in allowed list
+            if origin and (origin in cors_origins or "*" in cors_origins):
+                response.headers["Access-Control-Allow-Origin"] = origin
+                response.headers["Access-Control-Allow-Credentials"] = "true"
+                response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+                response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+            return response
 
-        token = auth_header[7:]  # Remove "Bearer " prefix
-
-        # Verify token
+        # Verify token (already extracted above)
         payload = verify_rs256_token(token)
+        
         if not payload:
-            return JSONResponse(
+            
+            # Ensure CORS headers are included in error response
+            # Get allowed origins from settings
+            cors_origins = self.settings.CORS_ORIGINS
+            if isinstance(cors_origins, str):
+                cors_origins = [cors_origins]
+            elif not isinstance(cors_origins, list):
+                cors_origins = list(cors_origins) if cors_origins else []
+            
+            origin = request.headers.get("origin")
+            response = JSONResponse(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 content={"detail": "Invalid or expired token"},
                 headers={"WWW-Authenticate": "Bearer"},
             )
+            # Add CORS headers if origin is in allowed list
+            if origin and (origin in cors_origins or "*" in cors_origins):
+                response.headers["Access-Control-Allow-Origin"] = origin
+                response.headers["Access-Control-Allow-Credentials"] = "true"
+                response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+                response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+            return response
 
         # Attach user info to request state
         request.state.user = {
