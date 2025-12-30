@@ -2140,6 +2140,12 @@ export default function ProductDetailPage() {
           runVersion={selectedRunForDetails.version}
           runStatus={selectedRunForDetails.status}
           initialMetrics={selectedRunForDetails.metrics}
+          onPipelineCancelled={() => {
+            // Refresh pipeline runs list
+            loadPipelineRuns()
+            // Optionally refresh artifacts too
+            loadPipelineArtifacts()
+          }}
         />
       )}
 
