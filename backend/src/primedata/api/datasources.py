@@ -908,6 +908,10 @@ async def delete_datasource(
     """
     Delete a data source.
     """
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    
     # Get the data source
     datasource = db.query(DataSource).filter(DataSource.id == datasource_id).first()
     if not datasource:
@@ -915,6 +919,16 @@ async def delete_datasource(
 
     # Ensure user has access to the product
     ensure_product_access(db, request, datasource.product_id)
+
+    # Check if there are any raw files associated with this data source
+    raw_files_count = db.query(RawFile).filter(RawFile.data_source_id == datasource_id).count()
+    
+    if raw_files_count > 0:
+        # Set data_source_id to NULL for all associated raw files
+        db.query(RawFile).filter(RawFile.data_source_id == datasource_id).update(
+            {RawFile.data_source_id: None}, synchronize_session=False
+        )
+        logger.info(f"Unlinked {raw_files_count} raw files from data source {datasource_id}")
 
     # Delete the data source
     db.delete(datasource)
