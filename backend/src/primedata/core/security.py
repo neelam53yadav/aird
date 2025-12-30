@@ -7,7 +7,7 @@ from functools import lru_cache
 from typing import Any, Dict, List, Optional
 
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from loguru import logger
 from primedata.core.jwt_keys import get_jwks
 from primedata.core.settings import get_settings
@@ -122,40 +122,36 @@ def verify_rs256_token(token: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-def get_current_user(token: str = Depends(lambda: None)) -> Dict[str, Any]:
+def get_current_user(request: Request) -> Dict[str, Any]:
     """
-    Dependency to get current authenticated user.
+    Dependency to get current authenticated user from request state.
+    
+    AuthMiddleware already verifies the token and sets request.state.user.
+    This dependency just extracts it - no token re-parsing or re-verification.
 
     Args:
-        token: Bearer token from Authorization header
+        request: FastAPI Request object
 
     Returns:
-        User information dict
+        User information dict with sub, email, roles, workspaces
 
     Raises:
-        HTTPException: If authentication fails
+        HTTPException: If authentication fails (user not in request.state)
     """
-    if not token:
+    # Add logging for debugging (can be removed later if not needed)
+    logger.debug(f"get_current_user - state.user exists? {hasattr(request.state, 'user')}, value={getattr(request.state, 'user', None)}")
+    
+    user = getattr(request.state, "user", None)
+    if not user:
+        logger.error("get_current_user - request.state.user is missing or None. Middleware may not have authenticated the request.")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication required",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    payload = verify_rs256_token(token)
-    if not payload:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    return {
-        "sub": payload.get("sub"),
-        "email": payload.get("email"),
-        "roles": payload.get("roles", []),
-        "workspaces": payload.get("workspaces", []),
-    }
+    logger.debug(f"get_current_user - returning user: {user.get('sub')}")
+    return user
 
 
 def require_roles(required_roles: List[str]):
