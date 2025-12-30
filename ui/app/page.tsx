@@ -61,8 +61,8 @@ export default function HomePage() {
       })
       
       if (result?.ok) {
-        const exchangeSuccess = await exchangeToken()
-        if (exchangeSuccess) {
+        const exchangeResult = await exchangeToken()
+        if (exchangeResult.success) {
           console.log("Token exchange successful, redirecting to dashboard")
         }
         router.push('/dashboard')
