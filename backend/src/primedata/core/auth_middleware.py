@@ -125,28 +125,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # #endregion
 
         if not token:
-
-            # Ensure CORS headers are included in error response
-            # Get allowed origins from settings
-            cors_origins = self.settings.CORS_ORIGINS
-            if isinstance(cors_origins, str):
-                cors_origins = [cors_origins]
-            elif not isinstance(cors_origins, list):
-                cors_origins = list(cors_origins) if cors_origins else []
-
-            origin = request.headers.get("origin")
-            response = JSONResponse(
+            # CORSMiddleware will handle CORS headers automatically
+            return JSONResponse(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 content={"detail": "Authentication required"},
                 headers={"WWW-Authenticate": "Bearer"},
             )
-            # Add CORS headers if origin is in allowed list
-            if origin and (origin in cors_origins or "*" in cors_origins):
-                response.headers["Access-Control-Allow-Origin"] = origin
-                response.headers["Access-Control-Allow-Credentials"] = "true"
-                response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-                response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
-            return response
 
         # Verify token (already extracted above)
         payload = verify_rs256_token(token)
@@ -178,28 +162,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # #endregion
 
         if not payload:
-
-            # Ensure CORS headers are included in error response
-            # Get allowed origins from settings
-            cors_origins = self.settings.CORS_ORIGINS
-            if isinstance(cors_origins, str):
-                cors_origins = [cors_origins]
-            elif not isinstance(cors_origins, list):
-                cors_origins = list(cors_origins) if cors_origins else []
-
-            origin = request.headers.get("origin")
-            response = JSONResponse(
+            # CORSMiddleware will handle CORS headers automatically
+            return JSONResponse(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 content={"detail": "Invalid or expired token"},
                 headers={"WWW-Authenticate": "Bearer"},
             )
-            # Add CORS headers if origin is in allowed list
-            if origin and (origin in cors_origins or "*" in cors_origins):
-                response.headers["Access-Control-Allow-Origin"] = origin
-                response.headers["Access-Control-Allow-Credentials"] = "true"
-                response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-                response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
-            return response
 
         # Attach user info to request state
         request.state.user = {
