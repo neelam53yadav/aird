@@ -126,9 +126,9 @@ class ComplianceReportRequest(BaseModel):
 async def create_data_quality_rule(
     request: DataQualityRuleCreateRequest,
     product_id: UUID,
+    http_request: Request,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
-    http_request: Request,
 ):
     """Create a new data quality rule with full audit trail."""
     try:
@@ -235,9 +235,9 @@ async def list_data_quality_rules(
 async def update_data_quality_rule(
     rule_id: UUID,
     request: DataQualityRuleUpdateRequest,
+    http_request: Request,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
-    http_request: Request,
 ):
     """Update a data quality rule with audit trail."""
     try:
@@ -375,9 +375,9 @@ async def get_rule_audit_trail(
 async def generate_compliance_report(
     request: ComplianceReportRequest,
     workspace_id: UUID,
+    http_request: Request,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
-    http_request: Request,
 ):
     """Generate enterprise compliance reports."""
     try:
