@@ -374,6 +374,53 @@ export default function ProductDetailPage() {
     }
   }
 
+  const handleViewArtifact = async (artifact: any) => {
+    setViewingArtifact(artifact)
+    setLoadingArtifactContent(true)
+    setArtifactContent(null)
+
+    try {
+      if (artifact.artifact_type?.toLowerCase() === 'vector') {
+        // For vectors, we'll show Qdrant link - no content to load
+        setLoadingArtifactContent(false)
+        return
+      }
+
+      if (artifact.download_url) {
+        const response = await fetch(artifact.download_url)
+        if (response.ok) {
+          const contentType = response.headers.get('content-type') || ''
+          
+          if (contentType.includes('application/json') || artifact.artifact_type?.toLowerCase() === 'json') {
+            const json = await response.json()
+            setArtifactContent(JSON.stringify(json, null, 2))
+          } else if (contentType.includes('text/csv') || artifact.artifact_type?.toLowerCase() === 'csv') {
+            const text = await response.text()
+            setArtifactContent(text)
+          } else if (contentType.includes('application/pdf') || artifact.artifact_type?.toLowerCase() === 'pdf') {
+            // For PDF, open in new tab instead of modal
+            window.open(artifact.download_url, '_blank')
+            setViewingArtifact(null)
+            setLoadingArtifactContent(false)
+            return
+          } else {
+            // For JSONL or other text formats
+            const text = await response.text()
+            setArtifactContent(text)
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load artifact content:', err)
+      addToast({
+        type: 'error',
+        message: 'Failed to load artifact content',
+      })
+    } finally {
+      setLoadingArtifactContent(false)
+    }
+  }
+
   const loadPipelineRuns = async () => {
     if (!product) return
     
