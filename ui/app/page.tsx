@@ -26,15 +26,22 @@ export default function HomePage() {
 
   // Redirect to dashboard if user is already authenticated
   useEffect(() => {
-    if (status === 'authenticated' && session) {
-      console.log("User is authenticated, exchanging token and redirecting to dashboard")
-      exchangeToken().then(() => {
-        router.push('/dashboard')
-      }).catch((error) => {
-        console.error("Token exchange failed:", error)
-        router.push('/dashboard')
-      })
+    const initializeAuth = async () => {
+      if (status === 'authenticated' && session) {
+        console.log("User is authenticated, exchanging token and redirecting to dashboard")
+        try {
+          await exchangeToken()
+          // Wait a bit to ensure cookie is set before redirect
+          await new Promise(resolve => setTimeout(resolve, 100))
+          router.push('/dashboard')
+        } catch (error) {
+          console.error("Token exchange failed:", error)
+          router.push('/dashboard')
+        }
+      }
     }
+    
+    initializeAuth()
   }, [session, status, router])
 
   // Auto-rotate carousel
