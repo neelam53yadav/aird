@@ -641,22 +641,22 @@ async def sync_full(
                 if not existing:
                     # Calculate checksum from file in storage
                     file_checksum = file_info.get("checksum")  # Check if connector provided checksum
-                    if not file_checksum and minio_key:
+                    if not file_checksum and storage_key:
                         try:
                             # Download file to calculate checksum
-                            file_content = minio_client.get_bytes("primedata-raw", minio_key)
+                            file_content = minio_client.get_bytes("primedata-raw", storage_key)
                             if file_content:
                                 file_checksum = calculate_checksum(file_content, algorithm="sha256")
                             else:
                                 # Fallback: use a placeholder if we can't read the file
-                                logger.warning(f"Could not read file {minio_key} to calculate checksum")
+                                logger.warning(f"Could not read file {storage_key} to calculate checksum")
                                 file_checksum = ""  # This will fail, but at least we tried
                         except Exception as e:
-                            logger.warning(f"Failed to calculate checksum for {minio_key}: {e}")
+                            logger.warning(f"Failed to calculate checksum for {storage_key}: {e}")
                             file_checksum = ""  # This will fail, but at least we tried
 
                     if not file_checksum:
-                        raise ValueError(f"Could not determine checksum for file {minio_key}")
+                        raise ValueError(f"Could not determine checksum for file {storage_key}")
 
                     raw_file = RawFile(
                         workspace_id=datasource.workspace_id,
