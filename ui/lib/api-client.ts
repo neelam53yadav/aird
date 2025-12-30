@@ -271,8 +271,41 @@ class ApiClient {
         options.body = JSON.stringify(body)
       }
 
-      const response = await fetch(url, options)
-      const status = response.status
+      let response = await fetch(url, options)
+      let status = response.status
+
+      // If we get 401, try refreshing token and retry once
+      if (status === 401 && cookieToken) {
+        console.log('Got 401, attempting token refresh and retry...')
+        try {
+          const { exchangeToken } = await import('@/lib/auth-utils')
+          const refreshed = await exchangeToken()
+          
+          if (refreshed) {
+            // Re-read the cookie after refresh
+            const newCookie = document.cookie
+              .split('; ')
+              .find(row => row.startsWith('primedata_api_token='))
+            if (newCookie) {
+              const newValue = newCookie.split('=').slice(1).join('=')
+              const newToken = newValue ? decodeURIComponent(newValue) : null
+              
+              if (newToken) {
+                // Update headers with new token
+                headers['Authorization'] = `Bearer ${newToken}`
+                options.headers = headers
+                
+                // Retry the request
+                console.log('Retrying request with refreshed token...')
+                response = await fetch(url, options)
+                status = response.status
+              }
+            }
+          }
+        } catch (refreshError) {
+          console.error('Token refresh failed on 401:', refreshError)
+        }
+      }
 
       // Handle blob responses (for downloads)
       if (response.headers.get('content-type')?.includes('application/octet-stream') ||
