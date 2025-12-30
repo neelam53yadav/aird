@@ -42,6 +42,12 @@ export default function BillingPage() {
   }, [workspaceId])
 
   const loadBillingLimits = async () => {
+    if (!workspaceId) {
+      setError('No workspace available')
+      setLoading(false)
+      return
+    }
+    
     try {
       setLoading(true)
       const response = await apiClient.get(`/api/v1/billing/limits?workspace_id=${workspaceId}`)

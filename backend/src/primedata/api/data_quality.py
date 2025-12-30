@@ -278,10 +278,10 @@ async def update_data_quality_rules(
 @router.get("/products/{product_id}/violations", response_model=List[DataQualityViolationResponse])
 async def get_data_quality_violations(
     product_id: str,
+    request: Request,
     version: Optional[int] = Query(None, description="Specific version to get violations for"),
     severity: Optional[str] = Query(None, description="Filter by severity level"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of violations to return"),
-    request: Request,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
@@ -342,8 +342,8 @@ async def get_data_quality_violations(
 @router.get("/products/{product_id}/report", response_model=DataQualityReportResponse)
 async def get_data_quality_report(
     product_id: str,
-    version: Optional[int] = Query(None, description="Specific version to get report for"),
     request: Request,
+    version: Optional[int] = Query(None, description="Specific version to get report for"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):

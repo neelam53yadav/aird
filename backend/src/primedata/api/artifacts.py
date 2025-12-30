@@ -37,9 +37,9 @@ class RawArtifactsResponse(BaseModel):
 
 @router.get("/raw", response_model=RawArtifactsResponse)
 async def list_raw_artifacts(
+    request: Request,
     product_id: UUID = Query(..., description="Product ID"),
     version: Optional[int] = Query(None, description="Version number (defaults to latest)"),
-    request: Request,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):

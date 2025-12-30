@@ -121,6 +121,12 @@ export default function BillingPage() {
   }, [workspaceId])
 
   const loadBillingLimits = async () => {
+    if (!workspaceId) {
+      setError('No workspace available')
+      setLoading(false)
+      return
+    }
+    
     try {
       setLoading(true)
       setError(null)
@@ -140,6 +146,11 @@ export default function BillingPage() {
   }
 
   const handleUpgrade = async (plan: string) => {
+    if (!workspaceId) {
+      setMessage('No workspace available')
+      return
+    }
+    
     try {
       const response = await apiClient.createCheckoutSession(workspaceId, plan)
       if (response.error) {
@@ -156,6 +167,11 @@ export default function BillingPage() {
   }
 
   const handleManageBilling = async () => {
+    if (!workspaceId) {
+      setMessage('No workspace available')
+      return
+    }
+    
     try {
       const response = await apiClient.getCustomerPortal(workspaceId)
       if (response.error) {
