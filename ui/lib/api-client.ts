@@ -557,6 +557,15 @@ class ApiClient {
     return this.get(`/api/v1/pipeline/runs/${runId}/logs`)
   }
 
+  async getPipelineArtifacts(productId: string, version?: number): Promise<ApiResponse> {
+    const params = new URLSearchParams()
+    params.append('product_id', productId)
+    if (version !== undefined) {
+      params.append('version', version.toString())
+    }
+    return this.get(`/api/v1/pipeline/artifacts?${params.toString()}`)
+  }
+
   // Artifacts API
   async getRawArtifacts(productId: string, version: number): Promise<ApiResponse> {
     return this.get(`/api/v1/artifacts/raw?product_id=${productId}&version=${version}`)

@@ -16,7 +16,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from primedata.core.scope import allowed_workspaces, ensure_product_access
 from primedata.core.security import get_current_user
 from primedata.db.database import get_db
-from primedata.db.models import PipelineRun, PipelineRunStatus, Product, RawFile, RawFileStatus
+from primedata.db.models import ArtifactStatus, PipelineArtifact, PipelineRun, PipelineRunStatus, Product, RawFile, RawFileStatus
+from primedata.storage.minio_client import minio_client
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -797,6 +798,107 @@ async def get_pipeline_run_logs(
             "stage_metrics": stage_metrics,
             "error": f"Failed to fetch logs: {str(e)}",
         }
+
+
+class PipelineArtifactResponse(BaseModel):
+    """Response model for pipeline artifact information."""
+
+    id: str
+    stage_name: str
+    artifact_name: str
+    artifact_type: str
+    file_size: int
+    created_at: str
+    download_url: Optional[str] = None
+    display_name: Optional[str] = None
+    description: Optional[str] = None
+
+
+@router.get("/artifacts")
+async def get_pipeline_artifacts(
+    product_id: UUID,
+    version: Optional[int] = Query(None, description="Version number (defaults to latest)"),
+    request_obj: Request = None,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Get pipeline artifacts for a product and version.
+    Returns artifacts grouped by stage from successful pipeline runs.
+    """
+    # Ensure user has access to the product
+    product = ensure_product_access(db, request_obj, product_id)
+
+    # Determine version
+    if version is None:
+        version = product.current_version
+
+    # Get artifacts for this product and version
+    artifacts = (
+        db.query(PipelineArtifact)
+        .filter(
+            PipelineArtifact.product_id == product_id,
+            PipelineArtifact.version == version,
+            PipelineArtifact.status == ArtifactStatus.ACTIVE,  # Only show active artifacts
+        )
+        .order_by(PipelineArtifact.stage_name, PipelineArtifact.created_at.desc())
+        .all()
+    )
+
+    # Artifact display names mapping
+    artifact_display_names = {
+        "fingerprint": "AI Readiness Fingerprint",
+        "trust_report": "AI Trust Report",
+        "validation_summary": "Validation Summary",
+        "processed_chunks": "Processed Chunks",
+        "metrics": "Trust Metrics",
+        "vectors": "Vector Index",
+    }
+
+    # Artifact descriptions
+    artifact_descriptions = {
+        "fingerprint": "AI readiness metrics and fingerprint data",
+        "trust_report": "Comprehensive AI trust assessment report",
+        "validation_summary": "AI validation results and compliance summary",
+        "processed_chunks": "Cleaned and chunked document data",
+        "metrics": "Trust scoring and quality metrics",
+        "vectors": "Embedded vector index metadata",
+    }
+
+    result = []
+    for artifact in artifacts:
+        # Generate presigned URL for download
+        download_url = None
+        try:
+            download_url = minio_client.presign(
+                artifact.storage_bucket,
+                artifact.storage_key,
+                expiry=3600,  # 1 hour expiry
+            )
+        except Exception as e:
+            logger.warning(f"Failed to generate presigned URL for artifact {artifact.id}: {e}")
+
+        # Get display name
+        display_name = artifact_display_names.get(artifact.artifact_name, artifact.artifact_name.replace("_", " ").title())
+
+        # Get description
+        description = artifact_descriptions.get(artifact.artifact_name)
+
+        result.append(
+            PipelineArtifactResponse(
+                id=str(artifact.id),
+                stage_name=artifact.stage_name,
+                artifact_name=artifact.artifact_name,
+                artifact_type=artifact.artifact_type.value,
+                file_size=artifact.file_size,
+                created_at=artifact.created_at.isoformat() if artifact.created_at else "",
+                download_url=download_url,
+                display_name=display_name,
+                description=description,
+            )
+        )
+
+    return {"artifacts": result, "total": len(result)}
 
 
 def _check_airflow_dag_run_status(
