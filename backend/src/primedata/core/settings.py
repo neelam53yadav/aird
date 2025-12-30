@@ -108,9 +108,10 @@ def get_settings() -> Settings:
         # Ensure CORS_ORIGINS is always a list
         if isinstance(_settings.CORS_ORIGINS, str):
             _settings.CORS_ORIGINS = [_settings.CORS_ORIGINS]
-        
+
         # Debug logging (remove in production if needed)
         import logging
+
         logger = logging.getLogger(__name__)
         logger.info(f"CORS_ORIGINS configured: {_settings.CORS_ORIGINS}")
     return _settings

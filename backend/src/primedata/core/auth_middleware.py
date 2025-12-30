@@ -49,10 +49,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         # Extract Bearer token from Authorization header OR cookie
         auth_header = request.headers.get("authorization")
-        
+
         # #region agent log
         import json
         import logging
+
         logger = logging.getLogger(__name__)
         log_data = {
             "location": "auth_middleware.py:51",
@@ -66,7 +67,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             "timestamp": int(__import__("time").time() * 1000),
             "sessionId": "debug-session",
             "runId": "run3",
-            "hypothesisId": "F"
+            "hypothesisId": "F",
         }
         logger.info(f"AUTH_MIDDLEWARE: {json.dumps(log_data)}")
         try:
@@ -75,7 +76,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         except Exception as e:
             logger.error(f"Failed to write debug log: {e}")
         # #endregion
-        
+
         # Also check for token in cookie (for httpOnly cookies that JS can't read)
         cookie_token = None
         if not auth_header or not auth_header.startswith("Bearer "):
@@ -86,16 +87,17 @@ class AuthMiddleware(BaseHTTPMiddleware):
                     if cookie.startswith("primedata_api_token="):
                         cookie_token = cookie.split("=", 1)[1]
                         break
-        
+
         # Use Authorization header if present, otherwise fall back to cookie
         token = None
         if auth_header and auth_header.startswith("Bearer "):
             token = auth_header[7:]  # Remove "Bearer " prefix
         elif cookie_token:
             token = cookie_token
-        
+
         # #region agent log
         import logging
+
         logger = logging.getLogger(__name__)
         log_data = {
             "location": "auth_middleware.py:75",
@@ -104,13 +106,15 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 "path": path,
                 "has_token": bool(token),
                 "token_length": len(token) if token else 0,
-                "token_source": "header" if (auth_header and auth_header.startswith("Bearer ")) else "cookie" if cookie_token else "none",
+                "token_source": (
+                    "header" if (auth_header and auth_header.startswith("Bearer ")) else "cookie" if cookie_token else "none"
+                ),
                 "token_prefix": token[:30] + "..." if token else None,
             },
             "timestamp": int(__import__("time").time() * 1000),
             "sessionId": "debug-session",
             "runId": "run3",
-            "hypothesisId": "F"
+            "hypothesisId": "F",
         }
         logger.info(f"AUTH_MIDDLEWARE_TOKEN: {json.dumps(log_data)}")
         try:
@@ -119,9 +123,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
         except Exception as e:
             logger.error(f"Failed to write debug log: {e}")
         # #endregion
-        
+
         if not token:
-            
+
             # Ensure CORS headers are included in error response
             # Get allowed origins from settings
             cors_origins = self.settings.CORS_ORIGINS
@@ -129,7 +133,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 cors_origins = [cors_origins]
             elif not isinstance(cors_origins, list):
                 cors_origins = list(cors_origins) if cors_origins else []
-            
+
             origin = request.headers.get("origin")
             response = JSONResponse(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -146,9 +150,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         # Verify token (already extracted above)
         payload = verify_rs256_token(token)
-        
+
         # #region agent log
         import logging
+
         logger = logging.getLogger(__name__)
         log_data = {
             "location": "auth_middleware.py:96",
@@ -162,7 +167,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             "timestamp": int(__import__("time").time() * 1000),
             "sessionId": "debug-session",
             "runId": "run3",
-            "hypothesisId": "F"
+            "hypothesisId": "F",
         }
         logger.info(f"AUTH_MIDDLEWARE_VERIFY: {json.dumps(log_data)}")
         try:
@@ -171,9 +176,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
         except Exception as e:
             logger.error(f"Failed to write debug log: {e}")
         # #endregion
-        
+
         if not payload:
-            
+
             # Ensure CORS headers are included in error response
             # Get allowed origins from settings
             cors_origins = self.settings.CORS_ORIGINS
@@ -181,7 +186,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 cors_origins = [cors_origins]
             elif not isinstance(cors_origins, list):
                 cors_origins = list(cors_origins) if cors_origins else []
-            
+
             origin = request.headers.get("origin")
             response = JSONResponse(
                 status_code=status.HTTP_401_UNAUTHORIZED,

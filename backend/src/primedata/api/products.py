@@ -111,14 +111,14 @@ async def create_product(
     try:
         # Ensure user has access to the workspace
         ensure_workspace_access(db, request, request_body.workspace_id)
-        
+
         # CRITICAL: Double-check workspace is in user's allowed workspaces
         # This prevents products from being created in wrong workspaces
         allowed_workspace_ids = allowed_workspaces(request, db)
         if request_body.workspace_id not in allowed_workspace_ids:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have access to this workspace. Products must be created in your own workspace."
+                detail="You don't have access to this workspace. Products must be created in your own workspace.",
             )
 
         # Check billing limits for product creation
@@ -196,7 +196,7 @@ async def list_products(
     Otherwise, return products from all accessible workspaces.
     """
     allowed_workspace_ids = allowed_workspaces(request, db)
-    
+
     # CRITICAL: If user has no workspace access, return empty list
     if not allowed_workspace_ids:
         return []

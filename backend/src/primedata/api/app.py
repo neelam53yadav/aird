@@ -52,6 +52,7 @@ elif not isinstance(cors_origins, list):
 
 # Log CORS configuration for debugging
 import logging
+
 logger = logging.getLogger(__name__)
 logger.info(f"Configuring CORS with origins: {cors_origins}")
 

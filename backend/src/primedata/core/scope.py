@@ -25,9 +25,9 @@ def allowed_workspaces(request: Request, db: Optional[Session] = None) -> List[U
     if request is None:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Request object is missing. This is a server configuration error."
+            detail="Request object is missing. This is a server configuration error.",
         )
-    
+
     if not hasattr(request.state, "user") or not request.state.user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not authenticated")
 
@@ -39,7 +39,7 @@ def allowed_workspaces(request: Request, db: Optional[Session] = None) -> List[U
         # Always use database query when db is provided (both dev and production)
         # This ensures we're using the actual workspace memberships, not stale token data
         memberships = db.query(WorkspaceMember).filter(WorkspaceMember.user_id == user_id).all()
-        
+
         # Return database results - even if empty (user has no workspace access)
         # Never fall back to token workspaces when we have a database session
         return [m.workspace_id for m in memberships]
@@ -81,9 +81,9 @@ def ensure_workspace_access(db: Session, request: Request, workspace_id: UUID, r
     if request is None:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Request object is missing. This is a server configuration error."
+            detail="Request object is missing. This is a server configuration error.",
         )
-    
+
     if not hasattr(request.state, "user") or not request.state.user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not authenticated")
 
@@ -138,9 +138,9 @@ def ensure_product_access(db: Session, request: Request, product_id: UUID) -> Pr
     if request is None:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Request object is missing. This is a server configuration error."
+            detail="Request object is missing. This is a server configuration error.",
         )
-    
+
     if not hasattr(request.state, "user") or not request.state.user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not authenticated")
 

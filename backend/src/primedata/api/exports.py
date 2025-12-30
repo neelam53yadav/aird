@@ -80,7 +80,7 @@ async def create_export_bundle(
     """
     try:
         from uuid import UUID
-        
+
         # Ensure user has access to the product
         product = ensure_product_access(db, request, UUID(product_id))
 
@@ -149,7 +149,7 @@ async def list_export_bundles(
     """
     try:
         from uuid import UUID
-        
+
         # Verify product exists and user has access
         product = ensure_product_access(db, request, UUID(product_id))
 

@@ -122,7 +122,7 @@ async def list_acls(
         # List ACLs only for products in user's accessible workspaces
         # This prevents users from seeing ACLs for products they don't have access to
         from primedata.db.models import Product
-        
+
         allowed_workspace_ids = allowed_workspaces(request, db)
         # Get product IDs from accessible workspaces
         accessible_products = db.query(Product.id).filter(Product.workspace_id.in_(allowed_workspace_ids)).subquery()

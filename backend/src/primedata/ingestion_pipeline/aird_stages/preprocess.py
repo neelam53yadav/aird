@@ -192,7 +192,9 @@ class PreprocessStage(AirdStage):
                 self.logger.info(file_info_msg)
                 std_logger.info(file_info_msg)
 
-                keys_msg = f"[PreprocessStage] Available file_stem_to_storage_key keys: {list(file_stem_to_storage_key.keys())}"
+                keys_msg = (
+                    f"[PreprocessStage] Available file_stem_to_storage_key keys: {list(file_stem_to_storage_key.keys())}"
+                )
                 self.logger.info(keys_msg)
                 std_logger.info(keys_msg)
 
