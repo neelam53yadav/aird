@@ -50,6 +50,32 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # Extract Bearer token from Authorization header OR cookie
         auth_header = request.headers.get("authorization")
         
+        # #region agent log
+        import json
+        import logging
+        logger = logging.getLogger(__name__)
+        log_data = {
+            "location": "auth_middleware.py:51",
+            "message": "Auth header check",
+            "data": {
+                "path": path,
+                "has_auth_header": bool(auth_header),
+                "auth_header_prefix": auth_header[:30] if auth_header else None,
+                "method": request.method,
+            },
+            "timestamp": int(__import__("time").time() * 1000),
+            "sessionId": "debug-session",
+            "runId": "run3",
+            "hypothesisId": "F"
+        }
+        logger.info(f"AUTH_MIDDLEWARE: {json.dumps(log_data)}")
+        try:
+            with open("/Users/atul7717/Desktop/Code/aird/.cursor/debug.log", "a") as f:
+                f.write(json.dumps(log_data) + "\n")
+        except Exception as e:
+            logger.error(f"Failed to write debug log: {e}")
+        # #endregion
+        
         # Also check for token in cookie (for httpOnly cookies that JS can't read)
         cookie_token = None
         if not auth_header or not auth_header.startswith("Bearer "):
@@ -67,6 +93,32 @@ class AuthMiddleware(BaseHTTPMiddleware):
             token = auth_header[7:]  # Remove "Bearer " prefix
         elif cookie_token:
             token = cookie_token
+        
+        # #region agent log
+        import logging
+        logger = logging.getLogger(__name__)
+        log_data = {
+            "location": "auth_middleware.py:75",
+            "message": "Token extraction result",
+            "data": {
+                "path": path,
+                "has_token": bool(token),
+                "token_length": len(token) if token else 0,
+                "token_source": "header" if (auth_header and auth_header.startswith("Bearer ")) else "cookie" if cookie_token else "none",
+                "token_prefix": token[:30] + "..." if token else None,
+            },
+            "timestamp": int(__import__("time").time() * 1000),
+            "sessionId": "debug-session",
+            "runId": "run3",
+            "hypothesisId": "F"
+        }
+        logger.info(f"AUTH_MIDDLEWARE_TOKEN: {json.dumps(log_data)}")
+        try:
+            with open("/Users/atul7717/Desktop/Code/aird/.cursor/debug.log", "a") as f:
+                f.write(json.dumps(log_data) + "\n")
+        except Exception as e:
+            logger.error(f"Failed to write debug log: {e}")
+        # #endregion
         
         if not token:
             
@@ -94,6 +146,31 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         # Verify token (already extracted above)
         payload = verify_rs256_token(token)
+        
+        # #region agent log
+        import logging
+        logger = logging.getLogger(__name__)
+        log_data = {
+            "location": "auth_middleware.py:96",
+            "message": "Token verification result",
+            "data": {
+                "path": path,
+                "token_valid": bool(payload),
+                "has_payload": bool(payload),
+                "payload_keys": list(payload.keys()) if payload else [],
+            },
+            "timestamp": int(__import__("time").time() * 1000),
+            "sessionId": "debug-session",
+            "runId": "run3",
+            "hypothesisId": "F"
+        }
+        logger.info(f"AUTH_MIDDLEWARE_VERIFY: {json.dumps(log_data)}")
+        try:
+            with open("/Users/atul7717/Desktop/Code/aird/.cursor/debug.log", "a") as f:
+                f.write(json.dumps(log_data) + "\n")
+        except Exception as e:
+            logger.error(f"Failed to write debug log: {e}")
+        # #endregion
         
         if not payload:
             
