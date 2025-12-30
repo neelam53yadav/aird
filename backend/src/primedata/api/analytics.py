@@ -56,6 +56,7 @@ async def get_analytics_metrics(
     """
     try:
         from uuid import UUID
+
         from ..core.scope import ensure_workspace_access
 
         # Ensure user has access to the workspace

@@ -77,6 +77,7 @@ async def get_data_quality_rules(
     """Get data quality rules for a product."""
     try:
         from uuid import UUID
+
         from ..core.scope import ensure_product_access
 
         # Verify product exists and user has access
@@ -161,6 +162,7 @@ async def update_data_quality_rules(
     """Update data quality rules for a product."""
     try:
         from uuid import UUID
+
         from ..core.scope import ensure_product_access
 
         # Verify product exists and user has access
@@ -285,6 +287,7 @@ async def get_data_quality_violations(
     """Get data quality violations for a product."""
     try:
         from uuid import UUID
+
         from ..core.scope import ensure_product_access
 
         # Verify product exists and user has access
@@ -347,6 +350,7 @@ async def get_data_quality_report(
     """Get comprehensive data quality report for a product."""
     try:
         from uuid import UUID
+
         from ..core.scope import ensure_product_access
 
         # Verify product exists and user has access
@@ -432,6 +436,7 @@ async def delete_data_quality_rules(
     """Delete data quality rules for a product."""
     try:
         from uuid import UUID
+
         from ..core.scope import ensure_product_access
 
         # Verify product exists and user has access
@@ -465,6 +470,7 @@ async def validate_data_quality_rules(
     """Validate data quality rules without saving them."""
     try:
         from uuid import UUID
+
         from ..core.scope import ensure_product_access
 
         # Verify product exists and user has access
