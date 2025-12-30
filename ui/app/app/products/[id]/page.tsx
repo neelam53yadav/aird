@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Package, Database, Settings, Play, Pause, Search, TrendingUp, BarChart3, AlertTriangle, GitBranch, FileText, Download, FileSpreadsheet, Upload, Loader2, ArrowDownToLine, CheckCircle2, Home, Shield, Layers, Lock, FileCheck } from 'lucide-react'
+import { ArrowLeft, Package, Database, Settings, Play, Pause, Search, TrendingUp, BarChart3, AlertTriangle, GitBranch, FileText, Download, FileSpreadsheet, Upload, Loader2, ArrowDownToLine, CheckCircle2, Home, Shield, Layers, Lock, FileCheck, FileJson, FileCode, FileSpreadsheet as FileCsv, RefreshCw } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { TableSkeleton, CardSkeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
@@ -89,7 +89,7 @@ export default function ProductDetailPage() {
   const [testingConnection, setTestingConnection] = useState<string | null>(null)
   const [ingestingDataSource, setIngestingDataSource] = useState<string | null>(null)
   const [ingestionResults, setIngestionResults] = useState<Record<string, any>>({})
-  const [rawArtifacts, setRawArtifacts] = useState<any[]>([])
+  const [pipelineArtifacts, setPipelineArtifacts] = useState<any[]>([])
   const [loadingArtifacts, setLoadingArtifacts] = useState(false)
   const [pipelineRuns, setPipelineRuns] = useState<PipelineRun[]>([])
   const [loadingPipelineRuns, setLoadingPipelineRuns] = useState(false)
@@ -139,7 +139,7 @@ export default function ProductDetailPage() {
   // Load raw artifacts when product changes
   useEffect(() => {
     if (product && product.current_version > 0) {
-      loadRawArtifacts()
+      loadPipelineArtifacts()
     }
   }, [product])
 
@@ -355,17 +355,17 @@ export default function ProductDetailPage() {
   }
 
 
-  const loadRawArtifacts = async () => {
+  const loadPipelineArtifacts = async () => {
     if (!product) return
     
     setLoadingArtifacts(true)
     try {
-      const response = await apiClient.getRawArtifacts(product.id, product.current_version)
+      const response = await apiClient.getPipelineArtifacts(product.id, product.current_version)
       if (response.data) {
-        setRawArtifacts(response.data.artifacts || [])
+        setPipelineArtifacts(response.data.artifacts || [])
       }
     } catch (err) {
-      console.error('Failed to load raw artifacts:', err)
+      console.error('Failed to load pipeline artifacts:', err)
     } finally {
       setLoadingArtifacts(false)
     }
@@ -1334,99 +1334,133 @@ export default function ProductDetailPage() {
               )}
             </div>
 
-            {/* Raw Artifacts Table */}
+            {/* Pipeline Artifacts Section */}
             {product.current_version > 0 && (
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                 <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-lg font-semibold text-gray-900">Raw Artifacts</h2>
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900">Pipeline Artifacts</h2>
+                    <p className="text-sm text-gray-600 mt-1">Generated artifacts from successful pipeline runs</p>
+                  </div>
                   <Button 
                     variant="outline" 
                     size="sm"
-                    onClick={loadRawArtifacts}
+                    onClick={loadPipelineArtifacts}
                     disabled={loadingArtifacts}
                   >
                     {loadingArtifacts ? (
                       <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600 mr-2"></div>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                         Loading...
                       </>
                     ) : (
-                      'Refresh'
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Refresh
+                      </>
                     )}
                   </Button>
                 </div>
                 
                 {loadingArtifacts ? (
-                  <TableSkeleton rows={3} cols={5} />
-                ) : rawArtifacts.length === 0 ? (
+                  <TableSkeleton rows={3} cols={4} />
+                ) : pipelineArtifacts.length === 0 ? (
                   <div className="text-center py-8">
-                    <Database className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                     <h3 className="text-lg font-medium text-gray-900 mb-2">No artifacts yet</h3>
-                    <p className="text-gray-600">Run the pipeline to ingest data from all data sources and see artifacts here.</p>
+                    <p className="text-gray-600">Run a pipeline to generate artifacts like fingerprint, trust reports, and validation summaries.</p>
                   </div>
                 ) : (
-                  <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gradient-to-r from-gray-50 to-blue-50">
-                        <tr>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Name
-                          </th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Size
-                          </th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Type
-                          </th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Last Modified
-                          </th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Actions
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {rawArtifacts.map((artifact, index) => (
-                          <tr key={index} className="hover:bg-blue-50/50 transition-colors">
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                              {artifact.name}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {(artifact.size / 1024).toFixed(1)} KB
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {artifact.content_type ? (
-                                artifact.content_type === 'application/pdf' ? 'PDF' :
-                                artifact.content_type === 'text/plain' ? 'Text' :
-                                artifact.content_type === 'text/html' ? 'HTML' :
-                                artifact.content_type === 'application/json' ? 'JSON' :
-                                artifact.content_type === 'text/csv' ? 'CSV' :
-                                artifact.content_type === 'image/png' ? 'PNG Image' :
-                                artifact.content_type === 'image/jpeg' ? 'JPEG Image' :
-                                artifact.content_type.startsWith('image/') ? 'Image' :
-                                artifact.content_type.startsWith('text/') ? 'Text' :
-                                artifact.content_type.startsWith('application/') ? 'Document' :
-                                artifact.content_type
-                              ) : 'Unknown'}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {new Date(artifact.last_modified).toLocaleDateString()}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              <a
-                                href={artifact.url}
+                  <div className="space-y-4">
+                    {(() => {
+                      // Group artifacts by stage
+                      const artifactsByStage: Record<string, any[]> = {}
+                      pipelineArtifacts.forEach((artifact) => {
+                        const stage = artifact.stage_name || 'other'
+                        if (!artifactsByStage[stage]) {
+                          artifactsByStage[stage] = []
+                        }
+                        artifactsByStage[stage].push(artifact)
+                      })
+
+                      // Stage display names
+                      const stageDisplayNames: Record<string, string> = {
+                        preprocess: 'Preprocess',
+                        scoring: 'Scoring',
+                        fingerprint: 'Fingerprint',
+                        validation: 'Validation',
+                        policy: 'Policy',
+                        reporting: 'Reporting',
+                        indexing: 'Indexing',
+                        validate_data_quality: 'Data Quality',
+                        finalize: 'Finalize',
+                      }
+
+                      // Get artifact icon
+                      const getArtifactIcon = (type: string) => {
+                        switch (type?.toLowerCase()) {
+                          case 'pdf':
+                            return <FileText className="h-5 w-5 text-red-500" />
+                          case 'json':
+                            return <FileJson className="h-5 w-5 text-yellow-500" />
+                          case 'jsonl':
+                            return <FileCode className="h-5 w-5 text-blue-500" />
+                          case 'csv':
+                            return <FileCsv className="h-5 w-5 text-green-500" />
+                          default:
+                            return <FileText className="h-5 w-5 text-gray-500" />
+                        }
+                      }
+
+                      return Object.entries(artifactsByStage).map(([stage, artifacts]) => (
+                        <div key={stage} className="border border-gray-200 rounded-lg overflow-hidden">
+                          <div className="bg-gradient-to-r from-gray-50 to-blue-50 px-4 py-3 border-b border-gray-200">
+                            <h3 className="text-sm font-semibold text-gray-900 capitalize">
+                              {stageDisplayNames[stage] || stage.replace(/_/g, ' ')}
+                            </h3>
+                          </div>
+                          <div className="divide-y divide-gray-200">
+                            {artifacts.map((artifact) => (
+                              <div key={artifact.id} className="px-4 py-3 hover:bg-gray-50 transition-colors">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center space-x-3 flex-1">
+                                    {getArtifactIcon(artifact.artifact_type)}
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium text-gray-900">
+                                        {artifact.display_name || artifact.artifact_name.replace(/_/g, ' ')}
+                                      </p>
+                                      {artifact.description && (
+                                        <p className="text-xs text-gray-500 mt-0.5">{artifact.description}</p>
+                                      )}
+                                      <div className="flex items-center space-x-4 mt-1">
+                                        <span className="text-xs text-gray-500">
+                                          {(artifact.file_size / 1024).toFixed(1)} KB
+                                        </span>
+                                        <span className="text-xs text-gray-400">•</span>
+                                        <span className="text-xs text-gray-500 uppercase">
+                                          {artifact.artifact_type}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  {artifact.download_url && (
+                                    <a
+                                      href={artifact.download_url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-blue-600 hover:text-blue-900"
-                              >
-                                Download
-                              </a>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                                      className="ml-4 text-blue-600 hover:text-blue-900 flex items-center space-x-1"
+                                    >
+                                      <Download className="h-4 w-4" />
+                                      <span className="text-sm">Download</span>
+                                    </a>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))
+                    })()}
                   </div>
                 )}
               </div>
