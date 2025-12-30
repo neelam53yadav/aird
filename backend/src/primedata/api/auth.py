@@ -184,6 +184,34 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
     )
 
 
+def normalize_auth_provider(provider: str | None) -> AuthProvider:
+    """
+    Normalize NextAuth provider string to AuthProvider enum.
+
+    NextAuth may send "credentials" for username/password auth.
+    We map that to SIMPLE in our backend enum.
+    """
+    if not provider:
+        return AuthProvider.NONE
+
+    p = provider.lower().strip()
+
+    # NextAuth credentials provider (email/password)
+    if p in {"credentials", "email"}:
+        return AuthProvider.SIMPLE
+
+    # OAuth providers
+    if p == "google":
+        return AuthProvider.GOOGLE
+
+    # Future-proofing
+    if p == "github":
+        return AuthProvider.SIMPLE  # or create AuthProvider.GITHUB later
+
+    # Unknown provider
+    return AuthProvider.NONE
+
+
 @router.post("/api/v1/auth/session/exchange", response_model=SessionExchangeResponse)
 async def exchange_session(request: SessionExchangeRequest, db: Session = Depends(get_db)):
     """
@@ -216,7 +244,7 @@ async def exchange_session(request: SessionExchangeRequest, db: Session = Depend
             email=email,
             name=name,
             picture_url=picture,
-            auth_provider=AuthProvider(provider) if provider else AuthProvider.NONE,
+            auth_provider=normalize_auth_provider(provider),
             google_sub=google_sub,
             roles=["viewer"],
         )
@@ -227,7 +255,7 @@ async def exchange_session(request: SessionExchangeRequest, db: Session = Depend
         # Update existing user
         user.name = name
         user.picture_url = picture
-        user.auth_provider = AuthProvider(provider) if provider else AuthProvider.NONE
+        user.auth_provider = normalize_auth_provider(provider)
         if google_sub:
             user.google_sub = google_sub
         db.commit()
