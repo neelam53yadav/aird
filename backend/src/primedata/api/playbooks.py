@@ -40,7 +40,10 @@ class PlaybookResponse(BaseModel):
 
 @router.get("/{playbook_id}/yaml")
 async def get_playbook_yaml(
-    playbook_id: str, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user), request: Request
+    playbook_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Get playbook YAML content as plain text.
@@ -87,10 +90,10 @@ async def get_playbook_yaml(
 
 @router.get("/", response_model=List[PlaybookInfo])
 async def list_available_playbooks(
+    request: Request,
     workspace_id: Optional[UUID] = None,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
-    request: Request,
 ):
     """
     List all available playbooks.
