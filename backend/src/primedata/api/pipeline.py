@@ -692,12 +692,18 @@ async def get_pipeline_run_logs(
     # Ensure user has access to the product (security check)
     ensure_product_access(db, request_obj, run.product_id)
 
+    # Lazy-load metrics from S3 if archived (do this early so we always have stage metrics)
+    from primedata.services.lazy_json_loader import load_pipeline_run_metrics
+
+    metrics = load_pipeline_run_metrics(run)
+    stage_metrics = metrics.get("aird_stages", {}) if metrics else {}
+
     if not run.dag_run_id:
         return {
             "run_id": str(run.id),
             "dag_run_id": None,
             "logs": {},
-            "stage_metrics": run.metrics.get("aird_stages", {}) if run.metrics else {},
+            "stage_metrics": stage_metrics,
             "message": "No DAG run ID available for this pipeline run",
         }
 
@@ -725,7 +731,7 @@ async def get_pipeline_run_logs(
                 "run_id": str(run.id),
                 "dag_run_id": run.dag_run_id,
                 "logs": {},
-                "stage_metrics": run.metrics.get("aird_stages", {}) if run.metrics else {},
+                "stage_metrics": stage_metrics,
                 "error": "Failed to fetch logs from Airflow",
             }
 
@@ -749,6 +755,7 @@ async def get_pipeline_run_logs(
                     continue
 
                 # Get logs for this task
+                # Airflow logs API returns plain text, not JSON
                 log_url = f"{airflow_url}/api/v1/dags/primedata_simple/dagRuns/{run.dag_run_id}/taskInstances/{task_id}/logs/1"
                 log_response = requests.get(
                     log_url,
@@ -757,9 +764,10 @@ async def get_pipeline_run_logs(
                 )
 
                 if log_response.status_code == 200:
-                    log_data = log_response.json()
+                    # Airflow returns logs as plain text, not JSON
+                    log_content = log_response.text
                     logs[task_id] = {
-                        "content": log_data.get("content", ""),
+                        "content": log_content,
                         "status": task_instance.get("state", "unknown"),
                         "start_date": task_instance.get("start_date"),
                         "end_date": task_instance.get("end_date"),
@@ -770,12 +778,6 @@ async def get_pipeline_run_logs(
                         "status": task_instance.get("state", "unknown"),
                         "error": f"Failed to fetch logs: {log_response.status_code}",
                     }
-
-        # Lazy-load metrics from S3 if archived
-        from primedata.services.lazy_json_loader import load_pipeline_run_metrics
-
-        metrics = load_pipeline_run_metrics(run)
-        stage_metrics = metrics.get("aird_stages", {}) if metrics else {}
 
         return {
             "run_id": str(run.id),
@@ -788,12 +790,11 @@ async def get_pipeline_run_logs(
     except Exception as e:
         logger.error(f"Error fetching logs from Airflow: {e}", exc_info=True)
         # Return stage metrics even if Airflow fetch fails
-        metrics = run.metrics if run.metrics else {}
         return {
             "run_id": str(run.id),
             "dag_run_id": run.dag_run_id,
             "logs": {},
-            "stage_metrics": metrics.get("aird_stages", {}) if metrics else {},
+            "stage_metrics": stage_metrics,
             "error": f"Failed to fetch logs: {str(e)}",
         }
 
