@@ -80,6 +80,12 @@ export default function BillingPage() {
   }, [workspaceId])
 
   const loadBillingLimits = async () => {
+    if (!workspaceId) {
+      setError('No workspace available')
+      setLoading(false)
+      return
+    }
+    
     try {
       setLoading(true)
       const response = await apiClient.get(`/api/v1/billing/limits?workspace_id=${workspaceId}`)
@@ -113,6 +119,11 @@ export default function BillingPage() {
   }
 
   const handleManageBilling = async () => {
+    if (!workspaceId) {
+      setError('No workspace available')
+      return
+    }
+    
     try {
       setOpeningPortal(true)
       const response = await apiClient.get<PortalResponse>(`/api/v1/billing/portal?workspace_id=${workspaceId}`)

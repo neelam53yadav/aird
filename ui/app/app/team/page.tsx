@@ -71,6 +71,12 @@ export default function TeamPage() {
   }, [workspaceId])
 
   const loadTeamMembers = async () => {
+    if (!workspaceId) {
+      setError('No workspace available')
+      setLoading(false)
+      return
+    }
+    
     try {
       setLoading(true)
       setError(null)
@@ -94,6 +100,12 @@ export default function TeamPage() {
   const handleInviteMember = async () => {
     if (!inviteEmail || !inviteRole) {
       setMessage({ type: 'error', text: 'Please provide email and role' })
+      setTimeout(() => setMessage(null), 5000)
+      return
+    }
+    
+    if (!workspaceId) {
+      setMessage({ type: 'error', text: 'No workspace available' })
       setTimeout(() => setMessage(null), 5000)
       return
     }
@@ -128,6 +140,12 @@ export default function TeamPage() {
 
   const confirmRemoveMember = async () => {
     if (!memberToDelete) return
+    
+    if (!workspaceId) {
+      setMessage({ type: 'error', text: 'No workspace available' })
+      setTimeout(() => setMessage(null), 5000)
+      return
+    }
     
     try {
       setRemoving(true)

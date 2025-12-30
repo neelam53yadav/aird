@@ -123,8 +123,8 @@ async def create_datasource(
 
 @router.get("/", response_model=List[DataSourceResponse])
 async def list_datasources(
-    product_id: Optional[UUID] = Query(None, description="Filter by product ID"),
     request: Request,
+    product_id: Optional[UUID] = Query(None, description="Filter by product ID"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
@@ -783,8 +783,8 @@ async def sync_full(
 @router.post("/{datasource_id}/upload-files")
 async def upload_files(
     datasource_id: UUID,
-    files: List[UploadFile] = File(...),
     request: Request,
+    files: List[UploadFile] = File(...),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):

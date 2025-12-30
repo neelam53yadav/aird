@@ -96,9 +96,9 @@ async def create_acl(
 
 @router.get("/", response_model=List[ACLResponse])
 async def list_acls(
+    request: Request,
     user_id: Optional[UUID] = None,
     product_id: Optional[UUID] = None,
-    request: Request,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
@@ -145,10 +145,10 @@ async def list_acls(
 
 @router.delete("/", status_code=status.HTTP_200_OK)
 async def delete_acls(
+    request: Request,
     acl_id: Optional[UUID] = None,
     user_id: Optional[UUID] = None,
     product_id: Optional[UUID] = None,
-    request: Request,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
