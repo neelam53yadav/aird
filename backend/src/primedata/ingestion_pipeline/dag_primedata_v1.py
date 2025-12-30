@@ -67,7 +67,7 @@ dag = DAG(
     catchup=False,
     tags=["primedata", "pipeline"],
     params={
-        "workspace_id": "550e8400-e29b-41d4-a716-446655440001",  # Default workspace
+        "workspace_id": None,  # Must be provided when triggering the DAG
         "product_id": None,  # Required parameter
         "version": None,  # Will be computed if not provided
         "embedder_name": "minilm",  # Default embedder

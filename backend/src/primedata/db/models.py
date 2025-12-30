@@ -114,7 +114,7 @@ class PolicyStatus(str, Enum):
 class RawFileStatus(str, Enum):
     """Raw file processing status enum."""
 
-    INGESTED = "ingested"  # File uploaded to MinIO and recorded in DB
+    INGESTED = "ingested"  # File uploaded to object storage and recorded in DB
     PROCESSING = "processing"  # Currently being processed by pipeline
     PROCESSED = "processed"  # Successfully processed by pipeline
     FAILED = "failed"  # Processing failed
@@ -263,8 +263,8 @@ class Product(Base):
     chunk_metrics = Column(JSON, nullable=True, default=list)  # Per-chunk metrics (small JSON only)
     chunk_metrics_path = Column(String(1000), nullable=True, default=None)  # S3 path for large JSON
     # Artifacts and reports (M3)
-    validation_summary_path = Column(String(500), nullable=True, default=None)  # MinIO path to validation CSV
-    trust_report_path = Column(String(500), nullable=True, default=None)  # MinIO path to trust report PDF
+    validation_summary_path = Column(String(500), nullable=True, default=None)  # Storage path to validation CSV
+    trust_report_path = Column(String(500), nullable=True, default=None)  # Storage path to trust report PDF
     # Chunking configuration
     chunking_config = Column(
         JSON,
@@ -334,21 +334,12 @@ class DataSource(Base):
     )
 
 
-class RawFileStatus(str, Enum):
-    """Raw file processing status enum."""
-
-    INGESTED = "ingested"  # File uploaded to MinIO and recorded in DB
-    PROCESSING = "processing"  # Currently being processed by pipeline
-    PROCESSED = "processed"  # Successfully processed by pipeline
-    FAILED = "failed"  # Processing failed
-    DELETED = "deleted"  # Soft deleted
-
-
 class RawFile(Base):
-    """Raw file model for tracking ingested files in MinIO.
+    """Raw file model for tracking ingested files in object storage.
 
     Enterprise-grade metadata catalog for object storage files.
-    Follows the metadata catalog pattern (DB for queries, MinIO for storage).
+    Follows the metadata catalog pattern (DB for queries, object storage for files).
+    Supports MinIO, GCS, Azure Blob, AWS S3, etc.
     """
 
     __tablename__ = "raw_files"
@@ -360,13 +351,13 @@ class RawFile(Base):
     version = Column(Integer, nullable=False, default=0)
     filename = Column(String(500), nullable=False)  # Original filename
     file_stem = Column(String(500), nullable=False, index=True)  # Filename without extension (for preprocessing)
-    minio_key = Column(String(1000), nullable=False, unique=True)  # Full MinIO object key
-    minio_bucket = Column(String(255), nullable=False, default="primedata-raw")
+    storage_key = Column(String(1000), nullable=False, unique=True)  # Full object storage key (S3 key, GCS blob name, etc.)
+    storage_bucket = Column(String(255), nullable=False, default="primedata-raw")  # Storage bucket/container name
     file_size = Column(Integer, nullable=False)  # Size in bytes
     content_type = Column(String(255), nullable=False, default="application/octet-stream")  # MIME type
     status = Column(SQLEnum(RawFileStatus), nullable=False, default=RawFileStatus.INGESTED)  # Processing status
     file_checksum = Column(String(64), nullable=False)  # MD5 or SHA256 checksum for integrity validation
-    minio_etag = Column(String(255), nullable=True)  # MinIO ETag for validation
+    storage_etag = Column(String(255), nullable=True)  # Storage provider ETag for validation (S3 ETag, GCS generation, etc.)
     ingested_at = Column(DateTime(timezone=True), server_default=func.now())
     processed_at = Column(DateTime(timezone=True), nullable=True)  # When processing completed
     error_message = Column(Text, nullable=True)  # Error message if processing failed
@@ -493,13 +484,14 @@ class PipelineArtifact(Base):
     """Pipeline artifact registry for enterprise traceability.
 
     Tracks all artifacts generated during pipeline execution:
-    - Location (MinIO bucket/key)
+    - Location (storage bucket/key)
     - Integrity (size, checksum)
     - Lineage (input artifacts)
     - Metadata (stage-specific info)
     - Retention (lifecycle management)
 
     Enables full data lineage, audit trails, and cost optimization.
+    Supports MinIO, GCS, Azure Blob, AWS S3, etc.
     """
 
     __tablename__ = "pipeline_artifacts"
@@ -516,11 +508,11 @@ class PipelineArtifact(Base):
     artifact_name = Column(String(255), nullable=False)  # "processed_chunks", "metrics", "fingerprint", etc.
 
     # Storage location
-    minio_bucket = Column(String(255), nullable=False)  # "primedata-clean", "primedata-embed", etc.
-    minio_key = Column(String(1000), nullable=False, index=True)  # Full MinIO object key
+    storage_bucket = Column(String(255), nullable=False)  # Storage bucket/container name (e.g., "primedata-clean", "primedata-embed")
+    storage_key = Column(String(1000), nullable=False, index=True)  # Full object storage key (S3 key, GCS blob name, etc.)
     file_size = Column(BigInteger, nullable=False)  # Size in bytes
     checksum = Column(String(64), nullable=False)  # MD5 or SHA256 for integrity verification
-    minio_etag = Column(String(255), nullable=False)  # MinIO ETag for validation
+    storage_etag = Column(String(255), nullable=False)  # Storage provider ETag for validation (S3 ETag, GCS generation, etc.)
 
     # Data lineage (Phase 2)
     input_artifacts = Column(JSON, nullable=True, default=list)  # List of artifact IDs this depends on
@@ -554,22 +546,8 @@ class PipelineArtifact(Base):
         Index("idx_artifacts_stage_type", "stage_name", "artifact_type"),
         Index("idx_artifacts_status_created", "status", "created_at"),
         Index("idx_artifacts_retention", "retention_policy", "created_at"),
-        Index("idx_artifacts_minio_key", "minio_key"),  # For quick lookup by MinIO key
+        Index("idx_artifacts_storage_key", "storage_key"),  # For quick lookup by storage key
     )
-
-
-class Pipeline(Base):
-    """Data pipeline model (placeholder)."""
-
-    __tablename__ = "pipelines"
-
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(255), nullable=False)
-    description = Column(Text)
-    config = Column(Text)  # JSON configuration
-    is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 
 class DqViolationSeverity(str, Enum):

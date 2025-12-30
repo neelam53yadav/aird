@@ -28,14 +28,7 @@ router = APIRouter(prefix="/api/v1/products", tags=["Products"])
 logger = logging.getLogger(__name__)
 
 
-def get_current_user_optional(request: Request, db: Session = Depends(get_db)):
-    """Get current user with optional authentication bypass for testing."""
-    settings = get_settings()
-    if settings.DISABLE_AUTH or settings.TESTING_MODE:
-        # Return a mock user for testing
-        return {"id": "test-user-id", "email": "test@example.com", "workspace_ids": ["550e8400-e29b-41d4-a716-446655440001"]}
-    else:
-        return get_current_user(request, db)
+# Removed get_current_user_optional - authentication is always required
 
 
 class ProductCreateRequest(BaseModel):
@@ -118,6 +111,15 @@ async def create_product(
     try:
         # Ensure user has access to the workspace
         ensure_workspace_access(db, request, request_body.workspace_id)
+        
+        # CRITICAL: Double-check workspace is in user's allowed workspaces
+        # This prevents products from being created in wrong workspaces
+        allowed_workspace_ids = allowed_workspaces(request, db)
+        if request_body.workspace_id not in allowed_workspace_ids:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have access to this workspace. Products must be created in your own workspace."
+            )
 
         # Check billing limits for product creation
         current_product_count = db.query(Product).filter(Product.workspace_id == request_body.workspace_id).count()
@@ -184,8 +186,8 @@ async def create_product(
 
 @router.get("/", response_model=List[ProductResponse])
 async def list_products(
+    request: Request,
     workspace_id: Optional[UUID] = Query(None, description="Filter by workspace ID"),
-    request: Request = None,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
@@ -194,6 +196,10 @@ async def list_products(
     Otherwise, return products from all accessible workspaces.
     """
     allowed_workspace_ids = allowed_workspaces(request, db)
+    
+    # CRITICAL: If user has no workspace access, return empty list
+    if not allowed_workspace_ids:
+        return []
 
     query = db.query(Product).filter(Product.workspace_id.in_(allowed_workspace_ids))
 
@@ -1114,7 +1120,7 @@ class ChunkMetadataResponse(BaseModel):
 
 @router.get("/{product_id}/embedding-diagnostics")
 async def get_embedding_diagnostics(
-    product_id: UUID, request: Request = None, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)
+    product_id: UUID, request: Request, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)
 ):
     """
     Diagnostic endpoint to check embedding model configuration and status.
@@ -1276,12 +1282,12 @@ def _get_embedding_recommendations(
 @router.get("/{product_id}/chunk-metadata", response_model=List[ChunkMetadataResponse])
 async def list_chunk_metadata(
     product_id: UUID,
+    request: Request,
     version: Optional[int] = Query(None, description="Filter by version"),
     section: Optional[str] = Query(None, description="Filter by section"),
     field_name: Optional[str] = Query(None, description="Filter by field name"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of results"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
-    request: Request = None,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
@@ -1351,9 +1357,9 @@ class CostEstimateResponse(BaseModel):
 
 @router.post("/estimate", response_model=CostEstimateResponse, status_code=status.HTTP_200_OK)
 async def estimate_cost(
+    request: Request,
     file: UploadFile = File(...),
     playbook_id: Optional[str] = Form(None),  # REGULATORY/SCANNED/TECH/None
-    request: Request = None,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
@@ -1668,7 +1674,7 @@ async def auto_configure_chunking(
 
 @router.get("/{product_id}/mlflow-metrics")
 async def get_mlflow_metrics(
-    product_id: UUID, request: Request, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user_optional)
+    product_id: UUID, request: Request, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)
 ):
     """
     Get MLflow metrics for the product's latest pipeline run.
@@ -1687,7 +1693,7 @@ async def get_mlflow_run_url(
     request: Request,
     run_id: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user_optional),
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Get MLflow UI URL for viewing runs.
@@ -1781,7 +1787,7 @@ async def get_mlflow_metrics_for_version(
     version: int,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user_optional),
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Get MLflow metrics for a specific version of the product's pipeline run.

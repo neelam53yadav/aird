@@ -259,7 +259,7 @@ async def trigger_pipeline(
             files_need_copy = []
 
             for existing_file in existing_files_for_version:
-                if not minio_client_instance.object_exists(existing_file.minio_bucket, existing_file.minio_key):
+                if not minio_client_instance.object_exists(existing_file.storage_bucket, existing_file.storage_key):
                     # File doesn't exist, need to find the original source file from previous version
                     # Find the original PROCESSED file from previous versions
                     original_file = (
@@ -274,22 +274,22 @@ async def trigger_pipeline(
                     )
 
                     if original_file and minio_client_instance.object_exists(
-                        original_file.minio_bucket, original_file.minio_key
+                        original_file.storage_bucket, original_file.storage_key
                     ):
                         # Copy from original location
                         logger.info(
-                            f"Copying missing file from original version: {original_file.minio_key} to {existing_file.minio_key}"
+                            f"Copying missing file from original version: {original_file.storage_key} to {existing_file.storage_key}"
                         )
                         copy_success = minio_client_instance.copy_object(
-                            source_bucket=original_file.minio_bucket,
-                            source_key=original_file.minio_key,
-                            dest_bucket=existing_file.minio_bucket,
-                            dest_key=existing_file.minio_key,
+                            source_bucket=original_file.storage_bucket,
+                            source_key=original_file.storage_key,
+                            dest_bucket=existing_file.storage_bucket,
+                            dest_key=existing_file.storage_key,
                         )
 
                         if copy_success:
                             # Verify copy succeeded
-                            if minio_client_instance.object_exists(existing_file.minio_bucket, existing_file.minio_key):
+                            if minio_client_instance.object_exists(existing_file.storage_bucket, existing_file.storage_key):
                                 existing_file.status = RawFileStatus.INGESTED
                                 existing_file.error_message = None
                                 logger.info(f"Successfully copied file and updated status for {existing_file.filename}")
@@ -330,49 +330,49 @@ async def trigger_pipeline(
             from primedata.storage.paths import raw_prefix
 
             for old_raw_file in processed_files_to_reprocess:
-                # Update minio_key to use the new version number
-                # Extract just the filename from the old minio_key
+                # Update storage_key to use the new version number
+                # Extract just the filename from the old storage_key
                 # Old format: ws/{ws}/prod/{prod}/v/{old_version}/raw/{filename}
                 # New format: ws/{ws}/prod/{prod}/v/{new_version}/raw/{filename}
-                old_key_parts = old_raw_file.minio_key.split("/")
+                old_key_parts = old_raw_file.storage_key.split("/")
                 filename = old_key_parts[-1]  # Get the filename
-                new_minio_key = f"{raw_prefix(old_raw_file.workspace_id, old_raw_file.product_id, new_version)}{filename}"
+                new_storage_key = f"{raw_prefix(old_raw_file.workspace_id, old_raw_file.product_id, new_version)}{filename}"
 
                 # Verify source file exists before copying
-                source_exists = minio_client_instance.object_exists(old_raw_file.minio_bucket, old_raw_file.minio_key)
+                source_exists = minio_client_instance.object_exists(old_raw_file.storage_bucket, old_raw_file.storage_key)
 
                 if not source_exists:
-                    logger.error(f"Source file does not exist in MinIO: {old_raw_file.minio_key}")
+                    logger.error(f"Source file does not exist in storage: {old_raw_file.storage_key}")
                     raise HTTPException(
                         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                        detail=f"Source file {old_raw_file.filename} not found in MinIO at {old_raw_file.minio_key}. Cannot reprocess.",
+                        detail=f"Source file {old_raw_file.filename} not found in storage at {old_raw_file.storage_key}. Cannot reprocess.",
                     )
 
                 # Check if destination already exists (shouldn't happen, but be safe)
-                dest_exists = minio_client_instance.object_exists(old_raw_file.minio_bucket, new_minio_key)
+                dest_exists = minio_client_instance.object_exists(old_raw_file.storage_bucket, new_storage_key)
                 if dest_exists:
-                    logger.info(f"Destination file already exists in MinIO: {new_minio_key}, skipping copy")
+                    logger.info(f"Destination file already exists in storage: {new_storage_key}, skipping copy")
                 else:
-                    # Copy the file in MinIO from old version path to new version path
-                    logger.info(f"Copying file from {old_raw_file.minio_key} to {new_minio_key}")
+                    # Copy the file in storage from old version path to new version path
+                    logger.info(f"Copying file from {old_raw_file.storage_key} to {new_storage_key}")
                     copy_success = minio_client_instance.copy_object(
-                        source_bucket=old_raw_file.minio_bucket,
-                        source_key=old_raw_file.minio_key,
-                        dest_bucket=old_raw_file.minio_bucket,
-                        dest_key=new_minio_key,
+                        source_bucket=old_raw_file.storage_bucket,
+                        source_key=old_raw_file.storage_key,
+                        dest_bucket=old_raw_file.storage_bucket,
+                        dest_key=new_storage_key,
                     )
 
                     if not copy_success:
-                        logger.error(f"Failed to copy file from {old_raw_file.minio_key} to {new_minio_key}")
+                        logger.error(f"Failed to copy file from {old_raw_file.storage_key} to {new_storage_key}")
                         raise HTTPException(
                             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                             detail=f"Failed to copy file {old_raw_file.filename} to new version path",
                         )
 
                     # Verify the copy succeeded
-                    verify_exists = minio_client_instance.object_exists(old_raw_file.minio_bucket, new_minio_key)
+                    verify_exists = minio_client_instance.object_exists(old_raw_file.storage_bucket, new_storage_key)
                     if not verify_exists:
-                        logger.error(f"Copy verification failed: file does not exist at {new_minio_key} after copy")
+                        logger.error(f"Copy verification failed: file does not exist at {new_storage_key} after copy")
                         raise HTTPException(
                             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                             detail=f"File copy verification failed for {old_raw_file.filename}",
@@ -386,13 +386,13 @@ async def trigger_pipeline(
                     version=new_version,
                     filename=old_raw_file.filename,
                     file_stem=old_raw_file.file_stem,
-                    minio_key=new_minio_key,  # Use new version in the key
-                    minio_bucket=old_raw_file.minio_bucket,
+                    storage_key=new_storage_key,  # Use new version in the key
+                    storage_bucket=old_raw_file.storage_bucket,
                     file_size=old_raw_file.file_size,
                     content_type=old_raw_file.content_type,
                     status=RawFileStatus.INGESTED,  # Start as INGESTED for reprocessing
                     file_checksum=old_raw_file.file_checksum,
-                    minio_etag=old_raw_file.minio_etag,
+                    storage_etag=old_raw_file.storage_etag,
                     ingested_at=datetime.utcnow(),
                     processed_at=None,
                     error_message=None,
@@ -476,7 +476,7 @@ async def list_pipeline_runs(
     product_id: UUID,
     limit: int = 10,
     sync: bool = Query(True, description="Sync with Airflow before returning"),
-    request_obj: Request = None,
+    request_obj: Request,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
@@ -526,7 +526,7 @@ async def list_pipeline_runs(
 
 @router.get("/runs/{run_id}", response_model=PipelineRunResponse)
 async def get_pipeline_run(
-    run_id: UUID, request_obj: Request = None, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)
+    run_id: UUID, request_obj: Request, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)
 ):
     """
     Get details of a specific pipeline run.
@@ -569,7 +569,7 @@ class PipelineRunUpdateRequest(BaseModel):
 async def update_pipeline_run(
     run_id: UUID,
     request_body: PipelineRunUpdateRequest,
-    request_obj: Request = None,
+    request_obj: Request,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
@@ -639,7 +639,7 @@ async def update_pipeline_run(
 
 @router.post("/sync")
 async def sync_pipeline_runs_with_airflow(
-    request_obj: Request = None, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)
+    request_obj: Request, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)
 ):
     """
     Manually sync all running pipeline runs with Airflow status.
@@ -654,7 +654,7 @@ async def sync_pipeline_runs_with_airflow(
 
 @router.get("/status/{run_id}")
 async def get_pipeline_status(
-    run_id: UUID, request_obj: Request = None, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)
+    run_id: UUID, request_obj: Request, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)
 ):
     """
     Get the current status of a pipeline run.

@@ -55,11 +55,11 @@ def register_artifact(
     stage_name: str,
     artifact_type: ArtifactType,
     artifact_name: str,
-    minio_bucket: str,
-    minio_key: str,
+    storage_bucket: str,
+    storage_key: str,
     file_size: int,
     checksum: Optional[str] = None,
-    minio_etag: Optional[str] = None,
+    storage_etag: Optional[str] = None,
     input_artifact_ids: Optional[List[UUID]] = None,
     artifact_metadata: Optional[Dict[str, Any]] = None,
     retention_policy: RetentionPolicy = RetentionPolicy.DAYS_90,
@@ -79,11 +79,11 @@ def register_artifact(
         stage_name: Stage that generated artifact ("preprocess", "scoring", etc.)
         artifact_type: Type of artifact (JSONL, JSON, CSV, PDF, VECTOR)
         artifact_name: Name of artifact ("processed_chunks", "metrics", etc.)
-        minio_bucket: MinIO bucket name
-        minio_key: Full MinIO object key
+        storage_bucket: MinIO bucket name
+        storage_key: Full MinIO object key
         file_size: File size in bytes
         checksum: Optional checksum (MD5 or SHA256)
-        minio_etag: Optional MinIO ETag
+        storage_etag: Optional MinIO ETag
         input_artifact_ids: List of artifact IDs this depends on (Phase 2: lineage)
         metadata: Stage-specific metadata dictionary
         retention_policy: Retention policy (Phase 3)
@@ -104,7 +104,7 @@ def register_artifact(
                     "artifact_id": str(input_artifact.id),
                     "stage": input_artifact.stage_name,
                     "artifact_name": input_artifact.artifact_name,
-                    "minio_key": input_artifact.minio_key,
+                    "storage_key": input_artifact.storage_key,
                 }
             )
 
@@ -123,11 +123,11 @@ def register_artifact(
         stage_name=stage_name,
         artifact_type=artifact_type,
         artifact_name=artifact_name,
-        minio_bucket=minio_bucket,
-        minio_key=minio_key,
+        storage_bucket=storage_bucket,
+        storage_key=storage_key,
         file_size=file_size,
         checksum=checksum,
-        minio_etag=minio_etag,
+        storage_etag=storage_etag,
         input_artifacts=input_artifacts_data,
         artifact_metadata=artifact_metadata or {},
         retention_policy=retention_policy,
@@ -362,7 +362,7 @@ def get_artifact_summary_for_run(
                 "name": artifact.artifact_name,
                 "type": artifact.artifact_type.value,
                 "size_bytes": artifact.file_size,
-                "minio_key": artifact.minio_key,
+                "storage_key": artifact.storage_key,
             }
         )
 

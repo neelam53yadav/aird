@@ -34,9 +34,35 @@ export default function TeamPage() {
   const [memberToDelete, setMemberToDelete] = useState<TeamMember | null>(null)
   const [removing, setRemoving] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null)
 
-  // Get workspace ID from session or use default for testing
-  const workspaceId = session?.user?.workspace_ids?.[0] || '550e8400-e29b-41d4-a716-446655440001'
+  useEffect(() => {
+    const getWorkspaceId = async () => {
+      // Try to get from session first
+      const sessionWorkspaceId = session?.user?.workspace_ids?.[0]
+      if (sessionWorkspaceId) {
+        setWorkspaceId(sessionWorkspaceId)
+        return
+      }
+
+      // If not in session, fetch from API
+      try {
+        const workspacesResponse = await apiClient.getWorkspaces()
+        if (workspacesResponse.data && workspacesResponse.data.length > 0) {
+          setWorkspaceId(workspacesResponse.data[0].id)
+        } else {
+          setError('No workspace found. Please create a workspace first.')
+        }
+      } catch (err) {
+        console.error('Failed to fetch workspaces:', err)
+        setError('Failed to load workspace information')
+      }
+    }
+
+    if (session) {
+      getWorkspaceId()
+    }
+  }, [session])
 
   useEffect(() => {
     if (workspaceId) {

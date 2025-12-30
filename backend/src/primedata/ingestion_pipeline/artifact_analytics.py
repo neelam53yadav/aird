@@ -295,7 +295,7 @@ def get_cleanup_recommendations(
         PipelineArtifact.stage_name,
         PipelineArtifact.artifact_name,
         PipelineArtifact.file_size,
-        PipelineArtifact.minio_key,
+        PipelineArtifact.storage_key,
     ).filter(
         PipelineArtifact.status == ArtifactStatus.ACTIVE,
     )
@@ -311,7 +311,7 @@ def get_cleanup_recommendations(
         key = f"{row.stage_name}:{row.artifact_name}:{row.file_size}"
         if key not in artifacts_by_key:
             artifacts_by_key[key] = []
-        artifacts_by_key[key].append(row.minio_key)
+        artifacts_by_key[key].append(row.storage_key)
 
     duplicates = {k: v for k, v in artifacts_by_key.items() if len(v) > 1}
     if duplicates:

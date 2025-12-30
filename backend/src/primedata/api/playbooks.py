@@ -40,7 +40,7 @@ class PlaybookResponse(BaseModel):
 
 @router.get("/{playbook_id}/yaml")
 async def get_playbook_yaml(
-    playbook_id: str, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user), request: Request = None
+    playbook_id: str, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user), request: Request
 ):
     """
     Get playbook YAML content as plain text.
@@ -90,7 +90,7 @@ async def list_available_playbooks(
     workspace_id: Optional[UUID] = None,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
-    request: Request = None,
+    request: Request,
 ):
     """
     List all available playbooks.
@@ -168,7 +168,7 @@ async def list_available_playbooks(
 
 @router.get("/{playbook_id}", response_model=PlaybookResponse)
 async def get_playbook(
-    playbook_id: str, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user), request: Request = None
+    playbook_id: str, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user), request: Request
 ):
     """
     Get playbook configuration by ID.
@@ -265,7 +265,7 @@ async def create_custom_playbook(
     workspace_id: UUID = Query(..., description="Workspace ID"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
-    request: Request = None,
+    request: Request,
 ):
     """
     Create a custom playbook based on an existing playbook or from scratch.
@@ -342,7 +342,7 @@ async def list_custom_playbooks(
     workspace_id: UUID = Query(..., description="Workspace ID"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
-    request: Request = None,
+    request: Request,
 ):
     """
     List all custom playbooks in a workspace.
@@ -373,7 +373,7 @@ async def get_custom_playbook(
     workspace_id: UUID = Query(..., description="Workspace ID"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
-    request: Request = None,
+    request: Request,
 ):
     """
     Get a specific custom playbook.
@@ -416,7 +416,7 @@ async def update_custom_playbook(
     request_body: CustomPlaybookUpdateRequest = ...,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
-    request: Request = None,
+    request: Request,
 ):
     """
     Update a custom playbook.
@@ -495,7 +495,7 @@ async def delete_custom_playbook(
     workspace_id: UUID = Query(..., description="Workspace ID"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
-    request: Request = None,
+    request: Request,
 ):
     """
     Delete (soft delete) a custom playbook.

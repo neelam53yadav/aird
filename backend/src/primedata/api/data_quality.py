@@ -73,7 +73,7 @@ class DataQualityReportResponse(BaseModel):
 @router.get("/products/{product_id}/rules", response_model=DataQualityRulesResponse)
 async def get_data_quality_rules(
     product_id: str, 
-    request: Request = None,
+    request: Request,
     db: Session = Depends(get_db), 
     current_user: dict = Depends(get_current_user)
 ):
@@ -157,7 +157,7 @@ async def get_data_quality_rules(
 async def update_data_quality_rules(
     product_id: str,
     request_body: DataQualityRulesRequest,
-    request: Request = None,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
@@ -281,7 +281,7 @@ async def get_data_quality_violations(
     version: Optional[int] = Query(None, description="Specific version to get violations for"),
     severity: Optional[str] = Query(None, description="Filter by severity level"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of violations to return"),
-    request: Request = None,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
@@ -343,7 +343,7 @@ async def get_data_quality_violations(
 async def get_data_quality_report(
     product_id: str,
     version: Optional[int] = Query(None, description="Specific version to get report for"),
-    request: Request = None,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
@@ -431,7 +431,7 @@ async def get_data_quality_report(
 @router.delete("/products/{product_id}/rules")
 async def delete_data_quality_rules(
     product_id: str, 
-    request: Request = None,
+    request: Request,
     db: Session = Depends(get_db), 
     current_user: dict = Depends(get_current_user)
 ):
@@ -464,7 +464,7 @@ async def delete_data_quality_rules(
 async def validate_data_quality_rules(
     product_id: str,
     rules: DataQualityRulesRequest,
-    request: Request = None,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):

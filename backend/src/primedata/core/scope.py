@@ -16,11 +16,18 @@ def allowed_workspaces(request: Request, db: Optional[Session] = None) -> List[U
 
     Args:
         request: FastAPI request object with user state
-        db: Optional database session to query actual workspace memberships (used in dev mode)
+        db: Optional database session to query actual workspace memberships
 
     Returns:
         List of workspace UUIDs the user can access
     """
+    # CRITICAL: Ensure request is not None - this prevents security bypass
+    if request is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Request object is missing. This is a server configuration error."
+        )
+    
     if not hasattr(request.state, "user") or not request.state.user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not authenticated")
 
@@ -70,44 +77,32 @@ def ensure_workspace_access(db: Session, request: Request, workspace_id: UUID, r
     Raises:
         HTTPException: 403 if access is denied, 404 if workspace not found
     """
+    # CRITICAL: Ensure request is not None - this prevents security bypass
+    if request is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Request object is missing. This is a server configuration error."
+        )
+    
     if not hasattr(request.state, "user") or not request.state.user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not authenticated")
-
-    from primedata.core.settings import get_settings
-
-    settings = get_settings()
 
     user_id = UUID(request.state.user["sub"])
 
     # Get workspace
     workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
 
-    # In dev mode, auto-create workspace and membership if they don't exist
-    if not workspace and settings.DISABLE_AUTH:
-        workspace = Workspace(id=workspace_id, name="Default Workspace")
-        db.add(workspace)
-        # Also create workspace membership for the user
-        membership = WorkspaceMember(workspace_id=workspace_id, user_id=user_id, role=WorkspaceRole.OWNER)
-        db.add(membership)
-        db.commit()
-        db.refresh(workspace)
-
     if not workspace:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
 
-    # Check database membership first (more reliable)
+    # Check database membership
     membership = (
         db.query(WorkspaceMember)
         .filter(WorkspaceMember.workspace_id == workspace_id, WorkspaceMember.user_id == user_id)
         .first()
     )
 
-    # In dev mode, if no membership exists but workspace exists, create it
-    if not membership and settings.DISABLE_AUTH:
-        membership = WorkspaceMember(workspace_id=workspace_id, user_id=user_id, role=WorkspaceRole.OWNER)
-        db.add(membership)
-        db.commit()
-    elif not membership:
+    if not membership:
         # Check if workspace is in allowed list (fallback for non-database cases)
         allowed_workspace_ids = allowed_workspaces(request, db)
         if workspace_id not in allowed_workspace_ids:
@@ -139,6 +134,13 @@ def ensure_product_access(db: Session, request: Request, product_id: UUID) -> Pr
     Raises:
         HTTPException: 403 if access is denied, 404 if product not found
     """
+    # CRITICAL: Ensure request is not None - this prevents security bypass
+    if request is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Request object is missing. This is a server configuration error."
+        )
+    
     if not hasattr(request.state, "user") or not request.state.user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not authenticated")
 

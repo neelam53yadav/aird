@@ -12,8 +12,28 @@ export default function BillingPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // Get workspace ID from session or use default for testing
-  const workspaceId = session?.user?.workspace_ids?.[0] || '550e8400-e29b-41d4-a716-446655440001'
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null)
+
+  useEffect(() => {
+    const getWorkspaceId = async () => {
+      const sessionWorkspaceId = session?.user?.workspace_ids?.[0]
+      if (sessionWorkspaceId) {
+        setWorkspaceId(sessionWorkspaceId)
+        return
+      }
+      try {
+        const workspacesResponse = await apiClient.getWorkspaces()
+        if (workspacesResponse.data && workspacesResponse.data.length > 0) {
+          setWorkspaceId(workspacesResponse.data[0].id)
+        }
+      } catch (err) {
+        console.error('Failed to fetch workspaces:', err)
+      }
+    }
+    if (session) {
+      getWorkspaceId()
+    }
+  }, [session])
 
   useEffect(() => {
     if (workspaceId) {
