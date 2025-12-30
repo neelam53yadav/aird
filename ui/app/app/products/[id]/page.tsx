@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Package, Database, Settings, Play, Pause, Search, TrendingUp, BarChart3, AlertTriangle, GitBranch, FileText, Download, FileSpreadsheet, Upload, Loader2, ArrowDownToLine, CheckCircle2, Home, Shield, Layers, Lock, FileCheck, FileJson, FileCode, FileSpreadsheet as FileCsv, RefreshCw } from 'lucide-react'
+import { ArrowLeft, Package, Database, Settings, Play, Pause, Search, TrendingUp, BarChart3, AlertTriangle, GitBranch, FileText, Download, FileSpreadsheet, Upload, Loader2, ArrowDownToLine, CheckCircle2, Home, Shield, Layers, Lock, FileCheck, FileJson, FileCode, FileSpreadsheet as FileCsv, RefreshCw, X } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { TableSkeleton, CardSkeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
@@ -99,6 +99,9 @@ export default function ProductDetailPage() {
   const [selectedRunForDetails, setSelectedRunForDetails] = useState<PipelineRun | null>(null)
   const [downloadingValidationSummary, setDownloadingValidationSummary] = useState(false)
   const [downloadingTrustReport, setDownloadingTrustReport] = useState(false)
+  const [viewingArtifact, setViewingArtifact] = useState<any | null>(null)
+  const [artifactContent, setArtifactContent] = useState<string | null>(null)
+  const [loadingArtifactContent, setLoadingArtifactContent] = useState(false)
   
   // Data quality states
   const [dataQualityViolations, setDataQualityViolations] = useState<any[]>([])
@@ -1149,58 +1152,6 @@ export default function ProductDetailPage() {
               </div>
             </div>
 
-            {/* Reports & Artifacts Section (M3) */}
-            {product.current_version > 0 && (
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <h2 className="text-lg font-semibold text-gray-900 mb-4">Reports & Artifacts</h2>
-                <p className="text-sm text-gray-600 mb-4">
-                  Download AI readiness reports and validation summaries generated from pipeline runs.
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <Button
-                    variant="outline"
-                    onClick={handleDownloadValidationSummary}
-                    disabled={downloadingValidationSummary || product.current_version === 0}
-                    className="flex items-center justify-center gap-2"
-                  >
-                    {downloadingValidationSummary ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
-                        Downloading...
-                      </>
-                    ) : (
-                      <>
-                        <FileSpreadsheet className="h-4 w-4" />
-                        Download Validation Summary (CSV)
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={handleDownloadTrustReport}
-                    disabled={downloadingTrustReport || product.current_version === 0}
-                    className="flex items-center justify-center gap-2"
-                  >
-                    {downloadingTrustReport ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
-                        Downloading...
-                      </>
-                    ) : (
-                      <>
-                        <FileText className="h-4 w-4" />
-                        Download Trust Report (PDF)
-                      </>
-                    )}
-                  </Button>
-                </div>
-                {product.current_version === 0 && (
-                  <p className="text-sm text-gray-500 mt-3">
-                    Run a pipeline to generate reports and artifacts.
-                  </p>
-                )}
-              </div>
-            )}
 
             {/* Pipeline Section */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -1391,7 +1342,7 @@ export default function ProductDetailPage() {
                             Size
                           </th>
                           <th className="px-6 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Actions
+                            View
                           </th>
                         </tr>
                       </thead>
@@ -1471,19 +1422,40 @@ export default function ProductDetailPage() {
                                 </span>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-right">
-                                {artifact.download_url ? (
-                                  <a
-                                    href={artifact.download_url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-blue-700 bg-blue-50 rounded-md hover:bg-blue-100 transition-colors"
-                                  >
-                                    <Download className="h-4 w-4 mr-1.5" />
-                                    Download
-                                  </a>
-                                ) : (
-                                  <span className="text-sm text-gray-400">N/A</span>
-                                )}
+                                <div className="flex items-center justify-end space-x-2">
+                                  {artifact.artifact_type?.toLowerCase() === 'vector' ? (
+                                    <a
+                                      href={`${process.env.NEXT_PUBLIC_QDRANT_URL || 'http://localhost:6333'}/dashboard`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-indigo-700 bg-indigo-50 rounded-md hover:bg-indigo-100 transition-colors"
+                                    >
+                                      <Layers className="h-4 w-4 mr-1.5" />
+                                      Open Qdrant
+                                    </a>
+                                  ) : (
+                                    <button
+                                      onClick={() => handleViewArtifact(artifact)}
+                                      className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-blue-700 bg-blue-50 rounded-md hover:bg-blue-100 transition-colors"
+                                    >
+                                      <FileText className="h-4 w-4 mr-1.5" />
+                                      View
+                                    </button>
+                                  )}
+                                  {artifact.download_url && (
+                                    <a
+                                      href={artifact.download_url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      download
+                                      className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <Download className="h-4 w-4 mr-1.5" />
+                                      Download
+                                    </a>
+                                  )}
+                                </div>
                               </td>
                             </tr>
                           )
@@ -2094,6 +2066,83 @@ export default function ProductDetailPage() {
           runStatus={selectedRunForDetails.status}
           initialMetrics={selectedRunForDetails.metrics}
         />
+      )}
+
+      {/* Artifact Viewer Modal */}
+      {viewingArtifact && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75" onClick={() => setViewingArtifact(null)} />
+
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
+              {/* Header */}
+              <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4 flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-white">
+                    {viewingArtifact.display_name || viewingArtifact.artifact_name.replace(/_/g, ' ')}
+                  </h3>
+                  <p className="text-sm text-blue-100 mt-1">
+                    {viewingArtifact.artifact_type?.toUpperCase() || 'UNKNOWN'} • {(() => {
+                      const formatFileSize = (bytes: number) => {
+                        if (bytes < 1024) return `${bytes} B`
+                        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+                        return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+                      }
+                      return formatFileSize(viewingArtifact.file_size)
+                    })()}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setViewingArtifact(null)}
+                  className="text-white hover:text-gray-200 transition-colors"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="px-6 py-4 max-h-[70vh] overflow-y-auto">
+                {loadingArtifactContent ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                  </div>
+                ) : artifactContent ? (
+                  <div className="bg-gray-900 rounded-lg p-4">
+                    <pre className="text-xs font-mono text-gray-100 whitespace-pre-wrap overflow-x-auto">
+                      {artifactContent}
+                    </pre>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <p>Unable to load artifact content</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="bg-gray-50 px-6 py-3 flex justify-end space-x-3">
+                {viewingArtifact.download_url && (
+                  <a
+                    href={viewingArtifact.download_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 inline-flex items-center"
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Download
+                  </a>
+                )}
+                <button
+                  onClick={() => setViewingArtifact(null)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </AppLayout>
   )
