@@ -176,6 +176,7 @@ async def create_data_quality_rule(
 
 @router.get("/rules", response_model=List[DataQualityRuleResponse])
 async def list_data_quality_rules(
+    http_request: Request,
     product_id: Optional[UUID] = Query(None),
     workspace_id: Optional[UUID] = Query(None),
     rule_type: Optional[str] = Query(None),
@@ -187,7 +188,6 @@ async def list_data_quality_rules(
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
-    http_request: Request,
 ):
     """List data quality rules with enterprise filtering and pagination."""
     try:
@@ -338,11 +338,11 @@ async def update_data_quality_rule(
 @router.get("/rules/{rule_id}/audit", response_model=List[DataQualityRuleAuditResponse])
 async def get_rule_audit_trail(
     rule_id: UUID,
+    http_request: Request,
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
-    http_request: Request,
 ):
     """Get complete audit trail for a data quality rule."""
     try:
@@ -469,10 +469,10 @@ async def generate_compliance_report(
 @router.delete("/rules/{rule_id}")
 async def delete_data_quality_rule(
     rule_id: UUID,
+    http_request: Request,
     reason: str = Query(..., description="Reason for deletion"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
-    http_request: Request,
 ):
     """Soft delete a data quality rule with audit trail."""
     try:

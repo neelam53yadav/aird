@@ -130,8 +130,8 @@ async def create_export_bundle(
 
 @router.get("", response_model=List[ExportBundleResponse])
 async def list_export_bundles(
-    product_id: str = Query(..., description="Product ID to list exports for"),
     request: Request,
+    product_id: str = Query(..., description="Product ID to list exports for"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
