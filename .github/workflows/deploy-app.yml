@@ -35,6 +35,8 @@ jobs:
           workload_identity_provider: projects/890841479962/locations/global/workloadIdentityPools/github-pool/providers/github-provider
           service_account: github-actions@project-f3c8a334-a3f2-4f66-a06.iam.gserviceaccount.com
           create_credentials_file: true
+          credentials_file_path: /tmp/gcp-credentials.json
+          credentials_file_path: /tmp/gcp-credentials.json
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
@@ -473,11 +475,19 @@ jobs:
             echo "deploy_path=~/primedata" >> $GITHUB_OUTPUT
           fi
 
+      - name: Cleanup old credential files on VM
+        run: |
+          echo "Cleaning up old GitHub Actions credential files on VM..."
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+            "rm -f /opt/primedata/gha-creds-*.json ~/primedata/gha-creds-*.json 2>/dev/null || true"
+          echo "✅ Cleanup complete"
+
       - name: Copy files to VM
         run: |
           DEPLOY_PATH="${{ steps.prepare-vm-dir.outputs.deploy_path }}"
           echo "Copying files to: ${DEPLOY_PATH}"
           rsync -avz --exclude='.git' --exclude='node_modules' --exclude='venv' \
+            --exclude='gha-creds-*.json' --exclude='*.tmp' --exclude='.env.local' \
             -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
             ./ ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }}:${DEPLOY_PATH}/
 

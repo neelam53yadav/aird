@@ -51,9 +51,8 @@ else:
     cors_origins = [str(o).strip() for o in cors_origins]
 
 # Log CORS configuration for debugging
-import logging
+from loguru import logger
 
-logger = logging.getLogger(__name__)
 logger.info(f"Configuring CORS with origins: {cors_origins}")
 
 app.add_middleware(
