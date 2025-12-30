@@ -182,7 +182,7 @@ class ApiClient {
 
       // Read token from cookie (handle URL encoding)
       // Cookie is NOT httpOnly so we can read it for cross-origin requests
-      const cookieToken = (() => {
+      let cookieToken = (() => {
         const cookie = document.cookie
           .split('; ')
           .find(row => row.startsWith('primedata_api_token='))
@@ -190,6 +190,49 @@ class ApiClient {
         const value = cookie.split('=').slice(1).join('=') // Handle = in token
         return value ? decodeURIComponent(value) : null
       })()
+
+      // Check if token is expired and refresh if needed
+      if (cookieToken) {
+        try {
+          // Decode token to check expiration (without verification)
+          const parts = cookieToken.split('.')
+          if (parts.length === 3) {
+            const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')))
+            const exp = payload.exp
+            const now = Math.floor(Date.now() / 1000)
+            
+            // If token is expired or expires in less than 5 minutes, refresh it
+            if (exp && (exp - now) < 300) {
+              console.log('Token expiring soon or expired, refreshing...', {
+                exp,
+                now,
+                timeUntilExpiry: exp - now,
+              })
+              
+              // Refresh token by calling exchangeToken
+              const { exchangeToken } = await import('@/lib/auth-utils')
+              const refreshed = await exchangeToken()
+              
+              if (refreshed) {
+                // Re-read the cookie after refresh
+                const newCookie = document.cookie
+                  .split('; ')
+                  .find(row => row.startsWith('primedata_api_token='))
+                if (newCookie) {
+                  const newValue = newCookie.split('=').slice(1).join('=')
+                  cookieToken = newValue ? decodeURIComponent(newValue) : null
+                  console.log('Token refreshed successfully')
+                }
+              } else {
+                console.warn('Token refresh failed, using existing token')
+              }
+            }
+          }
+        } catch (e) {
+          // If we can't decode the token, just use it as-is
+          console.warn('Could not check token expiration:', e)
+        }
+      }
 
       // Debug logging
       console.log('API Client - Request:', {

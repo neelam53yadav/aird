@@ -34,6 +34,39 @@ def verify_rs256_token(token: str) -> Optional[Dict[str, Any]]:
         # Get the header to find the key ID
         unverified_header = jwt.get_unverified_header(token)
         kid = unverified_header.get("kid")
+        
+        # Decode token without verification to see claims
+        unverified_payload = jwt.decode(token, options={"verify_signature": False})
+        
+        # #region agent log
+        import json
+        import logging
+        logger = logging.getLogger(__name__)
+        log_data = {
+            "location": "security.py:35",
+            "message": "Token header and unverified payload",
+            "data": {
+                "has_kid": bool(kid),
+                "kid": kid,
+                "unverified_iss": unverified_payload.get("iss"),
+                "unverified_aud": unverified_payload.get("aud"),
+                "unverified_exp": unverified_payload.get("exp"),
+                "expected_iss": settings.JWT_ISSUER,
+                "expected_aud": settings.JWT_AUDIENCE,
+                "payload_keys": list(unverified_payload.keys()),
+            },
+            "timestamp": int(__import__("time").time() * 1000),
+            "sessionId": "debug-session",
+            "runId": "run3",
+            "hypothesisId": "G"
+        }
+        logger.info(f"TOKEN_VERIFY_HEADER: {json.dumps(log_data)}")
+        try:
+            with open("/Users/atul7717/Desktop/Code/aird/.cursor/debug.log", "a") as f:
+                f.write(json.dumps(log_data) + "\n")
+        except Exception as e:
+            logger.error(f"Failed to write debug log: {e}")
+        # #endregion
 
         if not kid:
             return None
@@ -48,32 +81,131 @@ def verify_rs256_token(token: str) -> Optional[Dict[str, Any]]:
                 break
 
         if not key:
+            # #region agent log
+            log_data = {
+                "location": "security.py:51",
+                "message": "Key not found in JWKS",
+                "data": {
+                    "kid": kid,
+                    "jwks_keys_count": len(jwks.get("keys", [])),
+                },
+                "timestamp": int(__import__("time").time() * 1000),
+                "sessionId": "debug-session",
+                "runId": "run3",
+                "hypothesisId": "G"
+            }
+            try:
+                with open("/Users/atul7717/Desktop/Code/aird/.cursor/debug.log", "a") as f:
+                    f.write(json.dumps(log_data) + "\n")
+            except: pass
+            # #endregion
             return None
 
         # Verify the token
-        payload = jwt.decode(
-            token,
-            key,
-            algorithms=["RS256"],
-            audience=settings.JWT_AUDIENCE,
-            issuer=settings.JWT_ISSUER,
-            options={
-                "verify_exp": True,
-                "verify_iat": True,
-                "verify_nbf": True,
-                "verify_aud": True,
-                "verify_iss": True,
-            },
-        )
-
-        return payload
-
-    except jwt.ExpiredSignatureError:
-        return None
-    except jwt.InvalidTokenError:
-        return None
-    except Exception:
-        return None
+        try:
+            payload = jwt.decode(
+                token,
+                key,
+                algorithms=["RS256"],
+                audience=settings.JWT_AUDIENCE,
+                issuer=settings.JWT_ISSUER,
+                options={
+                    "verify_exp": True,
+                    "verify_iat": True,
+                    "verify_nbf": True,
+                    "verify_aud": True,
+                    "verify_iss": True,
+                },
+            )
+            
+            # #region agent log
+            import json
+            log_data = {
+                "location": "security.py:54",
+                "message": "Token verification successful",
+                "data": {
+                    "has_payload": bool(payload),
+                    "payload_keys": list(payload.keys()) if payload else [],
+                    "audience": settings.JWT_AUDIENCE,
+                    "issuer": settings.JWT_ISSUER,
+                },
+                "timestamp": int(__import__("time").time() * 1000),
+                "sessionId": "debug-session",
+                "runId": "run3",
+                "hypothesisId": "G"
+            }
+            try:
+                with open("/Users/atul7717/Desktop/Code/aird/.cursor/debug.log", "a") as f:
+                    f.write(json.dumps(log_data) + "\n")
+            except: pass
+            # #endregion
+            
+            return payload
+        except jwt.ExpiredSignatureError as e:
+            # #region agent log
+            log_data = {
+                "location": "security.py:71",
+                "message": "Token expired",
+                "data": {
+                    "error": str(e),
+                },
+                "timestamp": int(__import__("time").time() * 1000),
+                "sessionId": "debug-session",
+                "runId": "run3",
+                "hypothesisId": "G"
+            }
+            try:
+                with open("/Users/atul7717/Desktop/Code/aird/.cursor/debug.log", "a") as f:
+                    f.write(json.dumps(log_data) + "\n")
+            except: pass
+            # #endregion
+            return None
+        except jwt.InvalidTokenError as e:
+            # #region agent log
+            import logging
+            logger = logging.getLogger(__name__)
+            log_data = {
+                "location": "security.py:73",
+                "message": "Invalid token",
+                "data": {
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "audience": settings.JWT_AUDIENCE,
+                    "issuer": settings.JWT_ISSUER,
+                },
+                "timestamp": int(__import__("time").time() * 1000),
+                "sessionId": "debug-session",
+                "runId": "run3",
+                "hypothesisId": "G"
+            }
+            logger.error(f"TOKEN_VERIFY_INVALID: {json.dumps(log_data)}")
+            try:
+                with open("/Users/atul7717/Desktop/Code/aird/.cursor/debug.log", "a") as f:
+                    f.write(json.dumps(log_data) + "\n")
+            except Exception as file_err:
+                logger.error(f"Failed to write debug log: {file_err}")
+            # #endregion
+            return None
+        except Exception as e:
+            # #region agent log
+            log_data = {
+                "location": "security.py:75",
+                "message": "Token verification exception",
+                "data": {
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                },
+                "timestamp": int(__import__("time").time() * 1000),
+                "sessionId": "debug-session",
+                "runId": "run3",
+                "hypothesisId": "G"
+            }
+            try:
+                with open("/Users/atul7717/Desktop/Code/aird/.cursor/debug.log", "a") as f:
+                    f.write(json.dumps(log_data) + "\n")
+            except: pass
+            # #endregion
+            return None
 
 
 def get_current_user(token: str = Depends(lambda: None)) -> Dict[str, Any]:
