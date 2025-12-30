@@ -673,6 +673,131 @@ async def get_pipeline_status(
     }
 
 
+@router.get("/runs/{run_id}/logs")
+async def get_pipeline_run_logs(
+    run_id: UUID,
+    request_obj: Request,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Get logs for a specific pipeline run.
+    Fetches logs from Airflow in a secure, workspace-scoped manner.
+    """
+    # Get pipeline run
+    run = db.query(PipelineRun).filter(PipelineRun.id == run_id).first()
+    if not run:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pipeline run not found")
+
+    # Ensure user has access to the product (security check)
+    ensure_product_access(db, request_obj, run.product_id)
+
+    if not run.dag_run_id:
+        return {
+            "run_id": str(run.id),
+            "dag_run_id": None,
+            "logs": {},
+            "stage_metrics": run.metrics.get("aird_stages", {}) if run.metrics else {},
+            "message": "No DAG run ID available for this pipeline run",
+        }
+
+    # Fetch logs from Airflow
+    airflow_url = os.getenv("AIRFLOW_URL", "http://localhost:8080")
+    airflow_username = os.getenv("AIRFLOW_USERNAME", "admin")
+    airflow_password = os.getenv("AIRFLOW_PASSWORD", "admin")
+
+    try:
+        import requests
+        from requests.auth import HTTPBasicAuth
+
+        # Get DAG run details
+        dag_run_url = f"{airflow_url}/api/v1/dags/primedata_simple/dagRuns/{run.dag_run_id}"
+        dag_run_response = requests.get(
+            dag_run_url,
+            auth=HTTPBasicAuth(airflow_username, airflow_password),
+            timeout=10,
+        )
+
+        if dag_run_response.status_code != 200:
+            logger.warning(f"Failed to get DAG run details: {dag_run_response.status_code}")
+            # Return stage metrics even if Airflow is unavailable
+            return {
+                "run_id": str(run.id),
+                "dag_run_id": run.dag_run_id,
+                "logs": {},
+                "stage_metrics": run.metrics.get("aird_stages", {}) if run.metrics else {},
+                "error": "Failed to fetch logs from Airflow",
+            }
+
+        dag_run_data = dag_run_response.json()
+
+        # Get task instances for this DAG run
+        task_instances_url = f"{airflow_url}/api/v1/dags/primedata_simple/dagRuns/{run.dag_run_id}/taskInstances"
+        task_instances_response = requests.get(
+            task_instances_url,
+            auth=HTTPBasicAuth(airflow_username, airflow_password),
+            timeout=10,
+        )
+
+        logs = {}
+        if task_instances_response.status_code == 200:
+            task_instances = task_instances_response.json().get("task_instances", [])
+
+            for task_instance in task_instances:
+                task_id = task_instance.get("task_id")
+                if not task_id:
+                    continue
+
+                # Get logs for this task
+                log_url = f"{airflow_url}/api/v1/dags/primedata_simple/dagRuns/{run.dag_run_id}/taskInstances/{task_id}/logs/1"
+                log_response = requests.get(
+                    log_url,
+                    auth=HTTPBasicAuth(airflow_username, airflow_password),
+                    timeout=10,
+                )
+
+                if log_response.status_code == 200:
+                    log_data = log_response.json()
+                    logs[task_id] = {
+                        "content": log_data.get("content", ""),
+                        "status": task_instance.get("state", "unknown"),
+                        "start_date": task_instance.get("start_date"),
+                        "end_date": task_instance.get("end_date"),
+                    }
+                else:
+                    logs[task_id] = {
+                        "content": "",
+                        "status": task_instance.get("state", "unknown"),
+                        "error": f"Failed to fetch logs: {log_response.status_code}",
+                    }
+
+        # Lazy-load metrics from S3 if archived
+        from primedata.services.lazy_json_loader import load_pipeline_run_metrics
+
+        metrics = load_pipeline_run_metrics(run)
+        stage_metrics = metrics.get("aird_stages", {}) if metrics else {}
+
+        return {
+            "run_id": str(run.id),
+            "dag_run_id": run.dag_run_id,
+            "dag_run_state": dag_run_data.get("state", "unknown"),
+            "logs": logs,
+            "stage_metrics": stage_metrics,
+        }
+
+    except Exception as e:
+        logger.error(f"Error fetching logs from Airflow: {e}", exc_info=True)
+        # Return stage metrics even if Airflow fetch fails
+        metrics = run.metrics if run.metrics else {}
+        return {
+            "run_id": str(run.id),
+            "dag_run_id": run.dag_run_id,
+            "logs": {},
+            "stage_metrics": metrics.get("aird_stages", {}) if metrics else {},
+            "error": f"Failed to fetch logs: {str(e)}",
+        }
+
+
 def _check_airflow_dag_run_status(
     airflow_url: str, airflow_username: str, airflow_password: str, dag_run_id: str
 ) -> Dict[str, Any]:

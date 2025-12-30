@@ -553,6 +553,10 @@ class ApiClient {
     })
   }
 
+  async getPipelineRunLogs(runId: string): Promise<ApiResponse> {
+    return this.get(`/api/v1/pipeline/runs/${runId}/logs`)
+  }
+
   // Artifacts API
   async getRawArtifacts(productId: string, version: number): Promise<ApiResponse> {
     return this.get(`/api/v1/artifacts/raw?product_id=${productId}&version=${version}`)
