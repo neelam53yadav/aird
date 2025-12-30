@@ -77,11 +77,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Set cookie with backend access token
-    // NOT httpOnly so JavaScript can read it for cross-origin requests
-    // The frontend API client will read this cookie and add it to Authorization header
-    const nextResponse = NextResponse.json({ ok: true })
+    // Set cookie server-side (backup, but may not be readable by JS)
     const isProduction = process.env.NODE_ENV === "production"
+    const nextResponse = NextResponse.json({ 
+      ok: true,
+      token: backendToken  // Return token so client can set cookie client-side
+    })
+    
     nextResponse.cookies.set("primedata_api_token", backendToken, {
       httpOnly: false, // Allow JS to read for cross-origin requests
       secure: isProduction,
