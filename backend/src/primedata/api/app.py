@@ -46,9 +46,9 @@ app = FastAPI(
 # Ensure CORS_ORIGINS is a list
 cors_origins = settings.CORS_ORIGINS
 if isinstance(cors_origins, str):
-    cors_origins = [cors_origins]
-elif not isinstance(cors_origins, list):
-    cors_origins = list(cors_origins)
+    cors_origins = [o.strip() for o in cors_origins.split(",") if o.strip()]
+else:
+    cors_origins = [str(o).strip() for o in cors_origins]
 
 # Log CORS configuration for debugging
 import logging
@@ -58,11 +58,12 @@ logger.info(f"Configuring CORS with origins: {cors_origins}")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=cors_origins,
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # Add authentication middleware
 app.add_middleware(AuthMiddleware)
