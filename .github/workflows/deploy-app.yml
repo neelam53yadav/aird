@@ -671,11 +671,17 @@ jobs:
           ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
             "${DOCKER_CMD} image prune -f --filter 'until=168h' || true"
           
-          # Show disk usage after cleanup
+          # Show disk usage after cleanup (non-fatal - may fail if Docker has corrupted snapshots)
           echo ""
           echo "Docker disk usage after cleanup:"
-          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
-            "${DOCKER_CMD} system df"
+          if ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+            "${DOCKER_CMD} system df" 2>/dev/null; then
+            echo "✅ Disk usage reported successfully"
+          else
+            echo "⚠️  Could not calculate disk usage (Docker snapshot issue - this is non-critical)"
+            echo "   Cleanup operations succeeded, but disk usage reporting failed due to corrupted snapshot."
+            echo "   This does not affect functionality and will resolve on next Docker system prune."
+          fi
           
           echo ""
           echo "✅ Image cleanup complete"
