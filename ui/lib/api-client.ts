@@ -264,7 +264,7 @@ class ApiClient {
       const options: RequestInit = {
         method,
         headers,
-        credentials: 'include', // Include cookies for authentication (backup)
+        // Removed credentials: 'include' - using Authorization header only
       }
 
       if (body) {
@@ -493,13 +493,29 @@ class ApiClient {
       formData.append('files', file)
     })
     
+    // Get token from cookie for Authorization header
+    const cookieToken = (() => {
+      const cookie = document.cookie
+        .split('; ')
+        .find(row => row.startsWith('primedata_api_token='))
+      if (!cookie) return null
+      const value = cookie.split('=').slice(1).join('=')
+      return value ? decodeURIComponent(value) : null
+    })()
+    
     // Use fetch directly since we need FormData
     try {
       const url = `${this.baseUrl}/api/v1/datasources/${datasourceId}/upload-files`
+      const headers: Record<string, string> = {}
+      if (cookieToken) {
+        headers['Authorization'] = `Bearer ${cookieToken}`
+      }
+      
       const response = await fetch(url, {
         method: 'POST',
+        headers,
         body: formData,
-        credentials: 'include',
+        // Removed credentials: 'include' - using Authorization header only
       })
       
       const status = response.status
@@ -819,13 +835,29 @@ class ApiClient {
       formData.append('playbook_id', playbookId)
     }
     
+    // Get token from cookie for Authorization header
+    const cookieToken = (() => {
+      const cookie = document.cookie
+        .split('; ')
+        .find(row => row.startsWith('primedata_api_token='))
+      if (!cookie) return null
+      const value = cookie.split('=').slice(1).join('=')
+      return value ? decodeURIComponent(value) : null
+    })()
+    
     // Use fetch directly since we need FormData
     try {
       const url = `${this.baseUrl}/api/v1/cost/estimate`
+      const headers: Record<string, string> = {}
+      if (cookieToken) {
+        headers['Authorization'] = `Bearer ${cookieToken}`
+      }
+      
       const response = await fetch(url, {
         method: 'POST',
+        headers,
         body: formData,
-        credentials: 'include',
+        // Removed credentials: 'include' - using Authorization header only
       })
       
       const status = response.status
