@@ -587,6 +587,36 @@ async def update_pipeline_run(
             # If cancelling a running/queued pipeline, mark it as failed
             if new_status == PipelineRunStatus.FAILED and run.status in [PipelineRunStatus.RUNNING, PipelineRunStatus.QUEUED]:
                 logger.info(f"Cancelling pipeline run {run_id} (was {run.status.value})")
+                
+                # Cancel the DAG run in Airflow if dag_run_id exists
+                if run.dag_run_id:
+                    try:
+                        import requests
+                        from requests.auth import HTTPBasicAuth
+                        
+                        # Use same environment variables as get_pipeline_run_logs
+                        airflow_url = os.getenv("AIRFLOW_URL", "http://localhost:8080")
+                        airflow_username = os.getenv("AIRFLOW_USERNAME", "admin")
+                        airflow_password = os.getenv("AIRFLOW_PASSWORD", "admin")
+                        
+                        dag_id = "primedata_simple"
+                        # Use PATCH to update DAG run state to failed (stops execution)
+                        cancel_url = f"{airflow_url}/api/v1/dags/{dag_id}/dagRuns/{run.dag_run_id}"
+                        
+                        cancel_response = requests.patch(
+                            cancel_url,
+                            json={"state": "failed"},
+                            auth=HTTPBasicAuth(airflow_username, airflow_password),
+                            timeout=10,
+                        )
+                        
+                        if cancel_response.status_code == 200:
+                            logger.info(f"Successfully cancelled DAG run {run.dag_run_id} in Airflow")
+                        else:
+                            logger.warning(f"Failed to cancel DAG run in Airflow: {cancel_response.status_code} - {cancel_response.text}")
+                    except Exception as e:
+                        logger.warning(f"Failed to cancel DAG run in Airflow (continuing with DB update): {e}")
+                
                 run.status = PipelineRunStatus.FAILED
                 run.finished_at = datetime.utcnow()
                 if not run.metrics:
