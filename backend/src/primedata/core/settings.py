@@ -2,8 +2,9 @@
 Application settings and configuration.
 """
 
+import json
 import os
-from typing import List, Optional
+from typing import List, Optional, Union
 
 try:
     from pydantic_settings import BaseSettings
@@ -21,8 +22,10 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = "postgresql+psycopg2://primedata:primedata123@localhost:5433/primedata"
 
-    # CORS
-    CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    # CORS - can be set via environment variable as JSON array or comma-separated string
+    # Example: CORS_ORIGINS='["http://localhost:3000","http://34.28.26.21:3000"]'
+    # Or: CORS_ORIGINS=http://localhost:3000,http://34.28.26.21:3000
+    CORS_ORIGINS: Union[List[str], str] = ["http://localhost:3000", "http://127.0.0.1:3000", "http://34.28.26.21:3000"]
 
     # Authentication
     NEXTAUTH_SECRET: str = "REPLACE_WITH_64_CHAR_RANDOM_STRING_FOR_PRODUCTION_USE_ONLY"
@@ -83,4 +86,16 @@ def get_settings() -> Settings:
     global _settings
     if _settings is None:
         _settings = Settings()
+        # Parse CORS_ORIGINS from environment if it's a string
+        cors_origins_env = os.getenv("CORS_ORIGINS")
+        if cors_origins_env:
+            try:
+                # Try parsing as JSON array first
+                _settings.CORS_ORIGINS = json.loads(cors_origins_env)
+            except (json.JSONDecodeError, ValueError):
+                # If not JSON, treat as comma-separated string
+                _settings.CORS_ORIGINS = [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
+        # Ensure CORS_ORIGINS is always a list
+        if isinstance(_settings.CORS_ORIGINS, str):
+            _settings.CORS_ORIGINS = [_settings.CORS_ORIGINS]
     return _settings
