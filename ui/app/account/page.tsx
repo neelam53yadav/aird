@@ -32,7 +32,8 @@ export default function AccountPage() {
         .then((result) => {
           if (!result.success) {
             console.warn("Token exchange failed")
-            return
+            setLoading(false)
+            return null
           }
           // Fetch user profile
           return fetch("/api/v1/users/me", {
@@ -44,8 +45,12 @@ export default function AccountPage() {
             },
           })
         })
-        .then((res: Response) => res.json())
+        .then((res: Response | null) => {
+          if (!res) return null
+          return res.json()
+        })
         .then((data: any) => {
+          if (!data) return
           setUser(data)
           // Fetch workspaces
           return fetch("/api/v1/workspaces", {
@@ -57,8 +62,12 @@ export default function AccountPage() {
             },
           })
         })
-        .then((res: Response) => res.json())
+        .then((res: Response | null) => {
+          if (!res) return null
+          return res.json()
+        })
         .then((data: any) => {
+          if (!data) return
           setWorkspaces(data)
           setLoading(false)
         })
