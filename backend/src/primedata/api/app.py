@@ -55,17 +55,18 @@ from loguru import logger
 
 logger.info(f"Configuring CORS with origins: {cors_origins}")
 
+# Add authentication middleware first
+app.add_middleware(AuthMiddleware)
+
+# Add CORS middleware AFTER AuthMiddleware so it wraps everything (including 401 responses)
+# This ensures CORS headers are added to all responses, including error responses
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
-    allow_credentials=True,
+    allow_credentials=False,  # Using Authorization header only, no cookies
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-# Add authentication middleware
-app.add_middleware(AuthMiddleware)
 
 # Include routers
 app.include_router(auth_router)
