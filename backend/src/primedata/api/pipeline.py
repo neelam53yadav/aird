@@ -17,7 +17,7 @@ from primedata.core.scope import allowed_workspaces, ensure_product_access
 from primedata.core.security import get_current_user
 from primedata.db.database import get_db
 from primedata.db.models import PipelineRun, PipelineRunStatus, Product, RawFile, RawFileStatus
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -37,6 +37,8 @@ class PipelineRunRequest(BaseModel):
 class PipelineRunResponse(BaseModel):
     """Response model for pipeline run information."""
 
+    model_config = ConfigDict(from_attributes=True)  # Pydantic v2 syntax
+
     id: UUID
     product_id: UUID
     version: int
@@ -46,9 +48,6 @@ class PipelineRunResponse(BaseModel):
     dag_run_id: Optional[str]
     metrics: Dict[str, Any]
     created_at: datetime
-
-    class Config:
-        orm_mode = True  # Pydantic v1 uses orm_mode instead of from_attributes
 
 
 class TriggerPipelineResponse(BaseModel):
