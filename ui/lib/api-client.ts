@@ -181,6 +181,15 @@ class ApiClient {
         return value ? decodeURIComponent(value) : null
       })()
 
+      // Debug logging
+      console.log('API Client - Request:', {
+        url,
+        method,
+        hasCookie: !!cookieToken,
+        cookieLength: cookieToken?.length || 0,
+        allCookies: document.cookie.substring(0, 200), // First 200 chars
+      })
+
       // Always include Authorization header if we have a token
       // This is required for cross-origin requests (different port = different origin)
       const headers: Record<string, string> = {
@@ -189,6 +198,14 @@ class ApiClient {
       
       if (cookieToken) {
         headers['Authorization'] = `Bearer ${cookieToken}`
+        console.log('API Client - Authorization header set:', {
+          hasHeader: true,
+          tokenPrefix: cookieToken.substring(0, 20) + '...',
+        })
+      } else {
+        console.warn('API Client - No token found in cookie!', {
+          allCookies: document.cookie,
+        })
       }
 
       const options: RequestInit = {
