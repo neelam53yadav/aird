@@ -211,18 +211,12 @@ class ApiClient {
               
               // Refresh token by calling exchangeToken
               const { exchangeToken } = await import('@/lib/auth-utils')
-              const refreshed = await exchangeToken()
+              const refreshResult = await exchangeToken()
               
-              if (refreshed) {
-                // Re-read the cookie after refresh
-                const newCookie = document.cookie
-                  .split('; ')
-                  .find(row => row.startsWith('primedata_api_token='))
-                if (newCookie) {
-                  const newValue = newCookie.split('=').slice(1).join('=')
-                  cookieToken = newValue ? decodeURIComponent(newValue) : null
-                  console.log('Token refreshed successfully')
-                }
+              if (refreshResult.success && refreshResult.token) {
+                // Use the token directly from the response
+                cookieToken = refreshResult.token
+                console.log('Token refreshed successfully')
               } else {
                 console.warn('Token refresh failed, using existing token')
               }
@@ -282,42 +276,29 @@ class ApiClient {
         })
         try {
           const { exchangeToken } = await import('@/lib/auth-utils')
-          const refreshed = await exchangeToken()
+          const refreshResult = await exchangeToken()
           
-          console.log('Token refresh result:', { refreshed })
+          console.log('Token refresh result:', { 
+            success: refreshResult.success, 
+            hasToken: !!refreshResult.token,
+            tokenLength: refreshResult.token?.length || 0,
+          })
           
-          if (refreshed) {
-            // Re-read the cookie after refresh
-            const newCookie = document.cookie
-              .split('; ')
-              .find(row => row.startsWith('primedata_api_token='))
-            if (newCookie) {
-              const newValue = newCookie.split('=').slice(1).join('=')
-              const newToken = newValue ? decodeURIComponent(newValue) : null
-              
-              console.log('New token after refresh:', {
-                hasNewToken: !!newToken,
-                newTokenLength: newToken?.length || 0,
-              })
-              
-              if (newToken) {
-                // Update headers with new token
-                headers['Authorization'] = `Bearer ${newToken}`
-                options.headers = headers
-                
-                // Retry the request
-                console.log('Retrying request with refreshed token...')
-                response = await fetch(url, options)
-                status = response.status
-                console.log('Retry result:', { status, ok: response.ok })
-              } else {
-                console.warn('Token refresh succeeded but no new token found in cookie')
-              }
-            } else {
-              console.warn('Token refresh succeeded but cookie not found')
-            }
+          if (refreshResult.success && refreshResult.token) {
+            // Use the token directly from the response (more reliable than reading cookie)
+            const newToken = refreshResult.token
+            
+            // Update headers with new token
+            headers['Authorization'] = `Bearer ${newToken}`
+            options.headers = headers
+            
+            // Retry the request
+            console.log('Retrying request with refreshed token...')
+            response = await fetch(url, options)
+            status = response.status
+            console.log('Retry result:', { status, ok: response.ok })
           } else {
-            console.warn('Token refresh returned false - may need to re-authenticate')
+            console.warn('Token refresh failed or no token returned - may need to re-authenticate')
           }
         } catch (refreshError) {
           console.error('Token refresh failed on 401:', refreshError)

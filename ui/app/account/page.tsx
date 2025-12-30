@@ -29,7 +29,11 @@ export default function AccountPage() {
     if (status === "authenticated") {
       // Exchange NextAuth token for backend token
       exchangeToken()
-        .then(() => {
+        .then((result) => {
+          if (!result.success) {
+            console.warn("Token exchange failed")
+            return
+          }
           // Fetch user profile
           return fetch("/api/v1/users/me", {
             headers: {

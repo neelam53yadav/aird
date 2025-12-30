@@ -28,8 +28,8 @@ export function AuthButtons({ className }: AuthButtonsProps) {
       
       if (result?.ok) {
         // Exchange token to register user in backend
-        const exchangeSuccess = await exchangeToken()
-        if (exchangeSuccess) {
+        const exchangeResult = await exchangeToken()
+        if (exchangeResult.success) {
           console.log("Token exchange successful")
         } else {
           console.warn("Token exchange failed, but continuing with redirect")
@@ -77,8 +77,8 @@ export function AuthButtons({ className }: AuthButtonsProps) {
         })
 
         if (result?.ok) {
-          const exchangeSuccess = await exchangeToken()
-          if (exchangeSuccess) {
+          const exchangeResult = await exchangeToken()
+          if (exchangeResult.success) {
             console.log("Token exchange successful")
             // Wait a bit to ensure cookie is set before redirect
             await new Promise(resolve => setTimeout(resolve, 100))
@@ -98,8 +98,8 @@ export function AuthButtons({ className }: AuthButtonsProps) {
         })
         
         if (result?.ok) {
-          const exchangeSuccess = await exchangeToken()
-          if (exchangeSuccess) {
+          const exchangeResult = await exchangeToken()
+          if (exchangeResult.success) {
             console.log("Token exchange successful")
             // Wait a bit to ensure cookie is set before redirect
             await new Promise(resolve => setTimeout(resolve, 100))

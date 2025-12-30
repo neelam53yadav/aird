@@ -8,9 +8,9 @@
  * for a backend API access token, which is then stored as a cookie client-side
  * so JavaScript can read it for cross-origin API requests
  * 
- * @returns Promise<boolean> - Returns true if exchange was successful, false otherwise
+ * @returns Promise<{success: boolean, token?: string}> - Returns success status and the token if available
  */
-export async function exchangeToken(): Promise<boolean> {
+export async function exchangeToken(): Promise<{ success: boolean; token?: string }> {
   try {
     const response = await fetch('/api/internal/exchange', {
       method: 'POST',
@@ -21,7 +21,7 @@ export async function exchangeToken(): Promise<boolean> {
 
     if (!response.ok) {
       console.error('Token exchange failed:', response.status, response.statusText)
-      return false
+      return { success: false }
     }
 
     const data = await response.json()
@@ -50,13 +50,13 @@ export async function exchangeToken(): Promise<boolean> {
         console.error('WARNING: Cookie was not set successfully!')
       }
       
-      return true
+      return { success: true, token: data.token }
     }
     
-    return data.ok === true
+    return { success: data.ok === true }
   } catch (error) {
     console.error('Token exchange error:', error)
-    return false
+    return { success: false }
   }
 }
 
