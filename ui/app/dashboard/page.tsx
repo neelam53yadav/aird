@@ -40,13 +40,23 @@ export default function DashboardPage() {
 
   // Exchange token when authenticated (ensures user is registered in backend)
   useEffect(() => {
-    if (status === 'authenticated' && session) {
-      exchangeToken().catch((error) => {
-        console.error("Token exchange failed on dashboard:", error)
-      })
-      // Load data when authenticated
-      loadDashboardData()
+    const initializeAuth = async () => {
+      if (status === 'authenticated' && session) {
+        try {
+          await exchangeToken()
+          // Wait a bit to ensure cookie is set before making API requests
+          await new Promise(resolve => setTimeout(resolve, 100))
+          // Load data after token exchange completes
+          loadDashboardData()
+        } catch (error) {
+          console.error("Token exchange failed on dashboard:", error)
+          // Still try to load data even if exchange fails
+          loadDashboardData()
+        }
+      }
     }
+    
+    initializeAuth()
   }, [status, session])
 
   const loadDashboardData = async () => {
