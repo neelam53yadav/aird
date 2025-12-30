@@ -496,10 +496,7 @@ async def list_pipeline_runs(
     runs = (
         db.query(PipelineRun)
         .join(Product, PipelineRun.product_id == Product.id)
-        .filter(
-            PipelineRun.product_id == product_id,
-            Product.workspace_id.in_(allowed_workspace_ids)
-        )
+        .filter(PipelineRun.product_id == product_id, Product.workspace_id.in_(allowed_workspace_ids))
         .order_by(PipelineRun.created_at.desc())
         .limit(limit)
         .all()

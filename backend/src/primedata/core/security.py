@@ -34,13 +34,14 @@ def verify_rs256_token(token: str) -> Optional[Dict[str, Any]]:
         # Get the header to find the key ID
         unverified_header = jwt.get_unverified_header(token)
         kid = unverified_header.get("kid")
-        
+
         # Decode token without verification to see claims
         unverified_payload = jwt.decode(token, options={"verify_signature": False})
-        
+
         # #region agent log
         import json
         import logging
+
         logger = logging.getLogger(__name__)
         log_data = {
             "location": "security.py:35",
@@ -58,7 +59,7 @@ def verify_rs256_token(token: str) -> Optional[Dict[str, Any]]:
             "timestamp": int(__import__("time").time() * 1000),
             "sessionId": "debug-session",
             "runId": "run3",
-            "hypothesisId": "G"
+            "hypothesisId": "G",
         }
         logger.info(f"TOKEN_VERIFY_HEADER: {json.dumps(log_data)}")
         try:
@@ -92,12 +93,13 @@ def verify_rs256_token(token: str) -> Optional[Dict[str, Any]]:
                 "timestamp": int(__import__("time").time() * 1000),
                 "sessionId": "debug-session",
                 "runId": "run3",
-                "hypothesisId": "G"
+                "hypothesisId": "G",
             }
             try:
                 with open("/Users/atul7717/Desktop/Code/aird/.cursor/debug.log", "a") as f:
                     f.write(json.dumps(log_data) + "\n")
-            except: pass
+            except:
+                pass
             # #endregion
             return None
 
@@ -117,9 +119,10 @@ def verify_rs256_token(token: str) -> Optional[Dict[str, Any]]:
                     "verify_iss": True,
                 },
             )
-            
+
             # #region agent log
             import json
+
             log_data = {
                 "location": "security.py:54",
                 "message": "Token verification successful",
@@ -132,14 +135,15 @@ def verify_rs256_token(token: str) -> Optional[Dict[str, Any]]:
                 "timestamp": int(__import__("time").time() * 1000),
                 "sessionId": "debug-session",
                 "runId": "run3",
-                "hypothesisId": "G"
+                "hypothesisId": "G",
             }
             try:
                 with open("/Users/atul7717/Desktop/Code/aird/.cursor/debug.log", "a") as f:
                     f.write(json.dumps(log_data) + "\n")
-            except: pass
+            except:
+                pass
             # #endregion
-            
+
             return payload
         except jwt.ExpiredSignatureError as e:
             # #region agent log
@@ -152,17 +156,19 @@ def verify_rs256_token(token: str) -> Optional[Dict[str, Any]]:
                 "timestamp": int(__import__("time").time() * 1000),
                 "sessionId": "debug-session",
                 "runId": "run3",
-                "hypothesisId": "G"
+                "hypothesisId": "G",
             }
             try:
                 with open("/Users/atul7717/Desktop/Code/aird/.cursor/debug.log", "a") as f:
                     f.write(json.dumps(log_data) + "\n")
-            except: pass
+            except:
+                pass
             # #endregion
             return None
         except jwt.InvalidTokenError as e:
             # #region agent log
             import logging
+
             logger = logging.getLogger(__name__)
             log_data = {
                 "location": "security.py:73",
@@ -176,7 +182,7 @@ def verify_rs256_token(token: str) -> Optional[Dict[str, Any]]:
                 "timestamp": int(__import__("time").time() * 1000),
                 "sessionId": "debug-session",
                 "runId": "run3",
-                "hypothesisId": "G"
+                "hypothesisId": "G",
             }
             logger.error(f"TOKEN_VERIFY_INVALID: {json.dumps(log_data)}")
             try:
@@ -198,17 +204,19 @@ def verify_rs256_token(token: str) -> Optional[Dict[str, Any]]:
                 "timestamp": int(__import__("time").time() * 1000),
                 "sessionId": "debug-session",
                 "runId": "run3",
-                "hypothesisId": "G"
+                "hypothesisId": "G",
             }
             try:
                 with open("/Users/atul7717/Desktop/Code/aird/.cursor/debug.log", "a") as f:
                     f.write(json.dumps(log_data) + "\n")
-            except: pass
+            except:
+                pass
             # #endregion
             return None
     except Exception as e:
         # Catch any unexpected errors in the outer try block
         import logging
+
         logger = logging.getLogger(__name__)
         logger.error(f"Unexpected error in verify_rs256_token: {e}")
         return None

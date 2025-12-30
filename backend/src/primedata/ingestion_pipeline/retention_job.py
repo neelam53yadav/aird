@@ -119,7 +119,9 @@ def apply_retention_policies(
                     minio_client.client.remove_object(artifact.storage_bucket, artifact.storage_key)
                     logger.info(f"Deleted artifact from MinIO: {artifact.storage_bucket}/{artifact.storage_key}")
                 except Exception as e:
-                    logger.warning(f"Failed to delete artifact from MinIO {artifact.storage_bucket}/{artifact.storage_key}: {e}")
+                    logger.warning(
+                        f"Failed to delete artifact from MinIO {artifact.storage_bucket}/{artifact.storage_key}: {e}"
+                    )
 
             # Mark as purged (hard delete from DB)
             artifact.status = ArtifactStatus.PURGED

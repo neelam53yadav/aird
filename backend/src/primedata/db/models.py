@@ -508,7 +508,9 @@ class PipelineArtifact(Base):
     artifact_name = Column(String(255), nullable=False)  # "processed_chunks", "metrics", "fingerprint", etc.
 
     # Storage location
-    storage_bucket = Column(String(255), nullable=False)  # Storage bucket/container name (e.g., "primedata-clean", "primedata-embed")
+    storage_bucket = Column(
+        String(255), nullable=False
+    )  # Storage bucket/container name (e.g., "primedata-clean", "primedata-embed")
     storage_key = Column(String(1000), nullable=False, index=True)  # Full object storage key (S3 key, GCS blob name, etc.)
     file_size = Column(BigInteger, nullable=False)  # Size in bytes
     checksum = Column(String(64), nullable=False)  # MD5 or SHA256 for integrity verification
