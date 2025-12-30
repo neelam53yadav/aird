@@ -5,6 +5,19 @@ import { X, CheckCircle, XCircle, Clock, Loader2, ChevronDown, ChevronUp, FileTe
 import { apiClient } from '@/lib/api-client'
 import { useToast } from '@/components/ui/toast'
 
+// Pipeline task execution order (matches Airflow DAG dependencies)
+const PIPELINE_TASK_ORDER = [
+  'preprocess',
+  'scoring',
+  'fingerprint',
+  'validation',
+  'policy',
+  'reporting',
+  'indexing',
+  'validate_data_quality',
+  'finalize',
+]
+
 interface PipelineDetailsModalProps {
   isOpen: boolean
   onClose: () => void
@@ -103,6 +116,19 @@ export default function PipelineDetailsModal({
     }
   }
 
+  // Helper function to sort tasks by execution order
+  const sortTasksByOrder = (tasks: [string, any][]): [string, any][] => {
+    return tasks.sort(([taskA], [taskB]) => {
+      const indexA = PIPELINE_TASK_ORDER.indexOf(taskA)
+      const indexB = PIPELINE_TASK_ORDER.indexOf(taskB)
+      // If task not in order list, put it at the end
+      if (indexA === -1 && indexB === -1) return 0
+      if (indexA === -1) return 1
+      if (indexB === -1) return -1
+      return indexA - indexB
+    })
+  }
+
   const stageMetrics = logs?.stage_metrics || initialMetrics?.aird_stages || {}
 
   if (!isOpen) return null
@@ -140,7 +166,7 @@ export default function PipelineDetailsModal({
                   <div>
                     <h4 className="text-sm font-semibold text-gray-900 mb-3">Pipeline Stages</h4>
                     <div className="space-y-2">
-                      {Object.entries(stageMetrics).map(([stageName, stageData]: [string, any]) => (
+                      {sortTasksByOrder(Object.entries(stageMetrics)).map(([stageName, stageData]: [string, any]) => (
                         <div
                           key={stageName}
                           className="border border-gray-200 rounded-lg overflow-hidden"
@@ -204,7 +230,7 @@ export default function PipelineDetailsModal({
                   <div>
                     <h4 className="text-sm font-semibold text-gray-900 mb-3">Task Logs</h4>
                     <div className="space-y-2">
-                      {Object.entries(logs.logs).map(([taskId, taskLog]: [string, any]) => (
+                      {sortTasksByOrder(Object.entries(logs.logs)).map(([taskId, taskLog]: [string, any]) => (
                         <div
                           key={taskId}
                           className="border border-gray-200 rounded-lg overflow-hidden"
