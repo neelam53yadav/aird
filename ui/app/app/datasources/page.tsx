@@ -142,11 +142,18 @@ export default function DataSourcesPage() {
               <p className="text-lg text-gray-600">Manage all your data sources across products</p>
             </div>
             <div className="flex space-x-3">
-              <Button variant="outline" className="border-2 hover:border-blue-300 hover:bg-blue-50">
+              <Button 
+                variant="outline" 
+                className="border-2 hover:border-blue-300 hover:bg-blue-50"
+                onClick={() => router.push('/app/products')}
+              >
                 <Database className="h-4 w-4 mr-2" />
                 Import Data Source
               </Button>
-              <Button className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg">
+              <Button 
+                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg"
+                onClick={() => router.push('/app/products')}
+              >
                 <Plus className="h-4 w-4 mr-2" />
                 Add Data Source
               </Button>
