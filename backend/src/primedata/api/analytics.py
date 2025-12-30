@@ -55,17 +55,19 @@ async def get_analytics_metrics(
     Get analytics metrics for the workspace.
     """
     try:
-        # Get workspace
-        workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
-        if not workspace:
-            raise HTTPException(status_code=404, detail="Workspace not found")
+        from uuid import UUID
+        from ..core.scope import ensure_workspace_access
+        
+        # Ensure user has access to the workspace
+        workspace_uuid = UUID(workspace_id)
+        workspace = ensure_workspace_access(db, request, workspace_uuid)
 
-        # Basic counts
-        total_products = db.query(Product).filter(Product.workspace_id == workspace_id).count()
-        total_data_sources = db.query(DataSource).filter(DataSource.workspace_id == workspace_id).count()
+        # Basic counts - filter by workspace_id (already verified access above)
+        total_products = db.query(Product).filter(Product.workspace_id == workspace_uuid).count()
+        total_data_sources = db.query(DataSource).filter(DataSource.workspace_id == workspace_uuid).count()
 
-        # Pipeline runs metrics
-        pipeline_runs = db.query(PipelineRun).filter(PipelineRun.workspace_id == workspace_id)
+        # Pipeline runs metrics - filter by workspace_id (already verified access above)
+        pipeline_runs = db.query(PipelineRun).filter(PipelineRun.workspace_id == workspace_uuid)
         total_pipeline_runs = pipeline_runs.count()
 
         # Success rate calculation
@@ -93,8 +95,8 @@ async def get_analytics_metrics(
             avg_processing_time = (total_time / len(completed_runs)) / 60  # Convert to minutes
 
         # Data quality score (based on violations)
-        # Get violations through product relationship
-        workspace_products = db.query(Product.id).filter(Product.workspace_id == workspace_id).subquery()
+        # Get violations through product relationship - filter by workspace_id (already verified access above)
+        workspace_products = db.query(Product.id).filter(Product.workspace_id == workspace_uuid).subquery()
         total_violations = db.query(DqViolation).filter(DqViolation.product_id.in_(workspace_products)).count()
         # Simple quality score: higher is better, based on violation rate
         data_quality_score = max(0, 100 - (total_violations * 2))  # Each violation reduces score by 2%

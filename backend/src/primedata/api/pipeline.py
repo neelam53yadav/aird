@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from primedata.core.scope import ensure_product_access
+from primedata.core.scope import allowed_workspaces, ensure_product_access
 from primedata.core.security import get_current_user
 from primedata.db.database import get_db
 from primedata.db.models import PipelineRun, PipelineRunStatus, Product, RawFile, RawFileStatus
@@ -484,16 +484,22 @@ async def list_pipeline_runs(
     List pipeline runs for a product.
     """
     # Ensure user has access to the product
-    ensure_product_access(db, request_obj, product_id)
+    product = ensure_product_access(db, request_obj, product_id)
 
     # Sync with Airflow if requested
     if sync:
         _sync_pipeline_runs_with_airflow(db)
 
-    # Get pipeline runs
+    # Get pipeline runs - filter by product_id AND workspace_id for security
+    # This ensures users can only see pipeline runs for products in their workspaces
+    allowed_workspace_ids = allowed_workspaces(request_obj, db)
     runs = (
         db.query(PipelineRun)
-        .filter(PipelineRun.product_id == product_id)
+        .join(Product, PipelineRun.product_id == Product.id)
+        .filter(
+            PipelineRun.product_id == product_id,
+            Product.workspace_id.in_(allowed_workspace_ids)
+        )
         .order_by(PipelineRun.created_at.desc())
         .limit(limit)
         .all()

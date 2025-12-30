@@ -222,8 +222,11 @@ class WorkspaceMember(Base):
     workspace = relationship("Workspace", back_populates="members")
     user = relationship("User", back_populates="workspace_memberships")
 
-    # Unique constraint
-    __table_args__ = (UniqueConstraint("workspace_id", "user_id", name="unique_workspace_user"),)
+    # Unique constraint and indexes
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "user_id", name="unique_workspace_user"),
+        Index("idx_workspace_members_user_id", "user_id"),  # For fast user workspace membership lookups
+    )
 
 
 class Product(Base):
