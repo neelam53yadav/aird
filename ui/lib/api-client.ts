@@ -170,12 +170,31 @@ class ApiClient {
           ? `${this.baseUrl}${path}`
           : `${this.baseUrl}/api/v1/${path}`
 
+      // Read token from cookie (handle URL encoding)
+      // Cookie is NOT httpOnly so we can read it for cross-origin requests
+      const cookieToken = (() => {
+        const cookie = document.cookie
+          .split('; ')
+          .find(row => row.startsWith('primedata_api_token='))
+        if (!cookie) return null
+        const value = cookie.split('=').slice(1).join('=') // Handle = in token
+        return value ? decodeURIComponent(value) : null
+      })()
+
+      // Always include Authorization header if we have a token
+      // This is required for cross-origin requests (different port = different origin)
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      }
+      
+      if (cookieToken) {
+        headers['Authorization'] = `Bearer ${cookieToken}`
+      }
+
       const options: RequestInit = {
         method,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include', // Include cookies for authentication
+        headers,
+        credentials: 'include', // Include cookies for authentication (backup)
       }
 
       if (body) {
