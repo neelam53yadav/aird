@@ -50,6 +50,11 @@ if isinstance(cors_origins, str):
 elif not isinstance(cors_origins, list):
     cors_origins = list(cors_origins)
 
+# Log CORS configuration for debugging
+import logging
+logger = logging.getLogger(__name__)
+logger.info(f"Configuring CORS with origins: {cors_origins}")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,

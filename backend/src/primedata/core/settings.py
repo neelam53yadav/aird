@@ -91,11 +91,26 @@ def get_settings() -> Settings:
         if cors_origins_env:
             try:
                 # Try parsing as JSON array first
-                _settings.CORS_ORIGINS = json.loads(cors_origins_env)
+                parsed = json.loads(cors_origins_env)
+                if isinstance(parsed, list):
+                    _settings.CORS_ORIGINS = parsed
+                else:
+                    # If JSON but not a list, treat as single value
+                    _settings.CORS_ORIGINS = [str(parsed)]
             except (json.JSONDecodeError, ValueError):
                 # If not JSON, treat as comma-separated string
-                _settings.CORS_ORIGINS = [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
+                origins_list = [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
+                if origins_list:
+                    _settings.CORS_ORIGINS = origins_list
+                else:
+                    # Single value
+                    _settings.CORS_ORIGINS = [cors_origins_env.strip()]
         # Ensure CORS_ORIGINS is always a list
         if isinstance(_settings.CORS_ORIGINS, str):
             _settings.CORS_ORIGINS = [_settings.CORS_ORIGINS]
+        
+        # Debug logging (remove in production if needed)
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"CORS_ORIGINS configured: {_settings.CORS_ORIGINS}")
     return _settings

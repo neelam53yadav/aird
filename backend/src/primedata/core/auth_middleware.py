@@ -37,6 +37,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
 
+        # Allow OPTIONS requests (CORS preflight) to pass through without auth
+        if request.method == "OPTIONS":
+            return await call_next(request)
+
         # Check if route allows anonymous access (before any auth checks)
         if self._is_anonymous_route(path):
             # Skip all authentication for anonymous routes
