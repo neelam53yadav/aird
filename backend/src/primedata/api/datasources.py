@@ -21,7 +21,7 @@ from primedata.db.models import DataSource, DataSourceType, Product, RawFile, Ra
 from primedata.ingestion_pipeline.artifact_registry import calculate_checksum
 from primedata.storage.minio_client import minio_client
 from primedata.storage.paths import raw_prefix, safe_filename
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/api/v1/datasources", tags=["DataSources"])
@@ -41,6 +41,8 @@ class DataSourceUpdateRequest(BaseModel):
 
 
 class DataSourceResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)  # Pydantic v2 syntax
+
     id: UUID
     workspace_id: UUID
     product_id: UUID
@@ -50,9 +52,6 @@ class DataSourceResponse(BaseModel):
     last_cursor: Optional[Dict[str, Any]] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
-
-    class Config:
-        orm_mode = True  # Pydantic v1 uses orm_mode instead of from_attributes
 
 
 class TestConnectionResponse(BaseModel):
@@ -118,7 +117,7 @@ async def create_datasource(
     db.commit()
     db.refresh(datasource)
 
-    return DataSourceResponse.from_orm(datasource)
+    return DataSourceResponse.model_validate(datasource)
 
 
 @router.get("/", response_model=List[DataSourceResponse])
@@ -145,7 +144,7 @@ async def list_datasources(
         query = db.query(DataSource).filter(DataSource.workspace_id.in_(allowed_workspace_ids))
 
     datasources = query.all()
-    return [DataSourceResponse.from_orm(datasource) for datasource in datasources]
+    return [DataSourceResponse.model_validate(datasource) for datasource in datasources]
 
 
 @router.get("/{datasource_id}", response_model=DataSourceResponse)
@@ -163,7 +162,7 @@ async def get_datasource(
     # Ensure user has access to the product
     ensure_product_access(db, request, datasource.product_id)
 
-    return DataSourceResponse.from_orm(datasource)
+    return DataSourceResponse.model_validate(datasource)
 
 
 @router.patch("/{datasource_id}", response_model=DataSourceResponse)
@@ -196,7 +195,7 @@ async def update_datasource(
     db.commit()
     db.refresh(datasource)
 
-    return DataSourceResponse.from_orm(datasource)
+    return DataSourceResponse.model_validate(datasource)
 
 
 def _test_connector_config(datasource_type: DataSourceType, config: Dict[str, Any]) -> Tuple[bool, str]:

@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import and_, desc, func, or_
 from sqlalchemy.orm import Session
 
@@ -63,6 +63,8 @@ class DataQualityRuleUpdateRequest(BaseModel):
 class DataQualityRuleResponse(BaseModel):
     """Response model for data quality rules."""
 
+    model_config = ConfigDict(from_attributes=True)  # Pydantic v2 syntax
+
     id: UUID
     product_id: UUID
     workspace_id: UUID
@@ -86,12 +88,11 @@ class DataQualityRuleResponse(BaseModel):
     activated_at: Optional[datetime]
     deprecated_at: Optional[datetime]
 
-    class Config:
-        from_attributes = True
-
 
 class DataQualityRuleAuditResponse(BaseModel):
     """Response model for audit trail."""
+
+    model_config = ConfigDict(from_attributes=True)  # Pydantic v2 syntax
 
     id: UUID
     rule_id: UUID
@@ -103,9 +104,6 @@ class DataQualityRuleAuditResponse(BaseModel):
     change_reason: Optional[str]
     ip_address: Optional[str]
     user_agent: Optional[str]
-
-    class Config:
-        from_attributes = True
 
 
 class ComplianceReportRequest(BaseModel):
@@ -167,7 +165,7 @@ async def create_data_quality_rule(
         db.add(audit_log)
         db.commit()
 
-        return DataQualityRuleResponse.from_orm(rule)
+        return DataQualityRuleResponse.model_validate(rule)
 
     except Exception as e:
         db.rollback()
@@ -225,7 +223,7 @@ async def list_data_quality_rules(
         # Apply pagination and ordering
         rules = query.order_by(desc(DataQualityRule.created_at)).offset(offset).limit(limit).all()
 
-        return [DataQualityRuleResponse.from_orm(rule) for rule in rules]
+        return [DataQualityRuleResponse.model_validate(rule) for rule in rules]
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to list rules: {str(e)}")
@@ -326,7 +324,7 @@ async def update_data_quality_rule(
 
         db.commit()
 
-        return DataQualityRuleResponse.from_orm(rule)
+        return DataQualityRuleResponse.model_validate(rule)
 
     except HTTPException:
         raise
@@ -363,7 +361,7 @@ async def get_rule_audit_trail(
             .all()
         )
 
-        return [DataQualityRuleAuditResponse.from_orm(log) for log in audit_logs]
+        return [DataQualityRuleAuditResponse.model_validate(log) for log in audit_logs]
 
     except HTTPException:
         raise

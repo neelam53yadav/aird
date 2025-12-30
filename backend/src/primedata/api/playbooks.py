@@ -16,7 +16,7 @@ from primedata.core.security import get_current_user
 from primedata.db.database import get_db
 from primedata.db.models import CustomPlaybook
 from primedata.ingestion_pipeline.aird_stages.playbooks import list_playbooks, load_playbook_yaml, refresh_index
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/api/v1/playbooks", tags=["Playbooks"])
@@ -249,6 +249,8 @@ class CustomPlaybookUpdateRequest(BaseModel):
 
 
 class CustomPlaybookResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)  # Pydantic v2 syntax
+
     id: UUID
     workspace_id: UUID
     owner_user_id: UUID
@@ -260,9 +262,6 @@ class CustomPlaybookResponse(BaseModel):
     is_active: bool
     created_at: datetime
     updated_at: Optional[datetime]
-
-    class Config:
-        orm_mode = True
 
 
 @router.post("/custom", response_model=CustomPlaybookResponse, status_code=status.HTTP_201_CREATED)
@@ -340,7 +339,7 @@ async def create_custom_playbook(
 
     logger.info(f"Created custom playbook {custom_playbook.playbook_id} in workspace {workspace_id}")
 
-    return CustomPlaybookResponse.from_orm(custom_playbook)
+    return CustomPlaybookResponse.model_validate(custom_playbook)
 
 
 @router.get("/custom", response_model=List[CustomPlaybookResponse])
@@ -364,7 +363,7 @@ async def list_custom_playbooks(
             .all()
         )
 
-        return [CustomPlaybookResponse.from_orm(pb) for pb in custom_playbooks]
+        return [CustomPlaybookResponse.model_validate(pb) for pb in custom_playbooks]
     except Exception as db_error:
         # If table doesn't exist, return empty list
         if "does not exist" in str(db_error) or "UndefinedTable" in str(type(db_error).__name__):
@@ -402,7 +401,7 @@ async def get_custom_playbook(
         if not custom_playbook:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Custom playbook '{playbook_id}' not found")
 
-        return CustomPlaybookResponse.from_orm(custom_playbook)
+        return CustomPlaybookResponse.model_validate(custom_playbook)
     except HTTPException:
         raise
     except Exception as db_error:
@@ -468,7 +467,7 @@ async def update_custom_playbook(
 
         logger.info(f"Updated custom playbook {custom_playbook.playbook_id}")
 
-        return CustomPlaybookResponse.from_orm(custom_playbook)
+        return CustomPlaybookResponse.model_validate(custom_playbook)
     except HTTPException:
         raise
     except Exception as db_error:

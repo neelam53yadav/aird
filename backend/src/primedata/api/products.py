@@ -20,7 +20,7 @@ from primedata.core.settings import get_settings
 from primedata.core.user_utils import get_user_id
 from primedata.db.database import get_db
 from primedata.db.models import PipelineRun, PipelineRunStatus, Product, ProductStatus, Workspace
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -55,6 +55,8 @@ class ProductUpdateRequest(BaseModel):
 
 
 class ProductResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)  # Pydantic v2 syntax
+
     id: UUID
     workspace_id: UUID
     owner_user_id: UUID
@@ -76,9 +78,6 @@ class ProductResponse(BaseModel):
     embedding_config: Optional[Dict[str, Any]] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
-
-    class Config:
-        orm_mode = True  # Pydantic v1 uses orm_mode instead of from_attributes
 
 
 class TrustMetricsResponse(BaseModel):
@@ -173,7 +172,7 @@ async def create_product(
 
         logger.info(f"Product created with ID {product.id}. Saved chunking_config: {product.chunking_config}")
 
-        return ProductResponse.from_orm(product)
+        return ProductResponse.model_validate(product)
     except HTTPException:
         # Re-raise HTTP exceptions (they already have proper error messages)
         raise
@@ -1104,6 +1103,8 @@ async def download_trust_report(
 class ChunkMetadataResponse(BaseModel):
     """Chunk metadata response (M4)."""
 
+    model_config = ConfigDict(from_attributes=True)  # Pydantic v2 syntax
+
     id: UUID
     chunk_id: str
     score: Optional[float]
@@ -1113,9 +1114,6 @@ class ChunkMetadataResponse(BaseModel):
     field_name: Optional[str]
     extra_tags: Optional[Dict[str, Any]]
     created_at: datetime
-
-    class Config:
-        orm_mode = True  # Pydantic v1 uses orm_mode instead of from_attributes
 
 
 @router.get("/{product_id}/embedding-diagnostics")
