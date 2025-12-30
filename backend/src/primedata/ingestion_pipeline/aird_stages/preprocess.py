@@ -204,12 +204,12 @@ class PreprocessStage(AirdStage):
                     std_logger.info(load_msg)
                     try:
                         self.logger.info(
-                            f"[PreprocessStage] About to call storage.get_raw_text(file_stem={file_stem}, storage_key={storage_key}, storage_bucket={storage_bucket})"
+                            f"[PreprocessStage] About to call storage.get_raw_text(file_stem={file_stem}, minio_key={storage_key}, minio_bucket={storage_bucket})"
                         )
                         std_logger.info(
-                            f"[PreprocessStage] About to call storage.get_raw_text(file_stem={file_stem}, storage_key={storage_key}, storage_bucket={storage_bucket})"
+                            f"[PreprocessStage] About to call storage.get_raw_text(file_stem={file_stem}, minio_key={storage_key}, minio_bucket={storage_bucket})"
                         )
-                        raw_text = storage.get_raw_text(file_stem, storage_key=storage_key, storage_bucket=storage_bucket)
+                        raw_text = storage.get_raw_text(file_stem, minio_key=storage_key, minio_bucket=storage_bucket)
                         self.logger.info(
                             f"[PreprocessStage] storage.get_raw_text() returned: {'None' if raw_text is None else f'{len(raw_text)} characters'}"
                         )
