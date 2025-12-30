@@ -9,7 +9,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from loguru import logger
-from primedata.core.scope import ensure_product_access
+from primedata.core.scope import allowed_workspaces, ensure_product_access
 from primedata.core.security import get_current_user
 from primedata.db.database import get_db
 from primedata.db.models import ACL, ACLAccessType
@@ -113,14 +113,20 @@ async def list_acls(
         if not product:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found or access denied")
 
-    # Get ACLs
+    # Get ACLs with workspace filtering for security
     if user_id:
         acls = get_acls_for_user(db, user_id, product_id)
     elif product_id:
         acls = get_acls_for_product(db, product_id, None)
     else:
-        # List all ACLs (admin only - in practice, you might want to restrict this)
-        acls = db.query(ACL).all()
+        # List ACLs only for products in user's accessible workspaces
+        # This prevents users from seeing ACLs for products they don't have access to
+        from primedata.db.models import Product
+        
+        allowed_workspace_ids = allowed_workspaces(request, db)
+        # Get product IDs from accessible workspaces
+        accessible_products = db.query(Product.id).filter(Product.workspace_id.in_(allowed_workspace_ids)).subquery()
+        acls = db.query(ACL).filter(ACL.product_id.in_(accessible_products)).all()
 
     return [
         ACLResponse(

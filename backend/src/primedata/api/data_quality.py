@@ -8,7 +8,7 @@ and viewing quality violations.
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -72,14 +72,18 @@ class DataQualityReportResponse(BaseModel):
 
 @router.get("/products/{product_id}/rules", response_model=DataQualityRulesResponse)
 async def get_data_quality_rules(
-    product_id: str, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)
+    product_id: str, 
+    request: Request = None,
+    db: Session = Depends(get_db), 
+    current_user: dict = Depends(get_current_user)
 ):
     """Get data quality rules for a product."""
     try:
+        from uuid import UUID
+        from ..core.scope import ensure_product_access
+        
         # Verify product exists and user has access
-        product = db.query(Product).filter(Product.id == product_id).first()
-        if not product:
-            raise HTTPException(status_code=404, detail="Product not found")
+        product = ensure_product_access(db, request, UUID(product_id))
 
         # Get rules from database
         rules = (
@@ -152,20 +156,22 @@ async def get_data_quality_rules(
 @router.put("/products/{product_id}/rules", response_model=DataQualityRulesResponse)
 async def update_data_quality_rules(
     product_id: str,
-    request: DataQualityRulesRequest,
+    request_body: DataQualityRulesRequest,
+    request: Request = None,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     """Update data quality rules for a product."""
     try:
+        from uuid import UUID
+        from ..core.scope import ensure_product_access
+        
         # Verify product exists and user has access
-        product = db.query(Product).filter(Product.id == product_id).first()
-        if not product:
-            raise HTTPException(status_code=404, detail="Product not found")
+        product = ensure_product_access(db, request, UUID(product_id))
 
         # Validate rules
         try:
-            rules = DataQualityRules(**request.rules)
+            rules = DataQualityRules(**request_body.rules)
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Invalid rules format: {str(e)}")
 
@@ -181,7 +187,7 @@ async def update_data_quality_rules(
 
         # Create new rules in database
         new_rules = []
-        for rule_type, rule_list in request.rules.items():
+        for rule_type, rule_list in request_body.rules.items():
             if rule_type.endswith("_rules") and isinstance(rule_list, list):
                 for rule_data in rule_list:
                     # Map frontend fields to configuration object
@@ -259,7 +265,7 @@ async def update_data_quality_rules(
             version=1,
             created_at=datetime.utcnow().isoformat(),
             updated_at=datetime.utcnow().isoformat(),
-            rules=request.rules,
+            rules=request_body.rules,
         )
 
     except HTTPException:
@@ -275,15 +281,17 @@ async def get_data_quality_violations(
     version: Optional[int] = Query(None, description="Specific version to get violations for"),
     severity: Optional[str] = Query(None, description="Filter by severity level"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of violations to return"),
+    request: Request = None,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     """Get data quality violations for a product."""
     try:
+        from uuid import UUID
+        from ..core.scope import ensure_product_access
+        
         # Verify product exists and user has access
-        product = db.query(Product).filter(Product.id == product_id).first()
-        if not product:
-            raise HTTPException(status_code=404, detail="Product not found")
+        product = ensure_product_access(db, request, UUID(product_id))
 
         # Build query
         query = db.query(DqViolation).filter(DqViolation.product_id == product_id)
@@ -335,15 +343,17 @@ async def get_data_quality_violations(
 async def get_data_quality_report(
     product_id: str,
     version: Optional[int] = Query(None, description="Specific version to get report for"),
+    request: Request = None,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     """Get comprehensive data quality report for a product."""
     try:
+        from uuid import UUID
+        from ..core.scope import ensure_product_access
+        
         # Verify product exists and user has access
-        product = db.query(Product).filter(Product.id == product_id).first()
-        if not product:
-            raise HTTPException(status_code=404, detail="Product not found")
+        product = ensure_product_access(db, request, UUID(product_id))
 
         # Get violations
         query = db.query(DqViolation).filter(DqViolation.product_id == product_id)
@@ -420,14 +430,18 @@ async def get_data_quality_report(
 
 @router.delete("/products/{product_id}/rules")
 async def delete_data_quality_rules(
-    product_id: str, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)
+    product_id: str, 
+    request: Request = None,
+    db: Session = Depends(get_db), 
+    current_user: dict = Depends(get_current_user)
 ):
     """Delete data quality rules for a product."""
     try:
+        from uuid import UUID
+        from ..core.scope import ensure_product_access
+        
         # Verify product exists and user has access
-        product = db.query(Product).filter(Product.id == product_id).first()
-        if not product:
-            raise HTTPException(status_code=404, detail="Product not found")
+        product = ensure_product_access(db, request, UUID(product_id))
 
         # Delete rules from MinIO
         minio_client = MinIOClient()
@@ -450,15 +464,17 @@ async def delete_data_quality_rules(
 async def validate_data_quality_rules(
     product_id: str,
     rules: DataQualityRulesRequest,
+    request: Request = None,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     """Validate data quality rules without saving them."""
     try:
+        from uuid import UUID
+        from ..core.scope import ensure_product_access
+        
         # Verify product exists and user has access
-        product = db.query(Product).filter(Product.id == product_id).first()
-        if not product:
-            raise HTTPException(status_code=404, detail="Product not found")
+        product = ensure_product_access(db, request, UUID(product_id))
 
         # Validate rules
         try:

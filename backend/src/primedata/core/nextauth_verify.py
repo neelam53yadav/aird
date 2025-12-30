@@ -318,7 +318,10 @@ def verify_nextauth_token(token: str) -> Optional[Dict[str, Any]]:
 
                                             # Method 5: Try base64 decoding
                                             try:
-                                                secret_b64_decoded = base64.b64decode(secret + "==")
+                                                # Proper base64 padding: length should be multiple of 4
+                                                padding_needed = (4 - len(secret) % 4) % 4
+                                                secret_with_padding = secret + "=" * padding_needed
+                                                secret_b64_decoded = base64.b64decode(secret_with_padding)
                                                 if len(secret_b64_decoded) >= 32:
                                                     key_b64 = secret_b64_decoded[:32]
                                                     logger.info("=" * 60)

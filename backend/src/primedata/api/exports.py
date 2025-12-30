@@ -14,10 +14,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from ..core.scope import ensure_product_access
 from ..core.security import get_current_user
 from ..db.database import get_db
 from ..db.models import Product, Workspace
@@ -59,7 +60,8 @@ class CreateExportResponse(BaseModel):
 @router.post("/{product_id}/create", response_model=CreateExportResponse)
 async def create_export_bundle(
     product_id: str,
-    request: CreateExportRequest,
+    request_body: CreateExportRequest,
+    request: Request = None,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
@@ -68,7 +70,8 @@ async def create_export_bundle(
 
     Args:
         product_id: ID of the product to export
-        request: Export creation request with optional version
+        request_body: Export creation request with optional version
+        request: FastAPI request object
         db: Database session
         current_user: Current authenticated user
 
@@ -76,21 +79,21 @@ async def create_export_bundle(
         Export bundle information with download URL
     """
     try:
-        # Get product
-        product = db.query(Product).filter(Product.id == product_id).first()
-        if not product:
-            raise HTTPException(status_code=404, detail="Product not found")
+        from uuid import UUID
+        
+        # Ensure user has access to the product
+        product = ensure_product_access(db, request, UUID(product_id))
 
         # Determine version to export
-        if request.version is None:
+        if request_body.version is None:
             # Use current version
             version = product.current_version
-        elif request.version == "prod":
+        elif request_body.version == "prod":
             # Use promoted version
             version = product.promoted_version or product.current_version
-        elif isinstance(request.version, int):
+        elif isinstance(request_body.version, int):
             # Use specified version
-            version = request.version
+            version = request_body.version
         else:
             # Invalid version format
             raise HTTPException(status_code=400, detail="Invalid version format. Use integer, 'prod', or null")
@@ -128,6 +131,7 @@ async def create_export_bundle(
 @router.get("", response_model=List[ExportBundleResponse])
 async def list_export_bundles(
     product_id: str = Query(..., description="Product ID to list exports for"),
+    request: Request = None,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
@@ -136,6 +140,7 @@ async def list_export_bundles(
 
     Args:
         product_id: ID of the product to list exports for
+        request: FastAPI request object
         db: Database session
         current_user: Current authenticated user
 
@@ -143,10 +148,10 @@ async def list_export_bundles(
         List of export bundles with download URLs
     """
     try:
+        from uuid import UUID
+        
         # Verify product exists and user has access
-        product = db.query(Product).filter(Product.id == product_id).first()
-        if not product:
-            raise HTTPException(status_code=404, detail="Product not found")
+        product = ensure_product_access(db, request, UUID(product_id))
 
         # Get workspace
         workspace = db.query(Workspace).filter(Workspace.id == product.workspace_id).first()
