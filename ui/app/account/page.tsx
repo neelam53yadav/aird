@@ -33,7 +33,7 @@ export default function AccountPage() {
           if (!result.success) {
             console.warn("Token exchange failed")
             setLoading(false)
-            return null
+            return undefined as any // Return undefined to match fetch return type
           }
           // Fetch user profile
           return fetch("/api/v1/users/me", {
@@ -45,8 +45,8 @@ export default function AccountPage() {
             },
           })
         })
-        .then((res: Response | null) => {
-          if (!res) return null
+        .then((res?: Response) => {
+          if (!res) return undefined
           return res.json()
         })
         .then((data: any) => {
@@ -62,8 +62,8 @@ export default function AccountPage() {
             },
           })
         })
-        .then((res: Response | null) => {
-          if (!res) return null
+        .then((res?: Response) => {
+          if (!res) return undefined
           return res.json()
         })
         .then((data: any) => {
