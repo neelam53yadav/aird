@@ -262,10 +262,10 @@ class CustomPlaybookResponse(BaseModel):
 @router.post("/custom", response_model=CustomPlaybookResponse, status_code=status.HTTP_201_CREATED)
 async def create_custom_playbook(
     request_body: CustomPlaybookCreateRequest,
+    request: Request,
     workspace_id: UUID = Query(..., description="Workspace ID"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
-    request: Request,
 ):
     """
     Create a custom playbook based on an existing playbook or from scratch.
@@ -339,10 +339,10 @@ async def create_custom_playbook(
 
 @router.get("/custom", response_model=List[CustomPlaybookResponse])
 async def list_custom_playbooks(
+    request: Request,
     workspace_id: UUID = Query(..., description="Workspace ID"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
-    request: Request,
 ):
     """
     List all custom playbooks in a workspace.
@@ -370,10 +370,10 @@ async def list_custom_playbooks(
 @router.get("/custom/{playbook_id}", response_model=CustomPlaybookResponse)
 async def get_custom_playbook(
     playbook_id: str,
+    request: Request,
     workspace_id: UUID = Query(..., description="Workspace ID"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
-    request: Request,
 ):
     """
     Get a specific custom playbook.
@@ -412,11 +412,11 @@ async def get_custom_playbook(
 @router.patch("/custom/{playbook_id}", response_model=CustomPlaybookResponse)
 async def update_custom_playbook(
     playbook_id: str,
+    request_body: CustomPlaybookUpdateRequest,
+    request: Request,
     workspace_id: UUID = Query(..., description="Workspace ID"),
-    request_body: CustomPlaybookUpdateRequest = ...,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
-    request: Request,
 ):
     """
     Update a custom playbook.
@@ -492,10 +492,10 @@ async def update_custom_playbook(
 @router.delete("/custom/{playbook_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_custom_playbook(
     playbook_id: str,
+    request: Request,
     workspace_id: UUID = Query(..., description="Workspace ID"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
-    request: Request,
 ):
     """
     Delete (soft delete) a custom playbook.

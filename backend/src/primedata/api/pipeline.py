@@ -474,9 +474,9 @@ async def trigger_pipeline(
 @router.get("/runs", response_model=List[PipelineRunResponse])
 async def list_pipeline_runs(
     product_id: UUID,
+    request_obj: Request,
     limit: int = 10,
     sync: bool = Query(True, description="Sync with Airflow before returning"),
-    request_obj: Request,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
