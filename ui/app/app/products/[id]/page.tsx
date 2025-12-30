@@ -19,6 +19,7 @@ import { AITrustScoreDisplay } from '@/components/AITrustScoreDisplay'
 import { ChunkMetadataDisplay } from '@/components/ChunkMetadataDisplay'
 import { ACLManagement } from '@/components/ACLManagement'
 import { useToast } from '@/components/ui/toast'
+import PipelineDetailsModal from '@/components/PipelineDetailsModal'
 
 interface Product {
   id: string
@@ -95,6 +96,7 @@ export default function ProductDetailPage() {
   const [runningPipeline, setRunningPipeline] = useState(false)
   const [pipelineConflict, setPipelineConflict] = useState<any>(null)
   const [promotingVersion, setPromotingVersion] = useState<number | null>(null)
+  const [selectedRunForDetails, setSelectedRunForDetails] = useState<PipelineRun | null>(null)
   const [downloadingValidationSummary, setDownloadingValidationSummary] = useState(false)
   const [downloadingTrustReport, setDownloadingTrustReport] = useState(false)
   
@@ -1293,16 +1295,12 @@ export default function ProductDetailPage() {
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">
                                   <div className="flex space-x-2">
-                                    {run.dag_run_id && (
-                                      <a
-                                        href={`${process.env.NEXT_PUBLIC_AIRFLOW_URL || 'http://localhost:8080'}/dags/primedata_simple/grid?dag_run_id=${run.dag_run_id}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-blue-600 hover:text-blue-900"
-                                      >
-                                        View in Airflow
-                                      </a>
-                                    )}
+                                    <button
+                                      onClick={() => setSelectedRunForDetails(run)}
+                                      className="text-blue-600 hover:text-blue-900 text-sm font-medium"
+                                    >
+                                      View Details
+                                    </button>
                                     {run.status === 'succeeded' && (
                                       <button
                                         onClick={() => handlePromoteVersion(run.version)}
@@ -2021,6 +2019,18 @@ export default function ProductDetailPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Pipeline Details Modal */}
+      {selectedRunForDetails && (
+        <PipelineDetailsModal
+          isOpen={!!selectedRunForDetails}
+          onClose={() => setSelectedRunForDetails(null)}
+          runId={selectedRunForDetails.id}
+          runVersion={selectedRunForDetails.version}
+          runStatus={selectedRunForDetails.status}
+          initialMetrics={selectedRunForDetails.metrics}
+        />
       )}
     </AppLayout>
   )
