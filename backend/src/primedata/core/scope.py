@@ -26,25 +26,19 @@ def allowed_workspaces(request: Request, db: Optional[Session] = None) -> List[U
 
     user_id = UUID(request.state.user["sub"])
 
-    # If database session is provided, query actual workspace memberships (more reliable, especially in dev mode)
+    # If database session is provided, ALWAYS query actual workspace memberships (more reliable)
+    # This is the source of truth - never fall back to token workspaces when we have a DB session
     if db:
-        from primedata.core.settings import get_settings
+        # Always use database query when db is provided (both dev and production)
+        # This ensures we're using the actual workspace memberships, not stale token data
+        memberships = db.query(WorkspaceMember).filter(WorkspaceMember.user_id == user_id).all()
+        
+        # Return database results - even if empty (user has no workspace access)
+        # Never fall back to token workspaces when we have a database session
+        return [m.workspace_id for m in memberships]
 
-        settings = get_settings()
-
-        # In dev mode, always query database for actual memberships (more accurate than middleware)
-        # In production, prefer database query for consistency, but can fall back to token
-        if settings.DISABLE_AUTH:
-            # Dev mode: always use database
-            memberships = db.query(WorkspaceMember).filter(WorkspaceMember.user_id == user_id).all()
-            return [m.workspace_id for m in memberships]
-        else:
-            # Production: try database first, fall back to token if needed
-            memberships = db.query(WorkspaceMember).filter(WorkspaceMember.user_id == user_id).all()
-            if memberships:
-                return [m.workspace_id for m in memberships]
-
-    # Fallback: use workspaces from user token/state
+    # Fallback: use workspaces from user token/state (only when no DB session is provided)
+    # This should rarely happen in production, but is needed for some edge cases
     user_workspaces = request.state.user.get("workspaces", [])
     # Handle both string and UUID workspace IDs
     result = []
