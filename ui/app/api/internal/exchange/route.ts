@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getToken } from "next-auth/jwt"
-import jwt from "jsonwebtoken"
 
 export async function POST(request: NextRequest) {
   try {
