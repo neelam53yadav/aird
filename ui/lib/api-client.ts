@@ -109,14 +109,14 @@ export type PipelineRun = {
   [key: string]: any
 }
 
+import { getApiUrl } from "./config"
+
 class ApiClient {
   private baseUrl: string
 
   constructor() {
-    // Get API base URL from environment variable, with fallback
-    this.baseUrl = process.env.NEXT_PUBLIC_API_BASE || 
-                   process.env.NEXT_PUBLIC_API_URL || 
-                   'http://localhost:8000'
+    // Get API base URL from centralized config
+    this.baseUrl = getApiUrl()
   }
 
   /**
@@ -228,27 +228,43 @@ class ApiClient {
         }
       }
 
+      // List of endpoints that should NEVER have auth headers
+      const anonymousEndpoints = [
+        '/api/v1/auth/login',
+        '/api/v1/auth/signup',
+        '/api/v1/auth/validate-email',
+        '/api/v1/auth/verify-email',
+        '/api/v1/auth/resend-verification',
+      ]
+      
+      // Check if this is an anonymous endpoint
+      const isAnonymousEndpoint = anonymousEndpoints.some(endpoint => url.includes(endpoint))
+
       // Debug logging
       console.log('API Client - Request:', {
         url,
         method,
         hasCookie: !!cookieToken,
         cookieLength: cookieToken?.length || 0,
+        isAnonymousEndpoint,
         allCookies: document.cookie.substring(0, 200), // First 200 chars
       })
 
       // Always include Authorization header if we have a token
+      // BUT skip for anonymous endpoints (login, signup, etc.)
       // This is required for cross-origin requests (different port = different origin)
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
       }
       
-      if (cookieToken) {
+      if (cookieToken && !isAnonymousEndpoint) {
         headers['Authorization'] = `Bearer ${cookieToken}`
         console.log('API Client - Authorization header set:', {
           hasHeader: true,
           tokenPrefix: cookieToken.substring(0, 20) + '...',
         })
+      } else if (cookieToken && isAnonymousEndpoint) {
+        console.log('API Client - Skipping Authorization header for anonymous endpoint:', url)
       } else {
         console.warn('API Client - No token found in cookie!', {
           allCookies: document.cookie,
