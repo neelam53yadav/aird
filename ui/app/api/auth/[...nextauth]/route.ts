@@ -1,6 +1,7 @@
 import NextAuth from "next-auth"
 import GoogleProvider from "next-auth/providers/google"
 import CredentialsProvider from "next-auth/providers/credentials"
+import { getApiUrl } from "@/lib/config"
 
 const handler = NextAuth({
   providers: [
@@ -16,33 +17,61 @@ const handler = NextAuth({
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          return null
+          throw new Error("Email and password are required")
         }
         
-        // Call your backend login API
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
-        const res = await fetch(`${apiUrl}/api/v1/auth/login`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: credentials.email,
-            password: credentials.password,
-          }),
-        })
-        
-        if (!res.ok) {
-          return null
-        }
-        
-        const data = await res.json()
-        
-        // Return user object that NextAuth expects
-        return {
-          id: data.user.id,
-          email: data.user.email,
-          name: data.user.name,
-          image: data.user.picture_url,
-          access_token: data.access_token, // Store backend token for session exchange
+        try {
+          // Call your backend login API
+          const apiUrl = getApiUrl()
+          const res = await fetch(`${apiUrl}/api/v1/auth/login`, {
+            method: "POST",
+            headers: { 
+              "Content-Type": "application/json",
+              // Explicitly don't include any auth headers or cookies
+            },
+            // Explicitly exclude cookies and credentials
+            credentials: "omit",
+            body: JSON.stringify({
+              email: credentials.email,
+              password: credentials.password,
+            }),
+          })
+          
+          if (!res.ok) {
+            // Try to get error message from backend
+            let errorMessage = "Invalid email or password"
+            try {
+              const errorData = await res.json()
+              if (errorData.detail) {
+                errorMessage = errorData.detail
+              }
+            } catch {
+              // If parsing fails, use default message
+            }
+            throw new Error(errorMessage)
+          }
+          
+          const data = await res.json()
+          
+          // Validate response structure
+          if (!data.user || !data.access_token) {
+            throw new Error("Invalid response from server")
+          }
+          
+          // Return user object that NextAuth expects
+          return {
+            id: data.user.id,
+            email: data.user.email,
+            name: data.user.name,
+            image: data.user.picture_url,
+            access_token: data.access_token, // Store backend token for session exchange
+          }
+        } catch (error) {
+          // Re-throw the error so NextAuth can pass it to the client
+          if (error instanceof Error) {
+            throw error
+          }
+          throw new Error("Authentication failed")
         }
       }
     })
@@ -83,31 +112,23 @@ const handler = NextAuth({
       return session
     },
     redirect: async ({ url, baseUrl }) => {
-      console.log("Redirect callback called:", { url, baseUrl })
-      
       // Always redirect to dashboard after successful login
       if (url === baseUrl || url === `${baseUrl}/`) {
-        console.log("Redirecting from base URL to dashboard")
         return `${baseUrl}/dashboard`
       }
       
       // If it's a relative URL, make it absolute
       if (url.startsWith("/")) {
-        const redirectUrl = `${baseUrl}${url}`
-        console.log("Redirecting to:", redirectUrl)
-        return redirectUrl
+        return `${baseUrl}${url}`
       }
       
       // If it's the same origin, allow it
       if (url.startsWith(baseUrl)) {
-        console.log("Same origin, allowing:", url)
         return url
       }
       
       // Default redirect to dashboard
-      const defaultRedirect = `${baseUrl}/dashboard`
-      console.log("Default redirect to:", defaultRedirect)
-      return defaultRedirect
+      return `${baseUrl}/dashboard`
     },
   },
   pages: {
