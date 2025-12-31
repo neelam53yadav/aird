@@ -1119,10 +1119,14 @@ def fingerprint(**context) -> Dict[str, Any]:
 
         # Get scoring result
         scoring_result = context.get("task_instance").xcom_pull(task_ids="score")
+        
+        # Get preprocess result for preprocessing stats
+        preprocess_result = context.get("task_instance").xcom_pull(task_ids="preprocess")
 
         stage_context = {
             "storage": storage,
             "scoring_result": scoring_result,
+            "preprocess_result": preprocess_result,  # Add preprocessing stats for Chunk Boundary Quality
         }
 
         result = fingerprint_stage.execute(stage_context)
