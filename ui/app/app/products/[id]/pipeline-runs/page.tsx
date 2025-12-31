@@ -22,13 +22,17 @@ export default function PipelineRunsPage() {
   const [triggering, setTriggering] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [pipelineConflict, setPipelineConflict] = useState<any>(null)
+  const [currentPage, setCurrentPage] = useState(0)
+  const [totalRuns, setTotalRuns] = useState(0)
+  const RUNS_PER_PAGE = 20
 
-  const loadPipelineRuns = useCallback(async (showLoading = true) => {
+  const loadPipelineRuns = useCallback(async (page: number, showLoading = true) => {
     if (showLoading) setLoading(true)
     setError(null)
     
     try {
-      const response = await apiClient.getPipelineRuns(productId, 50)
+      const offset = page * RUNS_PER_PAGE
+      const response = await apiClient.getPipelineRuns(productId, RUNS_PER_PAGE, offset)
       
       if (response.error) {
         setError(response.error)
@@ -37,7 +41,15 @@ export default function PipelineRunsPage() {
           message: `Failed to load pipeline runs: ${response.error}`,
         })
       } else if (response.data) {
-        setPipelineRuns(response.data)
+        // Handle both old format (array) and new format (object with runs, total, etc.)
+        if (Array.isArray(response.data)) {
+          setPipelineRuns(response.data)
+          setTotalRuns(response.data.length)
+        } else {
+          setPipelineRuns(response.data.runs || [])
+          setTotalRuns(response.data.total || 0)
+        }
+        setCurrentPage(page)
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load pipeline runs'
@@ -52,8 +64,9 @@ export default function PipelineRunsPage() {
   }, [productId, addToast])
 
   useEffect(() => {
-    loadPipelineRuns()
-  }, [loadPipelineRuns])
+    loadPipelineRuns(0, true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productId]) // Only reload when productId changes
 
   // Poll for running pipelines
   useEffect(() => {
@@ -104,7 +117,7 @@ export default function PipelineRunsPage() {
         })
         // Refresh runs after a short delay
         setTimeout(() => {
-          loadPipelineRuns()
+          loadPipelineRuns(currentPage, false) // Don't show loading spinner during refresh
         }, 1000)
       }
     } catch (err) {
@@ -132,7 +145,7 @@ export default function PipelineRunsPage() {
           type: 'success',
           message: `Synced ${response.data.updated_count} pipeline runs`,
         })
-        loadPipelineRuns()
+        loadPipelineRuns(currentPage, false)
       }
     } catch (err) {
       addToast({
@@ -157,7 +170,7 @@ export default function PipelineRunsPage() {
           type: 'success',
           message: 'Pipeline run cancelled successfully',
         })
-        loadPipelineRuns()
+        loadPipelineRuns(currentPage, false)
       }
     } catch (err) {
       addToast({
@@ -461,6 +474,36 @@ export default function PipelineRunsPage() {
                 </tbody>
               </table>
             </div>
+            {/* Pagination Controls */}
+            {totalRuns > RUNS_PER_PAGE && (
+              <div className="mt-4 flex items-center justify-between border-t border-gray-200 px-6 py-4 bg-white">
+                <div className="text-sm text-gray-700">
+                  Showing {currentPage * RUNS_PER_PAGE + 1} to{' '}
+                  {Math.min((currentPage + 1) * RUNS_PER_PAGE, totalRuns)} of{' '}
+                  {totalRuns} runs
+                </div>
+                <div className="flex space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => loadPipelineRuns(currentPage - 1)}
+                    disabled={currentPage === 0 || loading}
+                    className="px-3 py-1.5"
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => loadPipelineRuns(currentPage + 1)}
+                    disabled={(currentPage + 1) * RUNS_PER_PAGE >= totalRuns || loading}
+                    className="px-3 py-1.5"
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
