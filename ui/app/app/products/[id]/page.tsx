@@ -444,23 +444,23 @@ export default function ProductDetailPage() {
     }
   }
 
-  const loadPipelineRuns = async (page: number = pipelineRunsPage) => {
+  const loadPipelineRuns = async () => {
     if (!product) return
     
     setLoadingPipelineRuns(true)
     try {
-      const offset = page * PIPELINE_RUNS_PER_PAGE
-      const response = await apiClient.getPipelineRuns(product.id, PIPELINE_RUNS_PER_PAGE, offset)
+      // Always load only the first 5 runs (no pagination on overview page)
+      const response = await apiClient.getPipelineRuns(product.id, 5, 0)
       if (response.data) {
         // Handle both old format (array) and new format (object with runs, total, etc.)
         if (Array.isArray(response.data)) {
-          setPipelineRuns(response.data)
+          setPipelineRuns(response.data.slice(0, 5)) // Ensure only 5
           setPipelineRunsTotal(response.data.length)
         } else {
-          setPipelineRuns(response.data.runs || [])
+          setPipelineRuns((response.data.runs || []).slice(0, 5)) // Ensure only 5
           setPipelineRunsTotal(response.data.total || 0)
         }
-        setPipelineRunsPage(page)
+        setPipelineRunsPage(0) // Always reset to page 0
       }
     } catch (err) {
       console.error('Failed to load pipeline runs:', err)
@@ -1269,7 +1269,17 @@ export default function ProductDetailPage() {
                   
                   {/* Recent Runs Table */}
                   <div>
-                    <h3 className="text-md font-medium text-gray-900 mb-3">Recent Runs</h3>
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-md font-medium text-gray-900">Recent Runs</h3>
+                      {pipelineRunsTotal > 5 && (
+                        <Link 
+                          href={`/app/products/${productId}/pipeline-runs`}
+                          className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                        >
+                          View All ({pipelineRunsTotal})
+                        </Link>
+                      )}
+                    </div>
                     {loadingPipelineRuns ? (
                       <TableSkeleton rows={3} cols={5} />
                     ) : pipelineRuns.length === 0 ? (
@@ -1325,12 +1335,12 @@ export default function ProductDetailPage() {
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">
                                   <div className="flex space-x-2">
-                                    <button
-                                      onClick={() => setSelectedRunForDetails(run)}
+                                    <Link
+                                      href={`/app/products/${productId}/pipeline-runs`}
                                       className="text-blue-600 hover:text-blue-900 text-sm font-medium"
                                     >
                                       View Details
-                                    </button>
+                                    </Link>
                                     {run.status === 'succeeded' && (
                                       <button
                                         onClick={() => handlePromoteVersion(run.version)}
@@ -1357,32 +1367,7 @@ export default function ProductDetailPage() {
                             ))}
                           </tbody>
                         </table>
-                        {/* Pagination Controls */}
-                        {pipelineRunsTotal > PIPELINE_RUNS_PER_PAGE && (
-                          <div className="mt-4 flex items-center justify-between border-t border-gray-200 px-6 py-3 bg-white">
-                            <div className="text-sm text-gray-700">
-                              Showing {pipelineRunsPage * PIPELINE_RUNS_PER_PAGE + 1} to{' '}
-                              {Math.min((pipelineRunsPage + 1) * PIPELINE_RUNS_PER_PAGE, pipelineRunsTotal)} of{' '}
-                              {pipelineRunsTotal} runs
-                            </div>
-                            <div className="flex space-x-2">
-                              <button
-                                onClick={() => loadPipelineRuns(pipelineRunsPage - 1)}
-                                disabled={pipelineRunsPage === 0 || loadingPipelineRuns}
-                                className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                              >
-                                Previous
-                              </button>
-                              <button
-                                onClick={() => loadPipelineRuns(pipelineRunsPage + 1)}
-                                disabled={(pipelineRunsPage + 1) * PIPELINE_RUNS_PER_PAGE >= pipelineRunsTotal || loadingPipelineRuns}
-                                className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                              >
-                                Next
-                              </button>
-                            </div>
-                          </div>
-                        )}
+                        {/* No pagination - only show recent 5 runs */}
                       </div>
                     )}
                   </div>
