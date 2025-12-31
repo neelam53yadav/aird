@@ -1447,7 +1447,7 @@ export default function ProductDetailPage() {
                             Size
                           </th>
                           <th className="px-6 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            View
+                            Actions
                           </th>
                         </tr>
                       </thead>
