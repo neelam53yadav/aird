@@ -71,6 +71,12 @@ async def trigger_pipeline(
     """
     Trigger a pipeline run for a product.
 
+    **Version Management**:
+    - Each pipeline run gets a unique version number, independent of raw file version
+    - Pipeline run versions increment sequentially (1, 2, 3, ...) for each product
+    - Raw file version is stored separately in metrics for traceability
+    - Even if a previous run failed, a new run will get a new version number
+
     **Smart Version Resolution (Enterprise Best Practice)**:
     - If `version` is explicitly provided: Validates that raw files exist for that version
     - If `version` is `None`: Automatically uses the latest ingested version that has raw files
@@ -93,15 +99,16 @@ async def trigger_pipeline(
     # Option C: Smart Version Resolution (Enterprise Best Practice)
     # If version is explicitly provided, validate it exists
     # If version is None, auto-detect latest ingested version
+    # This determines which raw file version to process (separate from pipeline run version)
     if request.version is not None:
         # Explicit version provided - validate raw files exist
         # Include PROCESSED files to allow reprocessing with new configurations
-        version = request.version
+        raw_file_version = request.version
         raw_file_count = (
             db.query(RawFile)
             .filter(
                 RawFile.product_id == product.id,
-                RawFile.version == version,
+                RawFile.version == raw_file_version,
                 RawFile.status.in_(
                     [RawFileStatus.INGESTED, RawFileStatus.FAILED, RawFileStatus.PROCESSING, RawFileStatus.PROCESSED]
                 ),
@@ -129,12 +136,12 @@ async def trigger_pipeline(
             available_versions_list = [v[0] for v in available_versions] if available_versions else []
 
             error_detail = {
-                "message": f"No raw files found for version {version}",
-                "requested_version": version,
+                "message": f"No raw files found for version {raw_file_version}",
+                "requested_version": raw_file_version,
                 "latest_ingested_version": latest_version,
                 "available_versions": available_versions_list,
                 "suggestion": (
-                    f"Please run initial ingestion for version {version}, "
+                    f"Please run initial ingestion for version {raw_file_version}, "
                     f"or use version={latest_version} to process latest ingested data"
                     if latest_version
                     else "Please run initial ingestion first"
@@ -142,13 +149,13 @@ async def trigger_pipeline(
             }
 
             logger.warning(
-                f"Pipeline trigger failed: No raw files for product {product.id}, version {version}. "
+                f"Pipeline trigger failed: No raw files for product {product.id}, version {raw_file_version}. "
                 f"Available versions: {available_versions_list}"
             )
 
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error_detail)
 
-        logger.info(f"Using explicit version {version} (validated: {raw_file_count} raw files found)")
+        logger.info(f"Using explicit raw file version {raw_file_version} (validated: {raw_file_count} raw files found)")
     else:
         # Auto-detect: Prefer PROCESSED versions over FAILED versions for reprocessing
         # This ensures we use valid, successfully processed data as the source
@@ -160,8 +167,8 @@ async def trigger_pipeline(
         )
 
         if latest_processed:
-            version = latest_processed.version
-            logger.info(f"Auto-detected latest processed version: {version} " f"(found file: {latest_processed.filename})")
+            raw_file_version = latest_processed.version
+            logger.info(f"Auto-detected latest processed raw file version: {raw_file_version} " f"(found file: {latest_processed.filename})")
         else:
             # Fallback to INGESTED files if no PROCESSED files exist
             latest_ingested = (
@@ -192,50 +199,66 @@ async def trigger_pipeline(
 
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_detail)
 
-            version = latest_ingested.version
-            logger.info(f"Auto-detected latest ingested version: {version} " f"(found file: {latest_ingested.filename})")
+            raw_file_version = latest_ingested.version
+            logger.info(f"Auto-detected latest ingested raw file version: {raw_file_version} " f"(found file: {latest_ingested.filename})")
 
-    # Check if there's already a running pipeline for this version
-    existing_run = (
+    # ALWAYS create a new pipeline run version number (independent of raw file version)
+    # Get the maximum existing pipeline run version for this product
+    max_pipeline_run_version = (
+        db.query(func.max(PipelineRun.version))
+        .filter(PipelineRun.product_id == request.product_id)
+        .scalar()
+    ) or 0
+    
+    # Increment to get the next pipeline run version
+    pipeline_run_version = max_pipeline_run_version + 1
+    
+    logger.info(
+        f"Creating new pipeline run version {pipeline_run_version} "
+        f"(processing raw files from version {raw_file_version})"
+    )
+
+    # Check if there's already a running pipeline (regardless of version)
+    # Only block if there's a QUEUED or RUNNING pipeline for this product
+    existing_running_run = (
         db.query(PipelineRun)
         .filter(
             PipelineRun.product_id == request.product_id,
-            PipelineRun.version == version,
             PipelineRun.status.in_([PipelineRunStatus.QUEUED, PipelineRunStatus.RUNNING]),
         )
         .first()
     )
 
-    if existing_run:
+    if existing_running_run:
         # Check if user wants to force run (override existing)
         force_run = request.force_run
 
         if not force_run:
             # Provide helpful error message with details about existing run
-            status_msg = existing_run.status.value.lower()
+            status_msg = existing_running_run.status.value.lower()
             started_msg = ""
-            if existing_run.started_at:
+            if existing_running_run.started_at:
                 now = datetime.now(timezone.utc)
-                elapsed = now - existing_run.started_at.replace(tzinfo=timezone.utc)
+                elapsed = now - existing_running_run.started_at.replace(tzinfo=timezone.utc)
                 started_msg = f" (running for {int(elapsed.total_seconds() / 60)} minutes)"
 
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={
-                    "message": f"A pipeline run is already {status_msg} for this product (version {version}){started_msg}",
-                    "existing_run_id": str(existing_run.id),
-                    "existing_status": existing_run.status.value,
-                    "existing_started_at": existing_run.started_at.isoformat() if existing_run.started_at else None,
+                    "message": f"A pipeline run is already {status_msg} for this product (version {existing_running_run.version}){started_msg}",
+                    "existing_run_id": str(existing_running_run.id),
+                    "existing_status": existing_running_run.status.value,
+                    "existing_started_at": existing_running_run.started_at.isoformat() if existing_running_run.started_at else None,
                     "suggestion": "You can force run to cancel the existing run and start a new one, or wait for the current run to complete.",
                 },
             )
         else:
             # Cancel existing run and start new one
-            logger.info(f"Cancelling existing pipeline run {existing_run.id} to start new run")
-            existing_run.status = PipelineRunStatus.FAILED
-            existing_run.finished_at = datetime.utcnow()
-            existing_run.metrics = existing_run.metrics or {}
-            existing_run.metrics["cancelled_reason"] = "Replaced by new pipeline run"
+            logger.info(f"Cancelling existing pipeline run {existing_running_run.id} to start new run")
+            existing_running_run.status = PipelineRunStatus.FAILED
+            existing_running_run.finished_at = datetime.utcnow()
+            existing_running_run.metrics = existing_running_run.metrics or {}
+            existing_running_run.metrics["cancelled_reason"] = "Replaced by new pipeline run"
             db.commit()
 
     # Check if we're reprocessing already-processed files - if so, create a new version
@@ -246,7 +269,7 @@ async def trigger_pipeline(
             db.query(RawFile)
             .filter(
                 RawFile.product_id == request.product_id,
-                RawFile.version == version,
+                RawFile.version == raw_file_version,
                 RawFile.status.in_([RawFileStatus.FAILED, RawFileStatus.INGESTED, RawFileStatus.PROCESSING]),
             )
             .all()
@@ -307,20 +330,20 @@ async def trigger_pipeline(
         processed_files_to_reprocess = (
             db.query(RawFile)
             .filter(
-                RawFile.product_id == request.product_id, RawFile.version == version, RawFile.status == RawFileStatus.PROCESSED
+                RawFile.product_id == request.product_id, RawFile.version == raw_file_version, RawFile.status == RawFileStatus.PROCESSED
             )
             .all()
         )
 
         if processed_files_to_reprocess:
-            # We're reprocessing - create a new version by incrementing
-            # Get the maximum version number for this product
-            max_version = db.query(func.max(RawFile.version)).filter(RawFile.product_id == request.product_id).scalar() or 0
+            # We're reprocessing - create a new raw file version by incrementing
+            # Get the maximum raw file version number for this product
+            max_raw_file_version = db.query(func.max(RawFile.version)).filter(RawFile.product_id == request.product_id).scalar() or 0
 
-            new_version = max_version + 1
+            new_raw_file_version = max_raw_file_version + 1
             logger.info(
-                f"Reprocessing {len(processed_files_to_reprocess)} PROCESSED files from version {version} "
-                f"to new version {new_version} with new configuration"
+                f"Reprocessing {len(processed_files_to_reprocess)} PROCESSED files from raw file version {raw_file_version} "
+                f"to new raw file version {new_raw_file_version} with new configuration"
             )
 
             # Create new raw file records with the new version (copy the old ones)
@@ -333,10 +356,10 @@ async def trigger_pipeline(
                 # Update storage_key to use the new version number
                 # Extract just the filename from the old storage_key
                 # Old format: ws/{ws}/prod/{prod}/v/{old_version}/raw/{filename}
-                # New format: ws/{ws}/prod/{prod}/v/{new_version}/raw/{filename}
+                # New format: ws/{ws}/prod/{prod}/v/{new_raw_file_version}/raw/{filename}
                 old_key_parts = old_raw_file.storage_key.split("/")
                 filename = old_key_parts[-1]  # Get the filename
-                new_storage_key = f"{raw_prefix(old_raw_file.workspace_id, old_raw_file.product_id, new_version)}{filename}"
+                new_storage_key = f"{raw_prefix(old_raw_file.workspace_id, old_raw_file.product_id, new_raw_file_version)}{filename}"
 
                 # Verify source file exists before copying
                 source_exists = minio_client_instance.object_exists(old_raw_file.storage_bucket, old_raw_file.storage_key)
@@ -383,7 +406,7 @@ async def trigger_pipeline(
                     workspace_id=old_raw_file.workspace_id,
                     product_id=old_raw_file.product_id,
                     data_source_id=old_raw_file.data_source_id,
-                    version=new_version,
+                    version=new_raw_file_version,
                     filename=old_raw_file.filename,
                     file_stem=old_raw_file.file_stem,
                     storage_key=new_storage_key,  # Use new version in the key
@@ -398,21 +421,24 @@ async def trigger_pipeline(
                     error_message=None,
                 )
                 db.add(new_raw_file)
-                logger.info(f"Copied file {old_raw_file.filename} from v{version} to v{new_version} in MinIO")
+                logger.info(f"Copied file {old_raw_file.filename} from raw file v{raw_file_version} to raw file v{new_raw_file_version} in MinIO")
 
-            version = new_version  # Use the new version for the pipeline run
+            raw_file_version = new_raw_file_version  # Update to use the new raw file version
             db.commit()
-            logger.info(f"Created new version {version} for reprocessing")
+            logger.info(f"Created new raw file version {raw_file_version} for reprocessing")
 
     try:
-        # Create pipeline run record
+        # Create pipeline run record with the NEW pipeline run version
+        # Store raw file version in metrics for traceability
         pipeline_run = PipelineRun(
             workspace_id=product.workspace_id,
             product_id=request.product_id,
-            version=version,
+            version=pipeline_run_version,  # Use the new unique pipeline run version
             status=PipelineRunStatus.QUEUED,
             started_at=datetime.now(timezone.utc),  # Explicitly set started_at with timezone
-            metrics={},
+            metrics={
+                "raw_file_version": raw_file_version,  # Store the raw file version in metrics for reference
+            },
         )
         db.add(pipeline_run)
         db.commit()
@@ -427,17 +453,20 @@ async def trigger_pipeline(
 
         # Log the configuration being passed to Airflow for verification
         logger.info(
-            f"Triggering pipeline for product {request.product_id} with configuration:\n"
+            f"Triggering pipeline for product {request.product_id}:\n"
+            f"  pipeline_run_version: {pipeline_run_version}\n"
+            f"  raw_file_version: {raw_file_version}\n"
             f"  chunking_config: {chunking_config}\n"
             f"  embedding_config: {embedding_config}\n"
             f"  playbook_id: {product.playbook_id}"
         )
 
         # Trigger Airflow DAG with configuration
+        # Pass raw_file_version to Airflow, but pipeline_run will have its own version
         dag_run_id = await _trigger_airflow_dag(
             workspace_id=product.workspace_id,
             product_id=request.product_id,
-            version=version,
+            version=raw_file_version,  # Airflow processes raw files from this version
             pipeline_run_id=pipeline_run.id,
             chunking_config=chunking_config,
             embedding_config=embedding_config,
@@ -452,15 +481,20 @@ async def trigger_pipeline(
 
         # Create informative message
         version_source = "explicitly provided" if request.version is not None else "auto-detected (latest ingested)"
-        message = f"Pipeline run triggered successfully for version {version} ({version_source}). " f"DAG Run ID: {dag_run_id}"
+        message = (
+            f"Pipeline run version {pipeline_run_version} triggered successfully "
+            f"(processing raw files from version {raw_file_version}, {version_source}). "
+            f"DAG Run ID: {dag_run_id}"
+        )
 
         logger.info(
-            f"Triggered pipeline run {pipeline_run.id} for product {request.product_id} version {version} ({version_source})"
+            f"Triggered pipeline run {pipeline_run.id} for product {request.product_id} "
+            f"(pipeline_run_version: {pipeline_run_version}, raw_file_version: {raw_file_version}, {version_source})"
         )
 
         return TriggerPipelineResponse(
             product_id=request.product_id,
-            version=version,
+            version=pipeline_run_version,  # Return the pipeline run version
             run_id=pipeline_run.id,
             status=pipeline_run.status.value,
             message=message,
