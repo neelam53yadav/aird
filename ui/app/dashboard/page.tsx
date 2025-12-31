@@ -69,10 +69,34 @@ export default function DashboardPage() {
         const productsData = productsResponse.data as Product[]
         setProducts(productsData)
         
+        // Load all data sources
+        let totalDataSourcesCount = 0
+        try {
+          const dataSourcesResponse = await apiClient.getDataSources()
+          if (dataSourcesResponse.data) {
+            const allDataSources = dataSourcesResponse.data as DataSource[]
+            totalDataSourcesCount = allDataSources.length
+            setDataSources(allDataSources)
+          }
+        } catch (error) {
+          console.error('Failed to load data sources:', error)
+          // Fallback: count data sources from products
+          for (const product of productsData) {
+            try {
+              const productDataSources = await apiClient.getDataSources(product.id)
+              if (productDataSources.data) {
+                totalDataSourcesCount += (productDataSources.data as DataSource[]).length
+              }
+            } catch (err) {
+              // Skip if product doesn't have data sources
+            }
+          }
+        }
+        
         // Calculate stats
         const stats = {
           totalProducts: productsData.length,
-          totalDataSources: 0, // Will be calculated from data sources
+          totalDataSources: totalDataSourcesCount,
           runningProducts: productsData.filter(p => p.status === 'running').length,
           failedProducts: productsData.filter(p => p.status === 'failed').length,
           readyProducts: productsData.filter(p => p.status === 'ready').length,
@@ -80,13 +104,6 @@ export default function DashboardPage() {
         }
         setStats(stats)
       }
-
-      // Load data sources (we'll need to get this from all products)
-      // For now, we'll estimate based on products
-      setStats(prev => ({
-        ...prev,
-        totalDataSources: products.length * 2 // Rough estimate
-      }))
       
     } catch (error) {
       console.error('Failed to load dashboard data:', error)
@@ -131,98 +148,122 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        {/* Enhanced Stats Cards */}
+        {/* Enhanced Stats Cards - Now Clickable */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl p-3 mr-4 shadow-sm">
-                  <Package className="h-6 w-6 text-white" />
+          {/* Total Products - Clickable */}
+          <Link href="/app/products" className="block">
+            <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5 cursor-pointer group">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl p-3 mr-4 shadow-sm group-hover:scale-110 transition-transform">
+                    <Package className="h-6 w-6 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-600 mb-1">Total Products</p>
+                    <p className="text-3xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors">{stats.totalProducts}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-600 mb-1">Total Products</p>
-                  <p className="text-3xl font-bold text-gray-900">{stats.totalProducts}</p>
-                </div>
+                <ArrowUpRight className="h-5 w-5 text-gray-400 group-hover:text-blue-600 transition-colors" />
               </div>
             </div>
-          </div>
+          </Link>
 
-          <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl p-3 mr-4 shadow-sm">
-                  <Database className="h-6 w-6 text-white" />
+          {/* Data Sources - Clickable */}
+          <Link href="/app/datasources" className="block">
+            <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5 cursor-pointer group">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl p-3 mr-4 shadow-sm group-hover:scale-110 transition-transform">
+                    <Database className="h-6 w-6 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-600 mb-1">Data Sources</p>
+                    <p className="text-3xl font-bold text-gray-900 group-hover:text-green-600 transition-colors">{stats.totalDataSources}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-600 mb-1">Data Sources</p>
-                  <p className="text-3xl font-bold text-gray-900">{stats.totalDataSources}</p>
-                </div>
+                <ArrowUpRight className="h-5 w-5 text-gray-400 group-hover:text-green-600 transition-colors" />
               </div>
             </div>
-          </div>
+          </Link>
 
-          <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl p-3 mr-4 shadow-sm">
-                  <CheckCircle className="h-6 w-6 text-white" />
+          {/* Ready Products - Clickable */}
+          <Link href="/app/products?status=ready" className="block">
+            <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5 cursor-pointer group">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl p-3 mr-4 shadow-sm group-hover:scale-110 transition-transform">
+                    <CheckCircle className="h-6 w-6 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-600 mb-1">Ready Products</p>
+                    <p className="text-3xl font-bold text-gray-900 group-hover:text-green-600 transition-colors">{stats.readyProducts}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-600 mb-1">Ready Products</p>
-                  <p className="text-3xl font-bold text-gray-900">{stats.readyProducts}</p>
-                </div>
+                <ArrowUpRight className="h-5 w-5 text-gray-400 group-hover:text-green-600 transition-colors" />
               </div>
             </div>
-          </div>
+          </Link>
 
-          <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl p-3 mr-4 shadow-sm">
-                  <Activity className="h-6 w-6 text-white" />
+          {/* Running Products - Clickable */}
+          <Link href="/app/products?status=running" className="block">
+            <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5 cursor-pointer group">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl p-3 mr-4 shadow-sm group-hover:scale-110 transition-transform">
+                    <Activity className="h-6 w-6 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-600 mb-1">Running</p>
+                    <p className="text-3xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors">{stats.runningProducts}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-600 mb-1">Running</p>
-                  <p className="text-3xl font-bold text-gray-900">{stats.runningProducts}</p>
-                </div>
+                <ArrowUpRight className="h-5 w-5 text-gray-400 group-hover:text-blue-600 transition-colors" />
               </div>
             </div>
-          </div>
+          </Link>
         </div>
 
-        {/* Status Overview */}
+        {/* Status Overview - Make status items clickable too */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100">
             <h3 className="text-lg font-semibold text-gray-900 mb-6">Product Status Overview</h3>
             <div className="space-y-4">
-              <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-100">
-                <div className="flex items-center">
-                  <div className="w-4 h-4 bg-gradient-to-r from-green-500 to-emerald-600 rounded-full mr-3 shadow-sm"></div>
-                  <span className="text-sm font-medium text-gray-700">Ready</span>
+              <Link href="/app/products?status=ready" className="block">
+                <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-100 hover:bg-green-100 hover:border-green-200 transition-all cursor-pointer group">
+                  <div className="flex items-center">
+                    <div className="w-4 h-4 bg-gradient-to-r from-green-500 to-emerald-600 rounded-full mr-3 shadow-sm"></div>
+                    <span className="text-sm font-medium text-gray-700 group-hover:text-green-700">Ready</span>
+                  </div>
+                  <span className="text-lg font-bold text-gray-900 group-hover:text-green-700">{stats.readyProducts}</span>
                 </div>
-                <span className="text-lg font-bold text-gray-900">{stats.readyProducts}</span>
-              </div>
-              <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-100">
-                <div className="flex items-center">
-                  <div className="w-4 h-4 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full mr-3 shadow-sm animate-pulse"></div>
-                  <span className="text-sm font-medium text-gray-700">Running</span>
+              </Link>
+              <Link href="/app/products?status=running" className="block">
+                <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-100 hover:bg-blue-100 hover:border-blue-200 transition-all cursor-pointer group">
+                  <div className="flex items-center">
+                    <div className="w-4 h-4 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full mr-3 shadow-sm animate-pulse"></div>
+                    <span className="text-sm font-medium text-gray-700 group-hover:text-blue-700">Running</span>
+                  </div>
+                  <span className="text-lg font-bold text-gray-900 group-hover:text-blue-700">{stats.runningProducts}</span>
                 </div>
-                <span className="text-lg font-bold text-gray-900">{stats.runningProducts}</span>
-              </div>
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100">
-                <div className="flex items-center">
-                  <div className="w-4 h-4 bg-gradient-to-r from-gray-500 to-slate-600 rounded-full mr-3 shadow-sm"></div>
-                  <span className="text-sm font-medium text-gray-700">Draft</span>
+              </Link>
+              <Link href="/app/products?status=draft" className="block">
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100 hover:bg-gray-100 hover:border-gray-200 transition-all cursor-pointer group">
+                  <div className="flex items-center">
+                    <div className="w-4 h-4 bg-gradient-to-r from-gray-500 to-slate-600 rounded-full mr-3 shadow-sm"></div>
+                    <span className="text-sm font-medium text-gray-700 group-hover:text-gray-800">Draft</span>
+                  </div>
+                  <span className="text-lg font-bold text-gray-900 group-hover:text-gray-800">{stats.draftProducts}</span>
                 </div>
-                <span className="text-lg font-bold text-gray-900">{stats.draftProducts}</span>
-              </div>
-              <div className="flex items-center justify-between p-3 bg-red-50 rounded-lg border border-red-100">
-                <div className="flex items-center">
-                  <div className="w-4 h-4 bg-gradient-to-r from-red-500 to-rose-600 rounded-full mr-3 shadow-sm"></div>
-                  <span className="text-sm font-medium text-gray-700">Failed</span>
+              </Link>
+              <Link href="/app/products?status=failed" className="block">
+                <div className="flex items-center justify-between p-3 bg-red-50 rounded-lg border border-red-100 hover:bg-red-100 hover:border-red-200 transition-all cursor-pointer group">
+                  <div className="flex items-center">
+                    <div className="w-4 h-4 bg-gradient-to-r from-red-500 to-rose-600 rounded-full mr-3 shadow-sm"></div>
+                    <span className="text-sm font-medium text-gray-700 group-hover:text-red-700">Failed</span>
+                  </div>
+                  <span className="text-lg font-bold text-gray-900 group-hover:text-red-700">{stats.failedProducts}</span>
                 </div>
-                <span className="text-lg font-bold text-gray-900">{stats.failedProducts}</span>
-              </div>
+              </Link>
             </div>
           </div>
 
