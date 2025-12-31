@@ -21,6 +21,7 @@ from primedata.api.pipeline import router as pipeline_router
 from primedata.api.playbooks import router as playbooks_router  # M1
 from primedata.api.playground import router as playground_router
 from primedata.api.products import router as products_router
+from primedata.api.rag_evaluation import router as rag_evaluation_router
 from primedata.api.settings import router as settings_router
 from primedata.api.team import router as team_router
 from primedata.core.auth_middleware import AuthMiddleware
@@ -85,6 +86,7 @@ app.include_router(playbooks_router)  # M1
 app.include_router(acl_router)  # M5
 app.include_router(settings_router)
 app.include_router(team_router)  # Team management
+app.include_router(rag_evaluation_router)  # RAG Evaluation (AI-Ready metrics)
 
 
 async def check_database() -> Dict[str, Any]:

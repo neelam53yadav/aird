@@ -25,7 +25,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -204,6 +204,8 @@ class Workspace(Base):
     products = relationship("Product", back_populates="workspace")
     data_quality_rules = relationship("DataQualityRule", back_populates="workspace")
     billing_profile = relationship("BillingProfile", back_populates="workspace", uselist=False)
+    eval_queries = relationship("EvalQuery", back_populates="workspace", cascade="all, delete-orphan")
+    eval_runs = relationship("EvalRun", back_populates="workspace", cascade="all, delete-orphan")
 
 
 class WorkspaceMember(Base):
@@ -297,6 +299,8 @@ class Product(Base):
     raw_files = relationship("RawFile", back_populates="product")  # Track ingested raw files
     acls = relationship("ACL", back_populates="product")  # M5
     pipeline_artifacts = relationship("PipelineArtifact", back_populates="product")  # Track pipeline artifacts
+    eval_queries = relationship("EvalQuery", back_populates="product", cascade="all, delete-orphan")
+    eval_runs = relationship("EvalRun", back_populates="product", cascade="all, delete-orphan")
 
     # Unique constraint and indexes
     __table_args__ = (
@@ -436,6 +440,7 @@ class PipelineRun(Base):
     workspace = relationship("Workspace")
     product = relationship("Product")
     artifacts = relationship("PipelineArtifact", back_populates="pipeline_run", cascade="all, delete-orphan")
+    eval_runs = relationship("EvalRun", back_populates="pipeline_run")
 
     # Indexes
     __table_args__ = (
@@ -625,4 +630,57 @@ class BillingProfile(Base):
     __table_args__ = (
         Index("idx_billing_profiles_stripe_customer", "stripe_customer_id"),
         Index("idx_billing_profiles_plan", "plan"),
+    )
+
+
+class EvalQuery(Base):
+    """Synthetic evaluation queries for RAG evaluation."""
+    
+    __tablename__ = "eval_queries"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
+    workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
+    version = Column(Integer, nullable=False)
+    chunk_id = Column(String(255), nullable=False, index=True)
+    query = Column(Text, nullable=False)
+    expected_chunk_id = Column(String(255), nullable=False)
+    query_style = Column(String(50), nullable=True)  # 'technical', 'academic', 'clinical', etc.
+    generated_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relationships
+    product = relationship("Product", back_populates="eval_queries")
+    workspace = relationship("Workspace", back_populates="eval_queries")
+    
+    # Indexes
+    __table_args__ = (
+        Index('idx_eval_queries_product_version', 'product_id', 'version'),
+    )
+
+
+class EvalRun(Base):
+    """Evaluation runs for RAG metrics calculation."""
+    
+    __tablename__ = "eval_runs"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
+    workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
+    version = Column(Integer, nullable=False)
+    pipeline_run_id = Column(UUID(as_uuid=True), ForeignKey("pipeline_runs.id", ondelete="SET NULL"), nullable=True)
+    status = Column(String(50), nullable=False, server_default='pending')  # 'pending', 'running', 'completed', 'failed'
+    metrics = Column(JSONB, nullable=True)  # Store Recall@k, MRR, nDCG, etc.
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    finished_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relationships
+    product = relationship("Product", back_populates="eval_runs")
+    workspace = relationship("Workspace", back_populates="eval_runs")
+    pipeline_run = relationship("PipelineRun", back_populates="eval_runs")
+    
+    # Indexes
+    __table_args__ = (
+        Index('idx_eval_runs_product_version', 'product_id', 'version'),
     )

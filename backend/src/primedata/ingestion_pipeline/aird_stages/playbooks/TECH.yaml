@@ -119,6 +119,35 @@ quality_gates:
   min_sections: 3
   max_mid_sentence_boundary_rate: 0.15
 
+# Noise detection patterns for Noise Ratio metric
+noise_patterns:
+  boilerplate:
+    - pattern: '(?i)^\s*(confidential|proprietary|copyright|all rights reserved)'
+      flags: MULTILINE
+    - pattern: '(?i)^\s*page\s+\d+\s+of\s+\d+\s*$'
+      flags: MULTILINE
+  navigation:
+    - pattern: '(?i)^\s*(table of contents|index|appendix)\s*$'
+      flags: MULTILINE
+
+# Chunk coherence settings for Coherence Score
+coherence:
+  method: embedding_similarity
+  min_coherence_threshold: 0.6
+  sentence_window: 3
+
+# RAG evaluation settings for synthetic query generation
+rag_evaluation:
+  query_generation:
+    queries_per_chunk: 3
+    query_style: technical
+    include_context: true
+    min_query_length: 10
+    max_query_length: 50
+  retrieval_settings:
+    top_k: 10
+    similarity_threshold: 0.7
+
 
 
 

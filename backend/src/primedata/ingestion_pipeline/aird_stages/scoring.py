@@ -11,7 +11,12 @@ from uuid import UUID
 
 from loguru import logger
 from primedata.ingestion_pipeline.aird_stages.base import AirdStage, StageResult, StageStatus
-from primedata.services.trust_scoring import get_scoring_weights, score_record
+from primedata.services.trust_scoring import (
+    get_scoring_weights,
+    score_record,
+    score_record_with_ai_ready_metrics,
+    aggregate_metrics_with_ai_ready,
+)
 
 
 class ScoringStage(AirdStage):
@@ -70,6 +75,11 @@ class ScoringStage(AirdStage):
 
         # Get scoring weights
         weights = get_scoring_weights()
+        
+        # Get playbook for AI-Ready metrics (noise patterns, coherence settings)
+        playbook = context.get("playbook") or {}
+        playbook_id = context.get("playbook_id", "TECH")
+        self.logger.info(f"Using playbook {playbook_id} for AI-Ready metrics")
 
         for file_stem in processed_files:
             try:
@@ -86,7 +96,12 @@ class ScoringStage(AirdStage):
 
                 for record in records:
                     try:
-                        scored = score_record(record, weights)
+                        # Use AI-Ready metrics scorer if playbook is available
+                        if playbook:
+                            scored = score_record_with_ai_ready_metrics(record, weights, playbook)
+                        else:
+                            scored = score_record(record, weights)
+                        
                         # Add file tag and metadata
                         scored["file"] = file_tag
                         scored["section"] = record.get("section", "unknown")
@@ -134,12 +149,21 @@ class ScoringStage(AirdStage):
 
         # Store aggregate metrics
         storage.put_metrics_json(all_metrics)
+        
+        # Get preprocessing stats for Chunk Boundary Quality
+        preprocessing_stats = context.get("preprocessing_stats", {})
+        preprocess_result = context.get("preprocess_result")
+        if preprocess_result and preprocess_result.get("metrics"):
+            preprocessing_stats = preprocess_result["metrics"]
 
         finished_at = datetime.utcnow()
 
         # Calculate aggregate trust score
         trust_scores = [m.get("AI_Trust_Score", 0.0) for m in all_metrics]
         avg_trust_score = round(sum(trust_scores) / len(trust_scores), 4) if trust_scores else 0.0
+        
+        # Calculate aggregate metrics with AI-Ready metrics
+        aggregated_metrics = aggregate_metrics_with_ai_ready(all_metrics, preprocessing_stats)
 
         artifacts = {
             "metrics_json": f"processed/{self.product_id}/v{self.version}/metrics.json",
@@ -151,6 +175,8 @@ class ScoringStage(AirdStage):
             "total_chunks": total_chunks,
             "avg_trust_score": avg_trust_score,
             "scored_file_list": scored_files,
+            # Include AI-Ready aggregate metrics
+            "ai_ready_metrics": aggregated_metrics,
         }
 
         return self._create_result(

@@ -12,6 +12,10 @@ from typing import Any, Dict, List, Optional
 import regex as re
 from loguru import logger
 
+# Import AI-Ready metric services
+from primedata.services.chunk_coherence import calculate_chunk_coherence
+from primedata.services.noise_detection import calculate_noise_ratio
+
 # Try to import primary scorer
 try:
     from primedata.services.scoring_utils import load_weights, score_file_data
@@ -247,4 +251,98 @@ def aggregate_metrics(metrics: List[Dict[str, Any]]) -> Dict[str, float]:
         if c > 0:
             agg[k] = round(total / c, 4)
 
+    return agg
+
+
+def score_record_with_ai_ready_metrics(
+    record: Dict[str, Any],
+    weights: Optional[Dict[str, float]] = None,
+    playbook: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """
+    Score a record with AI-Ready metrics included.
+    
+    This extends the existing score_record function with:
+    - Chunk Coherence Score
+    - Noise Ratio (converted to Noise_Free_Score)
+    - Chunk Boundary Quality (calculated at aggregate level)
+    - Duplicate Rate (calculated separately at aggregate level)
+    
+    Args:
+        record: Chunk record with text, metadata, etc.
+        weights: Optional scoring weights (uses defaults if not provided)
+        playbook: Optional playbook configuration for noise patterns and coherence settings
+        
+    Returns:
+        Dict with all metrics including AI-Ready metrics (0-100 scale)
+    """
+    # Get base metrics from existing scorer
+    base_metrics = score_record(record, weights)
+    
+    # Extract chunk text
+    chunk_text = (record.get("text") or "").strip()
+    
+    # 1. Calculate Chunk Coherence
+    coherence_config = playbook.get("coherence", {}) if playbook else {}
+    coherence_result = calculate_chunk_coherence(
+        chunk_text=chunk_text,
+        method=coherence_config.get("method", "embedding_similarity"),
+        sentence_window=coherence_config.get("sentence_window", 3),
+        min_coherence_threshold=coherence_config.get("min_coherence_threshold", 0.6)
+    )
+    base_metrics["Chunk_Coherence"] = coherence_result["coherence_score"]
+    
+    # 2. Calculate Noise Ratio (inverted to score: lower noise = higher score)
+    noise_patterns = playbook.get("noise_patterns") if playbook else None
+    noise_result = calculate_noise_ratio(chunk_text, noise_patterns)
+    # Convert noise ratio to score (0-100, where 0% noise = 100 score)
+    noise_score = max(0.0, 100.0 - noise_result["noise_ratio"])
+    base_metrics["Noise_Free_Score"] = round(noise_score, 2)
+    
+    # 3. Chunk Boundary Quality (from existing preprocessing stats)
+    # This is calculated at aggregate level, but we can add a per-chunk indicator
+    # For now, we'll calculate it at aggregate level in the scoring stage
+    
+    return base_metrics
+
+
+def aggregate_metrics_with_ai_ready(
+    metrics: List[Dict[str, Any]],
+    preprocessing_stats: Optional[Dict[str, Any]] = None
+) -> Dict[str, float]:
+    """
+    Aggregate metrics including AI-Ready metrics.
+    
+    Args:
+        metrics: List of metric dictionaries (one per chunk)
+        preprocessing_stats: Preprocessing statistics including mid_sentence_boundary_rate
+        
+    Returns:
+        Aggregated metrics dictionary with AI-Ready metrics included
+    """
+    # Get base aggregated metrics
+    agg = aggregate_metrics(metrics)
+    
+    # Add AI-Ready aggregate metrics
+    
+    # 1. Average Chunk Coherence
+    coherence_scores = [m.get("Chunk_Coherence", 0) for m in metrics if "Chunk_Coherence" in m]
+    if coherence_scores:
+        agg["Avg_Chunk_Coherence"] = round(sum(coherence_scores) / len(coherence_scores), 2)
+    
+    # 2. Average Noise-Free Score
+    noise_scores = [m.get("Noise_Free_Score", 100) for m in metrics if "Noise_Free_Score" in m]
+    if noise_scores:
+        agg["Avg_Noise_Free_Score"] = round(sum(noise_scores) / len(noise_scores), 2)
+    
+    # 3. Chunk Boundary Quality (from preprocessing stats)
+    if preprocessing_stats:
+        mid_sentence_rate = preprocessing_stats.get("mid_sentence_boundary_rate", 0.0)
+        # Convert to score: 0% mid-sentence breaks = 100 score
+        boundary_quality = max(0.0, 100.0 - (mid_sentence_rate * 100))
+        agg["Chunk_Boundary_Quality"] = round(boundary_quality, 2)
+    
+    # 4. Duplicate Rate (calculated separately, but included here for completeness)
+    # This would be calculated during preprocessing/fingerprint stage
+    
     return agg
