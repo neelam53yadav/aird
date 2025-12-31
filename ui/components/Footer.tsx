@@ -12,9 +12,15 @@ export function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-8">
           {/* Brand Section */}
           <div className="lg:col-span-1">
-            <h3 className="text-2xl font-bold mb-4 bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">
-              PrimeData
-            </h3>
+            <Link 
+              href="/" 
+              className="block mb-4"
+              aria-label="Go to PrimeData homepage"
+            >
+              <h3 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent hover:from-blue-300 hover:to-indigo-300 transition-all duration-200 cursor-pointer">
+                PrimeData
+              </h3>
+            </Link>
             <p className="text-gray-300 text-sm leading-relaxed mb-4">
               Enterprise AI Data Platform. Transform your data into production-ready AI assets with enterprise-grade processing and validation.
             </p>
