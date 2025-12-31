@@ -16,10 +16,9 @@ import { DataQualityBanner } from '@/components/DataQualityBanner'
 import { DataQualityViolationsDrawer } from '@/components/DataQualityViolationsDrawer'
 import { DataQualityRulesEditor } from '@/components/DataQualityRulesEditor'
 import { AITrustScoreDisplay } from '@/components/AITrustScoreDisplay'
-import { ChunkMetadataDisplay } from '@/components/ChunkMetadataDisplay'
-import { ACLManagement } from '@/components/ACLManagement'
 import { useToast } from '@/components/ui/toast'
 import PipelineDetailsModal from '@/components/PipelineDetailsModal'
+import { ComingSoonBadge } from '@/components/ui/coming-soon-badge'
 
 interface Product {
   id: string
@@ -1008,12 +1007,19 @@ export default function ProductDetailPage() {
         )}
 
         {activeTab === 'chunk-metadata' && (
-          <div className="space-y-6">
-            <ChunkMetadataDisplay 
-              productId={productId} 
-              productVersion={product?.current_version}
-            />
-          </div>
+          <ComingSoonBadge
+            title="Chunk Metadata"
+            description="View and manage detailed metadata for all chunks, including embeddings, scores, and processing information."
+            icon={Layers}
+          />
+        )}
+
+        {activeTab === 'acl' && (
+          <ComingSoonBadge
+            title="Access Control"
+            description="Manage user permissions and access control lists (ACLs) for this product, including read, write, and admin roles."
+            icon={Lock}
+          />
         )}
 
         {activeTab === 'overview' && (
@@ -1178,14 +1184,14 @@ export default function ProductDetailPage() {
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
                 <Link href={`/app/products/${product.id}/datasources/new`}>
-                  <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer">
+                  <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer h-full flex flex-col">
                     <Database className="h-8 w-8 text-blue-600 mb-2" />
                     <h3 className="font-medium text-gray-900">Add Data Source</h3>
                     <p className="text-sm text-gray-600">Connect a new data source to this product</p>
                   </div>
                 </Link>
                 <div 
-                  className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer"
+                  className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer h-full flex flex-col"
                   onClick={() => setShowPipelineModal(true)}
                 >
                   <Play className="h-8 w-8 text-green-600 mb-2" />
@@ -1193,35 +1199,35 @@ export default function ProductDetailPage() {
                   <p className="text-sm text-gray-600">Execute the data processing pipeline</p>
                 </div>
                 <Link href={`/app/products/${productId}/playground`}>
-                  <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer">
+                  <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer h-full flex flex-col">
                     <Search className="h-8 w-8 text-purple-600 mb-2" />
                     <h3 className="font-medium text-gray-900">RAG Playground</h3>
                     <p className="text-sm text-gray-600">Search and explore your indexed data</p>
                   </div>
                 </Link>
-                <Link href={`/app/products/${productId}/ai-readiness`}>
-                  <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer">
-                    <TrendingUp className="h-8 w-8 text-orange-600 mb-2" />
-                    <h3 className="font-medium text-gray-900">AI Readiness</h3>
-                    <p className="text-sm text-gray-600">Assess and improve data quality</p>
-                  </div>
-                </Link>
-                <Link href={`/app/products/${productId}/pipeline-metrics`}>
-                  <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer">
-                    <BarChart3 className="h-8 w-8 text-blue-600 mb-2" />
-                    <h3 className="font-medium text-gray-900">Pipeline Metrics</h3>
-                    <p className="text-sm text-gray-600">View detailed metrics for each version</p>
-                  </div>
-                </Link>
+                <ComingSoonBadge
+                  title="AI Readiness"
+                  description="Assess and improve data quality"
+                  icon={TrendingUp}
+                  variant="compact"
+                  className="h-full"
+                />
+                <ComingSoonBadge
+                  title="Pipeline Metrics"
+                  description="View detailed metrics for each version"
+                  icon={BarChart3}
+                  variant="compact"
+                  className="h-full"
+                />
                 <Link href={`/app/products/${productId}/pipeline-runs`}>
-                  <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer">
+                  <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer h-full flex flex-col">
                     <GitBranch className="h-8 w-8 text-indigo-600 mb-2" />
-                    <h3 className="font-medium text-gray-900">Pipeline Runs</h3>
+                    <h3 className="font-medium text-gray-900">Recent Pipeline Runs</h3>
                     <p className="text-sm text-gray-600">Monitor and manage pipeline executions</p>
                   </div>
                 </Link>
                 <div 
-                  className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer"
+                  className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer h-full flex flex-col"
                   onClick={() => router.push(`/app/products/${productId}/edit`)}
                 >
                   <Settings className="h-8 w-8 text-gray-600 mb-2" />
@@ -1377,190 +1383,13 @@ export default function ProductDetailPage() {
 
             {/* Pipeline Artifacts Section */}
             {product.current_version > 0 && (
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <div className="flex justify-between items-center mb-6">
-                  <div>
-                    <h2 className="text-lg font-semibold text-gray-900">Pipeline Artifacts</h2>
-                    <p className="text-sm text-gray-600 mt-1">Generated artifacts from successful pipeline runs</p>
-                  </div>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={loadPipelineArtifacts}
-                    disabled={loadingArtifacts}
-                    className="border-2 hover:border-blue-300 hover:bg-blue-50"
-                  >
-                    {loadingArtifacts ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Loading...
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="h-4 w-4 mr-2" />
-                        Refresh
-                      </>
-                    )}
-                  </Button>
-                </div>
-                
-                {loadingArtifacts ? (
-                  <TableSkeleton rows={5} cols={5} />
-                ) : pipelineArtifacts.length === 0 ? (
-                  <div className="text-center py-12 bg-gradient-to-br from-gray-50 to-blue-50 rounded-lg border-2 border-dashed border-gray-200">
-                    <div className="bg-white rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4 shadow-sm">
-                      <Package className="h-8 w-8 text-gray-400" />
-                    </div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">No artifacts yet</h3>
-                    <p className="text-gray-600 max-w-md mx-auto">Run a pipeline to generate artifacts like fingerprint, trust reports, and validation summaries.</p>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gradient-to-r from-gray-50 to-blue-50">
-                        <tr>
-                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Artifact
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Type
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Size
-                          </th>
-                          <th className="px-6 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Actions
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {pipelineArtifacts.map((artifact) => {
-                          // Stage display names and colors
-                          const stageInfo: Record<string, { name: string; color: string }> = {
-                            preprocess: { name: 'Preprocess', color: 'bg-blue-100 text-blue-800' },
-                            scoring: { name: 'Scoring', color: 'bg-purple-100 text-purple-800' },
-                            fingerprint: { name: 'Fingerprint', color: 'bg-indigo-100 text-indigo-800' },
-                            validation: { name: 'Validation', color: 'bg-green-100 text-green-800' },
-                            policy: { name: 'Policy', color: 'bg-yellow-100 text-yellow-800' },
-                            reporting: { name: 'Reporting', color: 'bg-red-100 text-red-800' },
-                            indexing: { name: 'Indexing', color: 'bg-cyan-100 text-cyan-800' },
-                            validate_data_quality: { name: 'Data Quality', color: 'bg-orange-100 text-orange-800' },
-                            finalize: { name: 'Finalize', color: 'bg-gray-100 text-gray-800' },
-                          }
-
-                          const stage = stageInfo[artifact.stage_name] || { 
-                            name: artifact.stage_name?.replace(/_/g, ' ') || 'Unknown', 
-                            color: 'bg-gray-100 text-gray-800' 
-                          }
-
-                          // Get artifact icon
-                          const getArtifactIcon = (type: string) => {
-                            switch (type?.toLowerCase()) {
-                              case 'pdf':
-                                return <FileText className="h-4 w-4 text-red-500" />
-                              case 'json':
-                                return <FileJson className="h-4 w-4 text-yellow-500" />
-                              case 'jsonl':
-                                return <FileCode className="h-4 w-4 text-blue-500" />
-                              case 'csv':
-                                return <FileCsv className="h-4 w-4 text-green-500" />
-                              case 'vector':
-                                return <Layers className="h-4 w-4 text-indigo-500" />
-                              default:
-                                return <FileText className="h-4 w-4 text-gray-500" />
-                            }
-                          }
-
-                          // Format file size
-                          const formatFileSize = (bytes: number) => {
-                            if (bytes < 1024) return `${bytes} B`
-                            if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-                            return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
-                          }
-
-                          return (
-                            <tr key={artifact.id} className="hover:bg-blue-50/50 transition-colors">
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="flex items-center space-x-3">
-                                  {getArtifactIcon(artifact.artifact_type)}
-                                  <div className="flex-1">
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                      <p className="text-sm font-medium text-gray-900">
-                                        {artifact.display_name || artifact.artifact_name.replace(/_/g, ' ')}
-                                      </p>
-                                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${stage.color}`}>
-                                        {stage.name}
-                                      </span>
-                                    </div>
-                                    {artifact.description && (
-                                      <p className="text-xs text-gray-500 mt-0.5">{artifact.description}</p>
-                                    )}
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <span className="text-sm text-gray-600 uppercase font-mono">
-                                  {artifact.artifact_type}
-                                </span>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <span className="text-sm text-gray-600">
-                                  {formatFileSize(artifact.file_size)}
-                                </span>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-right">
-                                <div className="flex items-center justify-end space-x-2">
-                                  {artifact.artifact_type?.toLowerCase() === 'vector' ? (
-                                    <a
-                                      href={(() => {
-                                        // Derive Qdrant URL from current host (same host, port 6333)
-                                        if (typeof window !== 'undefined') {
-                                          const currentHost = window.location.hostname
-                                          return `http://${currentHost}:6333/dashboard`
-                                        }
-                                        // Fallback to environment variable or default
-                                        return process.env.NEXT_PUBLIC_QDRANT_URL || 'http://34.28.26.21:6333/dashboard'
-                                      })()}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-indigo-700 bg-indigo-50 rounded-md hover:bg-indigo-100 transition-colors"
-                                    >
-                                      <Layers className="h-4 w-4 mr-1.5" />
-                                      Open Qdrant
-                                    </a>
-                                  ) : (
-                                    <button
-                                      onClick={() => handleViewArtifact(artifact)}
-                                      className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-blue-700 bg-blue-50 rounded-md hover:bg-blue-100 transition-colors"
-                                    >
-                                      <FileText className="h-4 w-4 mr-1.5" />
-                                      View
-                                    </button>
-                                  )}
-                                  {artifact.download_url && (
-                                    <a
-                                      href={artifact.download_url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      download
-                                      className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors"
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      <Download className="h-4 w-4 mr-1.5" />
-                                      Download
-                                    </a>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
+              <ComingSoonBadge
+                title="Pipeline Artifacts"
+                description="View and manage all artifacts generated during pipeline execution, including trust reports, validation summaries, fingerprints, and more."
+                icon={Package}
+              />
             )}
+
           </div>
         )}
 
@@ -1966,98 +1795,11 @@ export default function ProductDetailPage() {
         )}
 
         {activeTab === 'exports' && (
-          <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h2 className="text-lg font-semibold text-gray-900">Export Bundles</h2>
-              <Button
-                onClick={() => setShowCreateExportModal(true)}
-                disabled={!product || product.current_version === 0}
-              >
-                <Package className="h-4 w-4 mr-2" />
-                Create Export
-              </Button>
-            </div>
-
-            {!product || product.current_version === 0 ? (
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
-                <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No data available for export</h3>
-                <p className="text-gray-600">Run the pipeline to process data before creating exports.</p>
-              </div>
-            ) : (
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <h3 className="text-md font-medium text-gray-900 mb-4">Available Exports</h3>
-                {loadingExports ? (
-                  <TableSkeleton rows={3} cols={5} />
-                ) : exports.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">No exports yet</h3>
-                    <p className="text-gray-600 mb-4">Create your first export bundle to download processed data.</p>
-                    <Button onClick={() => setShowCreateExportModal(true)}>
-                      <Package className="h-4 w-4 mr-2" />
-                      Create Export
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gradient-to-r from-gray-50 to-blue-50">
-                        <tr>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Bundle Name
-                          </th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Version
-                          </th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Size
-                          </th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Created
-                          </th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Actions
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {exports.map((exportBundle) => (
-                          <tr key={exportBundle.id} className="hover:bg-blue-50/50 transition-colors">
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm font-medium text-gray-900">
-                                {exportBundle.bundle_name}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                v{exportBundle.version}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {formatFileSize(exportBundle.size_bytes)}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {new Date(exportBundle.created_at).toLocaleDateString()}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                              <a
-                                href={exportBundle.download_url}
-                                download={exportBundle.bundle_name}
-                                className="text-blue-600 hover:text-blue-900"
-                              >
-                                Download
-                              </a>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          <ComingSoonBadge
+            title="Exports"
+            description="Create and download export bundles containing processed data, embeddings, and metadata for offline use or backup."
+            icon={Download}
+          />
         )}
       </div>
 
