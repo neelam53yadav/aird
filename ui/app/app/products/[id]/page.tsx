@@ -1681,44 +1681,47 @@ export default function ProductDetailPage() {
                           </Button>
                         </div>
                         
-                        <div className="mt-3">
-                          <Button
-                            variant="outline"
-                            size="default"
-                            className="w-full border-green-500 text-green-600 hover:bg-green-50 hover:border-green-600 hover:text-green-700 font-medium shadow-sm transition-all duration-200 hover:shadow-md"
-                            onClick={() => handleIngestDataSource(datasource.id)}
-                            disabled={ingestingDataSource === datasource.id}
-                          >
-                            {ingestingDataSource === datasource.id ? (
-                              <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin text-green-600" />
-                                <span className="text-green-600">Ingesting Data...</span>
-                              </>
-                            ) : (
-                              <>
-                                <ArrowDownToLine className="mr-2 h-4 w-4 text-green-600" />
-                                <span className="text-green-600">Run Initial Ingest</span>
-                              </>
-                            )}
-                          </Button>
-                          
-                          {ingestionResults[datasource.id] && (
-                            <div className="mt-2 flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-md px-3 py-2">
-                              <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
-                              <span className="font-medium">
-                                Successfully ingested {ingestionResults[datasource.id].files} file{ingestionResults[datasource.id].files !== 1 ? 's' : ''}
-                              </span>
-                              <span className="text-green-600">
-                                ({(ingestionResults[datasource.id].bytes / 1024 / 1024).toFixed(2)} MB)
-                              </span>
-                              {ingestionResults[datasource.id].errors > 0 && (
-                                <span className="text-orange-600 font-medium">
-                                  • {ingestionResults[datasource.id].errors} error{ingestionResults[datasource.id].errors !== 1 ? 's' : ''}
-                                </span>
+                        {/* Only show "Run Initial Ingest" for datasource types that need it (not folder/local) */}
+                        {datasource.type !== 'folder' && (
+                          <div className="mt-3">
+                            <Button
+                              variant="outline"
+                              size="default"
+                              className="w-full border-green-500 text-green-600 hover:bg-green-50 hover:border-green-600 hover:text-green-700 font-medium shadow-sm transition-all duration-200 hover:shadow-md"
+                              onClick={() => handleIngestDataSource(datasource.id)}
+                              disabled={ingestingDataSource === datasource.id}
+                            >
+                              {ingestingDataSource === datasource.id ? (
+                                <>
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin text-green-600" />
+                                  <span className="text-green-600">Ingesting Data...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <ArrowDownToLine className="mr-2 h-4 w-4 text-green-600" />
+                                  <span className="text-green-600">Run Initial Ingest</span>
+                                </>
                               )}
-                            </div>
-                          )}
-                        </div>
+                            </Button>
+                            
+                            {ingestionResults[datasource.id] && (
+                              <div className="mt-2 flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-md px-3 py-2">
+                                <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
+                                <span className="font-medium">
+                                  Successfully ingested {ingestionResults[datasource.id].files} file{ingestionResults[datasource.id].files !== 1 ? 's' : ''}
+                                </span>
+                                <span className="text-green-600">
+                                  ({(ingestionResults[datasource.id].bytes / 1024 / 1024).toFixed(2)} MB)
+                                </span>
+                                {ingestionResults[datasource.id].errors > 0 && (
+                                  <span className="text-orange-600 font-medium">
+                                    • {ingestionResults[datasource.id].errors} error{ingestionResults[datasource.id].errors !== 1 ? 's' : ''}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
                         
                       </div>
                     </div>
