@@ -79,7 +79,19 @@ class ScoringStage(AirdStage):
         # Get playbook for AI-Ready metrics (noise patterns, coherence settings)
         playbook = context.get("playbook") or {}
         playbook_id = context.get("playbook_id", "TECH")
-        self.logger.info(f"Using playbook {playbook_id} for AI-Ready metrics")
+        
+        # Check if playbook is actually loaded (not just an empty dict)
+        has_playbook = playbook and isinstance(playbook, dict) and len(playbook) > 0
+        
+        if has_playbook:
+            self.logger.info(f"Using playbook {playbook_id} for AI-Ready metrics (loaded successfully, keys: {list(playbook.keys())[:5]})")
+            # Log if AI-Ready sections are present
+            if "noise_patterns" in playbook:
+                self.logger.info(f"Playbook {playbook_id} has noise_patterns section")
+            if "coherence" in playbook:
+                self.logger.info(f"Playbook {playbook_id} has coherence section")
+        else:
+            self.logger.warning(f"Playbook {playbook_id} not available or empty, skipping AI-Ready metrics")
 
         for file_stem in processed_files:
             try:
@@ -97,7 +109,7 @@ class ScoringStage(AirdStage):
                 for record in records:
                     try:
                         # Use AI-Ready metrics scorer if playbook is available
-                        if playbook:
+                        if has_playbook:
                             scored = score_record_with_ai_ready_metrics(record, weights, playbook)
                         else:
                             scored = score_record(record, weights)

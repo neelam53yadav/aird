@@ -1051,9 +1051,14 @@ def score(**context) -> Dict[str, Any]:
             try:
                 from primedata.ingestion_pipeline.aird_stages.playbooks import load_playbook_yaml
                 playbook = load_playbook_yaml(playbook_id, workspace_id=str(workspace_id), db_session=db)
-                logger.info(f"Loaded playbook {playbook_id} for scoring stage")
+                logger.info(f"Loaded playbook {playbook_id} for scoring stage (keys: {list(playbook.keys())[:10]})")
+                # Log if AI-Ready sections are present
+                if "noise_patterns" in playbook:
+                    logger.info(f"Playbook {playbook_id} has noise_patterns section")
+                if "coherence" in playbook:
+                    logger.info(f"Playbook {playbook_id} has coherence section")
             except Exception as e:
-                logger.warning(f"Failed to load playbook {playbook_id}: {e}, using empty playbook")
+                logger.warning(f"Failed to load playbook {playbook_id}: {e}, using empty playbook", exc_info=True)
 
         stage_context = {
             "storage": storage,
