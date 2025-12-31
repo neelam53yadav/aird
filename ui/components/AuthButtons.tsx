@@ -5,21 +5,45 @@ import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { Button } from "./ui/button"
 import { exchangeToken } from "@/lib/auth-utils"
-import { Mail, Lock, User, ArrowLeft } from "lucide-react"
+import { Mail, Lock, User, CheckCircle2, X } from "lucide-react"
 
 interface AuthButtonsProps {
   className?: string
 }
 
+// Password complexity requirements
+interface PasswordRequirements {
+  minLength: boolean
+  hasUpperCase: boolean
+  hasLowerCase: boolean
+  hasNumber: boolean
+  hasSpecialChar: boolean
+}
+
 export function AuthButtons({ className }: AuthButtonsProps) {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
   const [name, setName] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [isSignUp, setIsSignUp] = useState(false)
-  const [showEmailForm, setShowEmailForm] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
+
+  // Check password complexity
+  const checkPasswordRequirements = (pwd: string): PasswordRequirements => {
+    return {
+      minLength: pwd.length >= 8,
+      hasUpperCase: /[A-Z]/.test(pwd),
+      hasLowerCase: /[a-z]/.test(pwd),
+      hasNumber: /[0-9]/.test(pwd),
+      hasSpecialChar: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pwd),
+    }
+  }
+
+  const passwordRequirements = checkPasswordRequirements(password)
+  const isPasswordValid = Object.values(passwordRequirements).every(Boolean)
+  const passwordsMatch = !isSignUp || password === confirmPassword
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true)
@@ -53,13 +77,27 @@ export function AuthButtons({ className }: AuthButtonsProps) {
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
+    
     if (!email || !password) {
       setError("Please fill in all fields")
       return
     }
-    if (isSignUp && !name) {
-      setError("Please enter your name")
-      return
+    
+    if (isSignUp) {
+      if (!name) {
+        setError("Please enter your name")
+        return
+      }
+      
+      if (!isPasswordValid) {
+        setError("Password does not meet complexity requirements")
+        return
+      }
+      
+      if (password !== confirmPassword) {
+        setError("Passwords do not match")
+        return
+      }
     }
 
     setIsLoading(true)
@@ -129,140 +167,15 @@ export function AuthButtons({ className }: AuthButtonsProps) {
     }
   }
 
-  // If email form is shown, display the form
-  if (showEmailForm) {
-    return (
-      <div className={`space-y-6 ${className}`}>
-        {/* Back Button */}
-        <button
-          onClick={() => {
-            setShowEmailForm(false)
-            setError(null)
-            setEmail("")
-            setPassword("")
-            setName("")
-            setIsSignUp(false)
-          }}
-          className="flex items-center text-gray-600 hover:text-gray-900 transition-colors mb-4"
-        >
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          <span className="text-sm font-medium">Back to sign in options</span>
-        </button>
-
-        {/* Form Header */}
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">
-            {isSignUp ? "Create your account" : "Sign in to your account"}
-          </h2>
-          <p className="text-gray-600">
-            {isSignUp
-              ? "Enter your details to get started"
-              : "Enter your email and password to continue"}
-          </p>
-        </div>
-
-        {/* Error Message */}
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-            {error}
-          </div>
-        )}
-
-        {/* Email/Password Form */}
-        <form onSubmit={handleEmailAuth} className="space-y-4">
-          {isSignUp && (
-            <div className="space-y-2">
-              <label htmlFor="name" className="text-sm font-medium text-gray-700">
-                Full Name
-              </label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <input
-                  id="name"
-                  type="text"
-                  placeholder="John Doe"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                  required={isSignUp}
-                />
-              </div>
-            </div>
-          )}
-
-          <div className="space-y-2">
-            <label htmlFor="email" className="text-sm font-medium text-gray-700">
-              Email
-            </label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-              <input
-                id="email"
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                required
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <label htmlFor="password" className="text-sm font-medium text-gray-700">
-              Password
-            </label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-              <input
-                id="password"
-                type="password"
-                placeholder="Enter your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                required
-              />
-            </div>
-          </div>
-
-          <Button
-            type="submit"
-            disabled={isLoading || !email || !password || (isSignUp && !name)}
-            className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold py-3 rounded-lg shadow-md hover:shadow-lg transition-all duration-200"
-            size="lg"
-          >
-            {isLoading
-              ? isSignUp
-                ? "Creating account..."
-                : "Signing in..."
-              : isSignUp
-              ? "Create account"
-              : "Sign in"}
-          </Button>
-
-          <div className="text-center">
-            <button
-              type="button"
-              onClick={() => {
-                setIsSignUp(!isSignUp)
-                setError(null)
-              }}
-              className="text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors"
-            >
-              {isSignUp
-                ? "Already have an account? Sign in"
-                : "Don't have an account? Sign up"}
-            </button>
-          </div>
-        </form>
-      </div>
-    )
-  }
-
-  // Default view: Show sign-in options
   return (
     <div className={`space-y-6 ${className}`}>
+      {/* Dynamic Header Text */}
+      <div className="text-center mb-4">
+        <p className="text-base md:text-lg text-gray-600">
+          {isSignUp ? "Create your account to get started" : "Sign in to your account to continue"}
+        </p>
+      </div>
+
       {/* Google Sign In */}
       <Button
         onClick={handleGoogleSignIn}
@@ -303,23 +216,194 @@ export function AuthButtons({ className }: AuthButtonsProps) {
         </div>
       </div>
 
-      {/* Email Sign In Button */}
-      <Button
-        onClick={() => setShowEmailForm(true)}
-        disabled={isLoading}
-        className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold py-3 rounded-lg shadow-md hover:shadow-lg transition-all duration-200"
-        size="lg"
-      >
-        <Mail className="w-5 h-5 mr-2" />
-        Sign in with email
-      </Button>
-
       {/* Error Message (if any) */}
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
           {error}
         </div>
       )}
+
+      {/* Email/Password Form */}
+      <form onSubmit={handleEmailAuth} className="space-y-4">
+        {isSignUp && (
+          <div className="space-y-2">
+            <label htmlFor="name" className="text-sm font-medium text-gray-700">
+              Full Name
+            </label>
+            <div className="relative">
+              <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+              <input
+                id="name"
+                type="text"
+                placeholder="John Doe"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                required={isSignUp}
+              />
+            </div>
+          </div>
+        )}
+
+        <div className="space-y-2">
+          <label htmlFor="email" className="text-sm font-medium text-gray-700">
+            Email
+          </label>
+          <div className="relative">
+            <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+            <input
+              id="email"
+              type="email"
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+              required
+            />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <label htmlFor="password" className="text-sm font-medium text-gray-700">
+            Password
+          </label>
+          <div className="relative">
+            <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+            <input
+              id="password"
+              type="password"
+              placeholder={isSignUp ? "Create a strong password" : "Enter your password"}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
+                isSignUp && password && !isPasswordValid
+                  ? "border-red-300"
+                  : "border-gray-300"
+              }`}
+              required
+            />
+          </div>
+          
+          {/* Password Requirements (only show during sign-up) */}
+          {isSignUp && password && (
+            <div className="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
+              <p className="text-xs font-medium text-gray-700 mb-2">Password requirements:</p>
+              <ul className="space-y-1.5 text-xs">
+                <li className={`flex items-center ${passwordRequirements.minLength ? "text-green-600" : "text-gray-500"}`}>
+                  {passwordRequirements.minLength ? (
+                    <CheckCircle2 className="h-3 w-3 mr-2" />
+                  ) : (
+                    <X className="h-3 w-3 mr-2" />
+                  )}
+                  At least 8 characters
+                </li>
+                <li className={`flex items-center ${passwordRequirements.hasUpperCase ? "text-green-600" : "text-gray-500"}`}>
+                  {passwordRequirements.hasUpperCase ? (
+                    <CheckCircle2 className="h-3 w-3 mr-2" />
+                  ) : (
+                    <X className="h-3 w-3 mr-2" />
+                  )}
+                  One uppercase letter
+                </li>
+                <li className={`flex items-center ${passwordRequirements.hasLowerCase ? "text-green-600" : "text-gray-500"}`}>
+                  {passwordRequirements.hasLowerCase ? (
+                    <CheckCircle2 className="h-3 w-3 mr-2" />
+                  ) : (
+                    <X className="h-3 w-3 mr-2" />
+                  )}
+                  One lowercase letter
+                </li>
+                <li className={`flex items-center ${passwordRequirements.hasNumber ? "text-green-600" : "text-gray-500"}`}>
+                  {passwordRequirements.hasNumber ? (
+                    <CheckCircle2 className="h-3 w-3 mr-2" />
+                  ) : (
+                    <X className="h-3 w-3 mr-2" />
+                  )}
+                  One number
+                </li>
+                <li className={`flex items-center ${passwordRequirements.hasSpecialChar ? "text-green-600" : "text-gray-500"}`}>
+                  {passwordRequirements.hasSpecialChar ? (
+                    <CheckCircle2 className="h-3 w-3 mr-2" />
+                  ) : (
+                    <X className="h-3 w-3 mr-2" />
+                  )}
+                  One special character
+                </li>
+              </ul>
+            </div>
+          )}
+        </div>
+
+        {/* Confirm Password (only for sign-up) */}
+        {isSignUp && (
+          <div className="space-y-2">
+            <label htmlFor="confirmPassword" className="text-sm font-medium text-gray-700">
+              Confirm Password
+            </label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+              <input
+                id="confirmPassword"
+                type="password"
+                placeholder="Confirm your password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
+                  confirmPassword && !passwordsMatch
+                    ? "border-red-300"
+                    : confirmPassword && passwordsMatch
+                    ? "border-green-300"
+                    : "border-gray-300"
+                }`}
+                required={isSignUp}
+              />
+            </div>
+            {confirmPassword && !passwordsMatch && (
+              <p className="text-xs text-red-600 mt-1">Passwords do not match</p>
+            )}
+            {confirmPassword && passwordsMatch && (
+              <p className="text-xs text-green-600 mt-1">Passwords match</p>
+            )}
+          </div>
+        )}
+
+        <Button
+          type="submit"
+          disabled={
+            isLoading ||
+            !email ||
+            !password ||
+            (isSignUp && (!name || !isPasswordValid || !passwordsMatch || !confirmPassword))
+          }
+          className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold py-3 rounded-lg shadow-md hover:shadow-lg transition-all duration-200"
+          size="lg"
+        >
+          {isLoading
+            ? isSignUp
+              ? "Creating account..."
+              : "Signing in..."
+            : isSignUp
+            ? "Create account"
+            : "Sign in"}
+        </Button>
+
+        <div className="text-center">
+          <button
+            type="button"
+            onClick={() => {
+              setIsSignUp(!isSignUp)
+              setError(null)
+              setPassword("")
+              setConfirmPassword("")
+            }}
+            className="text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors"
+          >
+            {isSignUp
+              ? "Already have an account? Sign in"
+              : "Don't have an account? Sign up"}
+          </button>
+        </div>
+      </form>
     </div>
   )
 }
