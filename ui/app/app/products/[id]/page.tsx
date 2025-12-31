@@ -1264,7 +1264,7 @@ export default function ProductDetailPage() {
               ) : (
                 <div className="space-y-4">
                   <p className="text-sm text-gray-600">
-                    Run the complete data processing pipeline to ingest, clean, chunk, embed, and index your data.
+                    Run the complete data processing pipeline to ingest, clean, score with AI-Ready metrics, generate fingerprint, chunk, embed, and index your data.
                   </p>
                   
                   {/* Recent Runs Table */}
@@ -1770,6 +1770,9 @@ export default function ProductDetailPage() {
               <ul className="text-sm text-gray-600 mb-6 space-y-1">
                 <li>• Automatically ingest data from all data sources</li>
                 <li>• Clean and preprocess the data</li>
+                <li>• Score chunks with AI-Ready metrics (coherence, noise detection, boundary quality)</li>
+                <li>• Generate readiness fingerprint</li>
+                <li>• Evaluate policy compliance</li>
                 <li>• Chunk documents for processing</li>
                 <li>• Generate embeddings</li>
                 <li>• Index to Qdrant for search</li>
