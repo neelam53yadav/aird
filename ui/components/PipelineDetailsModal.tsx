@@ -134,8 +134,11 @@ export default function PipelineDetailsModal({
     }
   }
 
-  // Check if pipeline can be cancelled
-  const canCancel = runStatus?.toLowerCase() === 'running' || runStatus?.toLowerCase() === 'queued'
+  // Check if pipeline can be cancelled (more robust status check)
+  const canCancel = runStatus && (
+    runStatus.toLowerCase() === 'running' || 
+    runStatus.toLowerCase() === 'queued'
+  )
 
   const getStageStatusIcon = (status: string) => {
     switch (status?.toLowerCase()) {

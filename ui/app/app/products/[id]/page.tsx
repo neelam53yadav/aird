@@ -93,6 +93,9 @@ export default function ProductDetailPage() {
   const [loadingArtifacts, setLoadingArtifacts] = useState(false)
   const [pipelineRuns, setPipelineRuns] = useState<PipelineRun[]>([])
   const [loadingPipelineRuns, setLoadingPipelineRuns] = useState(false)
+  const [pipelineRunsPage, setPipelineRunsPage] = useState(0)
+  const [pipelineRunsTotal, setPipelineRunsTotal] = useState(0)
+  const PIPELINE_RUNS_PER_PAGE = 5
   const [runningPipeline, setRunningPipeline] = useState(false)
   const [pipelineConflict, setPipelineConflict] = useState<any>(null)
   const [promotingVersion, setPromotingVersion] = useState<number | null>(null)
@@ -441,14 +444,23 @@ export default function ProductDetailPage() {
     }
   }
 
-  const loadPipelineRuns = async () => {
+  const loadPipelineRuns = async (page: number = pipelineRunsPage) => {
     if (!product) return
     
     setLoadingPipelineRuns(true)
     try {
-      const response = await apiClient.getPipelineRuns(product.id, 10)
+      const offset = page * PIPELINE_RUNS_PER_PAGE
+      const response = await apiClient.getPipelineRuns(product.id, PIPELINE_RUNS_PER_PAGE, offset)
       if (response.data) {
-        setPipelineRuns(response.data || [])
+        // Handle both old format (array) and new format (object with runs, total, etc.)
+        if (Array.isArray(response.data)) {
+          setPipelineRuns(response.data)
+          setPipelineRunsTotal(response.data.length)
+        } else {
+          setPipelineRuns(response.data.runs || [])
+          setPipelineRunsTotal(response.data.total || 0)
+        }
+        setPipelineRunsPage(page)
       }
     } catch (err) {
       console.error('Failed to load pipeline runs:', err)
@@ -1345,6 +1357,32 @@ export default function ProductDetailPage() {
                             ))}
                           </tbody>
                         </table>
+                        {/* Pagination Controls */}
+                        {pipelineRunsTotal > PIPELINE_RUNS_PER_PAGE && (
+                          <div className="mt-4 flex items-center justify-between border-t border-gray-200 px-6 py-3 bg-white">
+                            <div className="text-sm text-gray-700">
+                              Showing {pipelineRunsPage * PIPELINE_RUNS_PER_PAGE + 1} to{' '}
+                              {Math.min((pipelineRunsPage + 1) * PIPELINE_RUNS_PER_PAGE, pipelineRunsTotal)} of{' '}
+                              {pipelineRunsTotal} runs
+                            </div>
+                            <div className="flex space-x-2">
+                              <button
+                                onClick={() => loadPipelineRuns(pipelineRunsPage - 1)}
+                                disabled={pipelineRunsPage === 0 || loadingPipelineRuns}
+                                className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                              >
+                                Previous
+                              </button>
+                              <button
+                                onClick={() => loadPipelineRuns(pipelineRunsPage + 1)}
+                                disabled={(pipelineRunsPage + 1) * PIPELINE_RUNS_PER_PAGE >= pipelineRunsTotal || loadingPipelineRuns}
+                                className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                              >
+                                Next
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
