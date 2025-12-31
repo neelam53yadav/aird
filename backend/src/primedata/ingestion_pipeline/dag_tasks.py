@@ -1047,6 +1047,29 @@ def task_scoring(**context) -> Dict[str, Any]:
                 "message": "No processed files to score",
             }
 
+        # Load playbook for AI-Ready metrics (noise patterns, coherence settings)
+        playbook_id = params.get("playbook_id")
+        if not playbook_id:
+            # Try to get from product
+            from primedata.db.models import Product
+            product = db.query(Product).filter(Product.id == product_id).first()
+            if product and product.playbook_id:
+                playbook_id = product.playbook_id
+        
+        playbook = {}
+        if playbook_id:
+            try:
+                from primedata.ingestion_pipeline.aird_stages.playbooks import load_playbook_yaml
+                playbook = load_playbook_yaml(playbook_id, workspace_id=str(workspace_id), db_session=db)
+                logger.info(f"Loaded playbook {playbook_id} for scoring stage (keys: {list(playbook.keys())[:10]})")
+                # Log if AI-Ready sections are present
+                if "noise_patterns" in playbook:
+                    logger.info(f"Playbook {playbook_id} has noise_patterns section")
+                if "coherence" in playbook:
+                    logger.info(f"Playbook {playbook_id} has coherence section")
+            except Exception as e:
+                logger.warning(f"Failed to load playbook {playbook_id}: {e}, using empty playbook", exc_info=True)
+
         # Create and execute scoring stage
         # Lazy import to avoid DAG import timeouts
         from primedata.ingestion_pipeline.aird_stages.scoring import ScoringStage
@@ -1061,6 +1084,8 @@ def task_scoring(**context) -> Dict[str, Any]:
             "storage": storage,
             "processed_files": processed_files,
             "preprocess_result": preprocess_result,
+            "playbook": playbook,
+            "playbook_id": playbook_id,
         }
 
         result = scoring_stage.execute(stage_context)
@@ -1150,6 +1175,11 @@ def task_fingerprint(**context) -> Dict[str, Any]:
         if not scoring_result:
             scoring_result = context["task_instance"].xcom_pull(task_ids="scoring")
 
+        # Get preprocess result for preprocessing stats (needed for Chunk Boundary Quality)
+        preprocess_result = context["task_instance"].xcom_pull(task_ids="preprocess", key="preprocess_result")
+        if not preprocess_result:
+            preprocess_result = context["task_instance"].xcom_pull(task_ids="preprocess")
+
         # Create and execute fingerprint stage
         # Lazy import to avoid DAG import timeouts
         from primedata.ingestion_pipeline.aird_stages.fingerprint import FingerprintStage
@@ -1163,6 +1193,7 @@ def task_fingerprint(**context) -> Dict[str, Any]:
         stage_context = {
             "storage": storage,
             "scoring_result": scoring_result,
+            "preprocess_result": preprocess_result,
         }
 
         result = fingerprint_stage.execute(stage_context)
