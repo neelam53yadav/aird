@@ -5,6 +5,7 @@ import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { Button } from "./ui/button"
 import { exchangeToken } from "@/lib/auth-utils"
+import { getApiUrl } from "@/lib/config"
 import { Mail, Lock, User, CheckCircle2, X } from "lucide-react"
 
 interface AuthButtonsProps {
@@ -24,10 +25,12 @@ export function AuthButtons({ className }: AuthButtonsProps) {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
-  const [name, setName] = useState("")
+  const [firstName, setFirstName] = useState("")
+  const [lastName, setLastName] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [isSignUp, setIsSignUp] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [signupSuccess, setSignupSuccess] = useState(false)
   const router = useRouter()
 
   // Check password complexity
@@ -44,6 +47,44 @@ export function AuthButtons({ className }: AuthButtonsProps) {
   const passwordRequirements = checkPasswordRequirements(password)
   const isPasswordValid = Object.values(passwordRequirements).every(Boolean)
   const passwordsMatch = !isSignUp || password === confirmPassword
+
+  // Email format validation
+  const validateEmailFormat = (email: string): boolean => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    return emailRegex.test(email)
+  }
+
+  // Validate email domain (check if domain exists)
+  const validateEmailDomain = async (email: string): Promise<{ valid: boolean; message?: string }> => {
+    if (!validateEmailFormat(email)) {
+      return { valid: false, message: "Please enter a valid email address" }
+    }
+
+    try {
+      const apiUrl = getApiUrl()
+      const response = await fetch(`${apiUrl}/api/v1/auth/validate-email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        return { valid: false, message: error.detail || "Email validation failed" }
+      }
+
+      const data = await response.json()
+      return { valid: data.valid, message: data.message }
+    } catch (error) {
+      console.error("Email validation error:", error)
+      return { valid: false, message: "Unable to validate email. Please try again." }
+    }
+  }
+
+  // Handle email change (no real-time validation)
+  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setEmail(e.target.value)
+  }
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true)
@@ -77,15 +118,30 @@ export function AuthButtons({ className }: AuthButtonsProps) {
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
+    setSignupSuccess(false)
     
     if (!email || !password) {
       setError("Please fill in all fields")
       return
     }
+
+    // Validate email format
+    if (!validateEmailFormat(email)) {
+      setError("Please enter a valid email address")
+      return
+    }
     
     if (isSignUp) {
-      if (!name) {
-        setError("Please enter your name")
+      if (!firstName || !lastName) {
+        setError("Please enter your first and last name")
+        return
+      }
+
+      // Validate email domain for sign-up
+      const emailValidation = await validateEmailDomain(email)
+      
+      if (!emailValidation.valid) {
+        setError(emailValidation.message || "Invalid email address")
         return
       }
       
@@ -102,14 +158,14 @@ export function AuthButtons({ className }: AuthButtonsProps) {
 
     setIsLoading(true)
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+      const apiUrl = getApiUrl()
 
       if (isSignUp) {
         // Sign up with email/password
         const response = await fetch(`${apiUrl}/api/v1/auth/signup`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password, name }),
+          body: JSON.stringify({ email, password, first_name: firstName, last_name: lastName }),
         })
 
         if (!response.ok) {
@@ -119,7 +175,14 @@ export function AuthButtons({ className }: AuthButtonsProps) {
 
         const data = await response.json()
 
-        // Sign in with NextAuth using credentials
+        // Check if verification is required
+        if (data.requires_verification) {
+          setSignupSuccess(true)
+          setIsLoading(false)
+          return // Don't sign in yet, user needs to verify email
+        }
+
+        // If verification not required (shouldn't happen), sign in
         const result = await signIn("credentials", {
           email,
           password,
@@ -161,7 +224,30 @@ export function AuthButtons({ className }: AuthButtonsProps) {
       }
     } catch (error) {
       console.error("Email auth error:", error)
-      setError(error instanceof Error ? error.message : "Authentication failed")
+      
+      // Extract error message from NextAuth error
+      let errorMessage = "Authentication failed"
+      
+      if (error instanceof Error) {
+        errorMessage = error.message
+      } else if (typeof error === "string") {
+        errorMessage = error
+      } else if (error && typeof error === "object" && "message" in error) {
+        errorMessage = String(error.message)
+      }
+      
+      // Show user-friendly error messages
+      if (errorMessage.includes("Invalid email or password") || 
+          errorMessage.includes("Invalid email") || 
+          errorMessage.includes("Invalid password")) {
+        setError("Invalid email or password. Please check your credentials and try again.")
+      } else if (errorMessage.includes("Email and password are required")) {
+        setError("Please enter both email and password")
+      } else if (errorMessage.includes("fetch failed") || errorMessage.includes("Failed to fetch")) {
+        setError("Unable to connect to the server. Please check your connection and try again.")
+      } else {
+        setError(errorMessage)
+      }
     } finally {
       setIsLoading(false)
     }
@@ -216,6 +302,14 @@ export function AuthButtons({ className }: AuthButtonsProps) {
         </div>
       </div>
 
+      {/* Success Message (for signup) */}
+      {signupSuccess && (
+        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">
+          <p className="font-semibold mb-2">Account created successfully!</p>
+          <p>Please check your email ({email}) to verify your account before signing in.</p>
+        </div>
+      )}
+
       {/* Error Message (if any) */}
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
@@ -226,23 +320,43 @@ export function AuthButtons({ className }: AuthButtonsProps) {
       {/* Email/Password Form */}
       <form onSubmit={handleEmailAuth} className="space-y-4">
         {isSignUp && (
-          <div className="space-y-2">
-            <label htmlFor="name" className="text-sm font-medium text-gray-700">
-              Full Name
-            </label>
-            <div className="relative">
-              <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-              <input
-                id="name"
-                type="text"
-                placeholder="John Doe"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                required={isSignUp}
-              />
+          <>
+            <div className="space-y-2">
+              <label htmlFor="firstName" className="text-sm font-medium text-gray-700">
+                First Name
+              </label>
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <input
+                  id="firstName"
+                  type="text"
+                  placeholder="John"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  required={isSignUp}
+                />
+              </div>
             </div>
-          </div>
+
+            <div className="space-y-2">
+              <label htmlFor="lastName" className="text-sm font-medium text-gray-700">
+                Last Name
+              </label>
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <input
+                  id="lastName"
+                  type="text"
+                  placeholder="Doe"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  required={isSignUp}
+                />
+              </div>
+            </div>
+          </>
         )}
 
         <div className="space-y-2">
@@ -256,7 +370,7 @@ export function AuthButtons({ className }: AuthButtonsProps) {
               type="email"
               placeholder="you@example.com"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={handleEmailChange}
               className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
               required
             />
@@ -373,7 +487,7 @@ export function AuthButtons({ className }: AuthButtonsProps) {
             isLoading ||
             !email ||
             !password ||
-            (isSignUp && (!name || !isPasswordValid || !passwordsMatch || !confirmPassword))
+            (isSignUp && (!firstName || !lastName || !isPasswordValid || !passwordsMatch || !confirmPassword))
           }
           className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold py-3 rounded-lg shadow-md hover:shadow-lg transition-all duration-200"
           size="lg"
@@ -395,6 +509,9 @@ export function AuthButtons({ className }: AuthButtonsProps) {
               setError(null)
               setPassword("")
               setConfirmPassword("")
+              setFirstName("")
+              setLastName("")
+              setEmail("")
             }}
             className="text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors"
           >
