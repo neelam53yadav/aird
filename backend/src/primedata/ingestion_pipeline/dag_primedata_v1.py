@@ -1036,11 +1036,31 @@ def score(**context) -> Dict[str, Any]:
         # Get processed files from preprocessing
         preprocess_result = context.get("task_instance").xcom_pull(task_ids="preprocess")
         processed_files = preprocess_result.get("processed_file_list", []) if preprocess_result else []
+        
+        # Load playbook for AI-Ready metrics (noise patterns, coherence settings)
+        playbook_id = params.get("playbook_id")
+        if not playbook_id:
+            # Try to get from product
+            from primedata.db.models import Product
+            product = db.query(Product).filter(Product.id == product_id).first()
+            if product and product.playbook_id:
+                playbook_id = product.playbook_id
+        
+        playbook = {}
+        if playbook_id:
+            try:
+                from primedata.ingestion_pipeline.aird_stages.playbooks import load_playbook_yaml
+                playbook = load_playbook_yaml(playbook_id, workspace_id=str(workspace_id), db_session=db)
+                logger.info(f"Loaded playbook {playbook_id} for scoring stage")
+            except Exception as e:
+                logger.warning(f"Failed to load playbook {playbook_id}: {e}, using empty playbook")
 
         stage_context = {
             "storage": storage,
             "processed_files": processed_files,
             "preprocess_result": preprocess_result,
+            "playbook": playbook,
+            "playbook_id": playbook_id,
         }
 
         result = scoring_stage.execute(stage_context)
