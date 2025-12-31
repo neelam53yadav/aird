@@ -535,8 +535,8 @@ class ApiClient {
     })
   }
 
-  async getPipelineRuns(productId: string, limit: number = 10): Promise<ApiResponse> {
-    return this.get(`/api/v1/pipeline/runs?product_id=${productId}&limit=${limit}`)
+  async getPipelineRuns(productId: string, limit: number = 5, offset: number = 0): Promise<ApiResponse> {
+    return this.get(`/api/v1/pipeline/runs?product_id=${productId}&limit=${limit}&offset=${offset}`)
   }
 
   async syncPipelineRuns(productId: string): Promise<ApiResponse> {

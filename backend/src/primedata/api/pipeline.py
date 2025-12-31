@@ -471,17 +471,18 @@ async def trigger_pipeline(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to trigger pipeline: {str(e)}")
 
 
-@router.get("/runs", response_model=List[PipelineRunResponse])
+@router.get("/runs")
 async def list_pipeline_runs(
     product_id: UUID,
     request_obj: Request,
-    limit: int = 10,
+    limit: int = Query(10, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     sync: bool = Query(True, description="Sync with Airflow before returning"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     """
-    List pipeline runs for a product.
+    List pipeline runs for a product with pagination support.
     """
     # Ensure user has access to the product
     product = ensure_product_access(db, request_obj, product_id)
@@ -493,11 +494,21 @@ async def list_pipeline_runs(
     # Get pipeline runs - filter by product_id AND workspace_id for security
     # This ensures users can only see pipeline runs for products in their workspaces
     allowed_workspace_ids = allowed_workspaces(request_obj, db)
+    
+    # Get total count for pagination
+    total_count = (
+        db.query(func.count(PipelineRun.id))
+        .join(Product, PipelineRun.product_id == Product.id)
+        .filter(PipelineRun.product_id == product_id, Product.workspace_id.in_(allowed_workspace_ids))
+        .scalar()
+    )
+    
     runs = (
         db.query(PipelineRun)
         .join(Product, PipelineRun.product_id == Product.id)
         .filter(PipelineRun.product_id == product_id, Product.workspace_id.in_(allowed_workspace_ids))
         .order_by(PipelineRun.created_at.desc())
+        .offset(offset)
         .limit(limit)
         .all()
     )
@@ -505,20 +516,25 @@ async def list_pipeline_runs(
     # Lazy-load metrics from S3 if archived
     from primedata.services.lazy_json_loader import load_pipeline_run_metrics
 
-    return [
-        PipelineRunResponse(
-            id=run.id,
-            product_id=run.product_id,
-            version=run.version,
-            status=run.status.value,
-            started_at=run.started_at,
-            finished_at=run.finished_at,
-            dag_run_id=run.dag_run_id,
-            metrics=load_pipeline_run_metrics(run),
-            created_at=run.created_at,
-        )
-        for run in runs
-    ]
+    return {
+        "runs": [
+            PipelineRunResponse(
+                id=run.id,
+                product_id=run.product_id,
+                version=run.version,
+                status=run.status.value,
+                started_at=run.started_at,
+                finished_at=run.finished_at,
+                dag_run_id=run.dag_run_id,
+                metrics=load_pipeline_run_metrics(run),
+                created_at=run.created_at,
+            )
+            for run in runs
+        ],
+        "total": total_count,
+        "limit": limit,
+        "offset": offset,
+    }
 
 
 @router.get("/runs/{run_id}", response_model=PipelineRunResponse)
@@ -595,9 +611,9 @@ async def update_pipeline_run(
                         from requests.auth import HTTPBasicAuth
                         
                         # Use same environment variables as get_pipeline_run_logs
-                        airflow_url = os.getenv("AIRFLOW_URL", "http://localhost:8080")
+                        airflow_url = os.getenv("AIRFLOW_URL", "http://34.28.26.21:8080")
                         airflow_username = os.getenv("AIRFLOW_USERNAME", "admin")
-                        airflow_password = os.getenv("AIRFLOW_PASSWORD", "admin")
+                        airflow_password = os.getenv("AIRFLOW_PASSWORD", "admin123")
                         
                         dag_id = "primedata_simple"
                         # Use PATCH to update DAG run state to failed (stops execution)
@@ -739,9 +755,9 @@ async def get_pipeline_run_logs(
         }
 
     # Fetch logs from Airflow
-    airflow_url = os.getenv("AIRFLOW_URL", "http://localhost:8080")
+    airflow_url = os.getenv("AIRFLOW_URL", "http://34.28.26.21:8080")
     airflow_username = os.getenv("AIRFLOW_USERNAME", "admin")
-    airflow_password = os.getenv("AIRFLOW_PASSWORD", "admin")
+    airflow_password = os.getenv("AIRFLOW_PASSWORD", "admin123")
 
     try:
         import requests
@@ -977,9 +993,9 @@ def _sync_pipeline_runs_with_airflow(db: Session) -> int:
     """
     try:
         # Get Airflow configuration
-        airflow_url = os.getenv("AIRFLOW_URL", "http://localhost:8080")
+        airflow_url = os.getenv("AIRFLOW_URL", "http://34.28.26.21:8080")
         airflow_username = os.getenv("AIRFLOW_USERNAME", "admin")
-        airflow_password = os.getenv("AIRFLOW_PASSWORD", "admin")
+        airflow_password = os.getenv("AIRFLOW_PASSWORD", "admin123")
 
         # Get all running pipeline runs
         running_runs = (
@@ -1116,9 +1132,9 @@ async def _trigger_airflow_dag(
         dag_run_id = f"primedata_simple_{pipeline_run_id}_{int(datetime.utcnow().timestamp())}"
 
         # Trigger DAG using Airflow REST API
-        airflow_url = os.getenv("AIRFLOW_URL", "http://localhost:8080")
+        airflow_url = os.getenv("AIRFLOW_URL", "http://34.28.26.21:8080")
         airflow_username = os.getenv("AIRFLOW_USERNAME", "admin")
-        airflow_password = os.getenv("AIRFLOW_PASSWORD", "admin")
+        airflow_password = os.getenv("AIRFLOW_PASSWORD", "admin123")
 
         trigger_url = f"{airflow_url}/api/v1/dags/primedata_simple/dagRuns"
 
