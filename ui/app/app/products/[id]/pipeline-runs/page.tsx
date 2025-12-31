@@ -24,7 +24,22 @@ export default function PipelineRunsPage() {
   const [pipelineConflict, setPipelineConflict] = useState<any>(null)
   const [currentPage, setCurrentPage] = useState(0)
   const [totalRuns, setTotalRuns] = useState(0)
+  const [product, setProduct] = useState<any>(null)
+  const [promotingVersion, setPromotingVersion] = useState<number | null>(null)
   const RUNS_PER_PAGE = 20
+
+  const loadProduct = useCallback(async () => {
+    try {
+      const response = await apiClient.getProduct(productId)
+      if (response.error) {
+        console.error('Failed to load product:', response.error)
+      } else if (response.data) {
+        setProduct(response.data)
+      }
+    } catch (err) {
+      console.error('Failed to load product:', err)
+    }
+  }, [productId])
 
   const loadPipelineRuns = useCallback(async (page: number, showLoading = true) => {
     if (showLoading) setLoading(true)
@@ -64,6 +79,7 @@ export default function PipelineRunsPage() {
   }, [productId, addToast])
 
   useEffect(() => {
+    loadProduct()
     loadPipelineRuns(0, true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [productId]) // Only reload when productId changes
@@ -177,6 +193,37 @@ export default function PipelineRunsPage() {
         type: 'error',
         message: err instanceof Error ? err.message : 'Failed to cancel run',
       })
+    }
+  }
+
+  const handlePromoteVersion = async (version: number) => {
+    if (!product) return
+    
+    setPromotingVersion(version)
+    try {
+      const response = await apiClient.promoteVersion(product.id, version)
+      
+      if (response.error) {
+        addToast({
+          type: 'error',
+          message: typeof response.error === 'string' ? response.error : 'Failed to promote version',
+        })
+      } else {
+        addToast({
+          type: 'success',
+          message: `Version ${version} has been promoted to production successfully`,
+        })
+        
+        // Refresh product data to get updated promoted_version
+        await loadProduct()
+      }
+    } catch (err) {
+      addToast({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Failed to promote version',
+      })
+    } finally {
+      setPromotingVersion(null)
     }
   }
 
@@ -405,7 +452,14 @@ export default function PipelineRunsPage() {
                     return (
                       <tr key={run.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900">v{run.version}</div>
+                          <div className="flex items-center space-x-2">
+                            <span className="text-sm font-medium text-gray-900">v{run.version}</span>
+                            {product?.promoted_version === run.version && (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gradient-to-r from-purple-500 to-pink-600 text-white shadow-sm">
+                                🚀 PROD
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center gap-2">
@@ -456,17 +510,40 @@ export default function PipelineRunsPage() {
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          {(run.status === 'running' || run.status === 'queued') && run.id && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleCancelRun(run.id!)}
-                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                            >
-                              <X className="h-4 w-4 mr-1" />
-                              Cancel
-                            </Button>
-                          )}
+                          <div className="flex items-center gap-2">
+                            {(run.status === 'running' || run.status === 'queued') && run.id && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleCancelRun(run.id!)}
+                                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                              >
+                                <X className="h-4 w-4 mr-1" />
+                                Cancel
+                              </Button>
+                            )}
+                            {run.status === 'succeeded' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handlePromoteVersion(run.version)}
+                                disabled={promotingVersion === run.version || product?.promoted_version === run.version}
+                                className={
+                                  product?.promoted_version === run.version
+                                    ? 'bg-green-100 text-green-800 hover:bg-green-100 cursor-default'
+                                    : promotingVersion === run.version
+                                    ? 'bg-gray-100 text-gray-500 cursor-not-allowed'
+                                    : 'bg-blue-100 text-blue-800 hover:bg-blue-200'
+                                }
+                              >
+                                {product?.promoted_version === run.version
+                                  ? '✓ Promoted'
+                                  : promotingVersion === run.version
+                                  ? 'Promoting...'
+                                  : 'Promote to Prod'}
+                              </Button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     )
