@@ -1438,9 +1438,6 @@ export default function ProductDetailPage() {
                             Artifact
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Stage
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                             Type
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
@@ -1501,20 +1498,20 @@ export default function ProductDetailPage() {
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <div className="flex items-center space-x-3">
                                   {getArtifactIcon(artifact.artifact_type)}
-                                  <div>
-                                    <p className="text-sm font-medium text-gray-900">
-                                      {artifact.display_name || artifact.artifact_name.replace(/_/g, ' ')}
-                                    </p>
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <p className="text-sm font-medium text-gray-900">
+                                        {artifact.display_name || artifact.artifact_name.replace(/_/g, ' ')}
+                                      </p>
+                                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${stage.color}`}>
+                                        {stage.name}
+                                      </span>
+                                    </div>
                                     {artifact.description && (
                                       <p className="text-xs text-gray-500 mt-0.5">{artifact.description}</p>
                                     )}
                                   </div>
                                 </div>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${stage.color}`}>
-                                  {stage.name}
-                                </span>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <span className="text-sm text-gray-600 uppercase font-mono">
