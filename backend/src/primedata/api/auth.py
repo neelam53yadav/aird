@@ -2,16 +2,22 @@
 Authentication API router.
 """
 
+import secrets
 import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
+import dns.resolver
+from email_validator import validate_email, EmailNotValidError
 from fastapi import APIRouter, Depends, HTTPException, status
+from loguru import logger
 from primedata.core.jwt_keys import sign_jwt
 from primedata.core.nextauth_verify import verify_nextauth_token
 from primedata.core.password import hash_password, verify_password
 from primedata.core.security import get_current_user
 from primedata.db.database import get_db
 from primedata.db.models import AuthProvider, User, Workspace, WorkspaceMember, WorkspaceRole
+from primedata.services.email_service import send_verification_email
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -60,7 +66,8 @@ class SignupRequest(BaseModel):
 
     email: str
     password: str
-    name: str
+    first_name: str
+    last_name: str
 
 
 class LoginRequest(BaseModel):
@@ -79,24 +86,130 @@ class LoginResponse(BaseModel):
     default_workspace_id: str
 
 
-@router.post("/api/v1/auth/signup", response_model=LoginResponse)
+class SignupResponse(BaseModel):
+    """Response model for signup."""
+
+    message: str
+    email: str
+    requires_verification: bool = True
+
+
+class EmailValidationRequest(BaseModel):
+    """Request model for email validation."""
+
+    email: str
+
+
+class EmailValidationResponse(BaseModel):
+    """Response model for email validation."""
+
+    valid: bool
+    message: str
+    domain_valid: Optional[bool] = None
+    address_verified: Optional[bool] = None
+
+
+class VerifyEmailRequest(BaseModel):
+    """Request model for email verification."""
+
+    token: str
+
+
+@router.post("/api/v1/auth/validate-email", response_model=EmailValidationResponse)
+async def validate_email_endpoint(request: EmailValidationRequest, db: Session = Depends(get_db)):
+    """
+    Validate email format and check if domain exists (has MX records).
+    """
+    email = request.email.strip().lower()
+    
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email is required"
+        )
+    
+    try:
+        # Validate email format using email-validator
+        validation = validate_email(email, check_deliverability=True)
+        email = validation.normalized
+        
+        # Additional check: verify domain has MX records
+        domain = email.split("@")[1]
+        try:
+            mx_records = dns.resolver.resolve(domain, "MX")
+            has_mx = len(mx_records) > 0
+        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.Timeout):
+            has_mx = False
+        
+        if not has_mx:
+            return EmailValidationResponse(
+                valid=False,
+                message="Email domain does not exist or cannot receive emails",
+                domain_valid=False,
+                address_verified=None
+            )
+        
+        return EmailValidationResponse(
+            valid=True,
+            message="Email format and domain are valid",
+            domain_valid=True,
+            address_verified=None  # Cannot verify specific address without sending email
+        )
+        
+    except EmailNotValidError as e:
+        return EmailValidationResponse(
+            valid=False,
+            message=str(e),
+            domain_valid=None,
+            address_verified=None
+        )
+    except Exception as e:
+        logger.error(f"Email validation error: {e}")
+        return EmailValidationResponse(
+            valid=False,
+            message="Unable to validate email. Please try again.",
+            domain_valid=None,
+            address_verified=None
+        )
+
+
+@router.post("/api/v1/auth/signup", response_model=SignupResponse)
 async def signup(request: SignupRequest, db: Session = Depends(get_db)):
     """
     Register a new user with email and password.
+    Creates account but requires email verification.
     """
     # Check if user already exists
     existing_user = db.query(User).filter(User.email == request.email).first()
     if existing_user:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User with this email already exists")
 
-    # Create new user
+    # Validate email format and domain
+    try:
+        validation = validate_email(request.email, check_deliverability=True)
+        email = validation.normalized
+    except EmailNotValidError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    # Create new user (marked as unverified)
     password_hash = hash_password(request.password)
+    verification_token = secrets.token_urlsafe(32)  # Generate unique token
+    verification_expires = datetime.now(timezone.utc) + timedelta(hours=24)  # 24 hour expiry
+    
+    # Construct full name from first and last name
+    full_name = f"{request.first_name} {request.last_name}".strip()
+    
     user = User(
-        email=request.email,
-        name=request.name,
+        email=email,
+        name=full_name,  # Store full name in name field for backward compatibility
+        first_name=request.first_name,
+        last_name=request.last_name,
         password_hash=password_hash,
         auth_provider=AuthProvider.SIMPLE,
         roles=["viewer"],
+        email_verified=False,
+        verification_token=verification_token,
+        verification_token_expires=verification_expires,
     )
     db.add(user)
     db.commit()
@@ -113,21 +226,94 @@ async def signup(request: SignupRequest, db: Session = Depends(get_db)):
     db.add(membership)
     db.commit()
 
-    # Sign JWT token
-    payload = {"sub": str(user.id), "email": user.email, "roles": user.roles, "workspaces": [str(workspace.id)]}
-    access_token = sign_jwt(payload, exp_s=3600)
+    # Send verification email (use first name for personalization)
+    email_sent = send_verification_email(user.email, verification_token, user.first_name)
+    if not email_sent:
+        logger.warning(f"Failed to send verification email to {user.email}, but account created")
 
-    return LoginResponse(
-        access_token=access_token,
-        user={
-            "id": str(user.id),
-            "email": user.email,
-            "name": user.name,
-            "roles": user.roles,
-            "picture_url": user.picture_url,
-        },
-        default_workspace_id=str(workspace.id),
+    return SignupResponse(
+        message="Account created successfully. Please check your email to verify your account.",
+        email=user.email,
+        requires_verification=True
     )
+
+
+@router.post("/api/v1/auth/verify-email")
+async def verify_email(request: VerifyEmailRequest, db: Session = Depends(get_db)):
+    """
+    Verify user's email address using verification token.
+    """
+    if not request.token:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Verification token is required")
+
+    # Log the received token for debugging
+    logger.info(f"Verification attempt - token length: {len(request.token)}, token preview: {request.token[:20]}...")
+
+    # Find user by verification token
+    user = db.query(User).filter(User.verification_token == request.token).first()
+    
+    # If token not found, check if user might already be verified
+    # This handles the case where the token was already used (idempotent operation)
+    if not user:
+        # Check if there's a recently verified user (within last 5 minutes)
+        # This is a fallback for when token was already used
+        recent_time = datetime.now(timezone.utc) - timedelta(minutes=5)
+        recently_verified = db.query(User).filter(
+            User.email_verified == True,
+            User.updated_at >= recent_time
+        ).first()
+        
+        if recently_verified:
+            logger.info(f"Token not found, but found recently verified user: {recently_verified.email}")
+            return {
+                "message": "Email already verified",
+                "email": recently_verified.email,
+                "verified": True
+            }
+        
+        unverified_count = db.query(User).filter(User.email_verified == False).count()
+        logger.warning(f"Token not found. Total unverified users: {unverified_count}")
+        # Also log a sample of existing tokens for debugging (first 20 chars only)
+        sample_tokens = db.query(User.verification_token).filter(
+            User.verification_token.isnot(None),
+            User.email_verified == False
+        ).limit(3).all()
+        if sample_tokens:
+            logger.debug(f"Sample existing tokens: {[t[0][:20] + '...' if t[0] else None for t in sample_tokens]}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification token. If you already verified your email, please try signing in."
+        )
+    
+    # Check if token has expired
+    if user.verification_token_expires and user.verification_token_expires < datetime.now(timezone.utc):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Verification token has expired. Please request a new verification email."
+        )
+    
+    # Check if already verified (idempotent check)
+    if user.email_verified:
+        logger.info(f"User {user.email} already verified, returning success")
+        return {
+            "message": "Email already verified",
+            "email": user.email,
+            "verified": True
+        }
+    
+    # Verify the email
+    user.email_verified = True
+    user.verification_token = None  # Clear token after verification
+    user.verification_token_expires = None
+    db.commit()
+    
+    logger.info(f"Email verified for user: {user.email}")
+    
+    return {
+        "message": "Email verified successfully",
+        "email": user.email,
+        "verified": True
+    }
 
 
 @router.post("/api/v1/auth/login", response_model=LoginResponse)
@@ -147,6 +333,13 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
     # Check if user is active
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User account is inactive")
+    
+    # Check if email is verified (only for email/password auth)
+    if user.auth_provider == AuthProvider.SIMPLE and not user.email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Please verify your email address before logging in. Check your inbox for the verification email."
+        )
 
     # Get workspace memberships
     workspace_memberships = db.query(WorkspaceMember).filter(WorkspaceMember.user_id == user.id).all()
