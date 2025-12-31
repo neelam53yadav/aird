@@ -60,8 +60,21 @@ class FingerprintStage(AirdStage):
 
             self.logger.info(f"Generating fingerprint from {len(metrics)} metric entries")
 
-            # Generate fingerprint
-            fingerprint = generate_fingerprint(metrics)
+            # Get preprocessing stats from scoring result for Chunk Boundary Quality
+            scoring_result = context.get("scoring_result", {})
+            preprocessing_stats = None
+            if scoring_result and scoring_result.get("metrics"):
+                # Try to get preprocessing stats from scoring result
+                ai_ready_metrics = scoring_result.get("metrics", {}).get("ai_ready_metrics", {})
+                # Or get from preprocess result if available
+                preprocess_result = context.get("preprocess_result")
+                if preprocess_result and preprocess_result.get("metrics"):
+                    preprocessing_stats = preprocess_result["metrics"]
+                elif hasattr(storage, 'get_preprocessing_stats'):
+                    preprocessing_stats = storage.get_preprocessing_stats()
+
+            # Generate fingerprint with AI-Ready metrics
+            fingerprint = generate_fingerprint(metrics, preprocessing_stats)
 
             if not fingerprint:
                 return self._create_result(

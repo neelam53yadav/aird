@@ -26,6 +26,12 @@ const METRIC_NAMES: Record<string, string> = {
   Diversity: 'Diversity',
   Audience_Accessibility: 'Audience Accessibility',
   KnowledgeBase_Ready: 'Knowledge Base Ready',
+  // New AI-Ready metrics
+  Chunk_Coherence: 'Chunk Coherence',
+  Noise_Free_Score: 'Noise-Free Score',
+  Chunk_Boundary_Quality: 'Chunk Boundary Quality',
+  Avg_Chunk_Coherence: 'Avg Chunk Coherence',
+  Avg_Noise_Free_Score: 'Avg Noise-Free Score',
 }
 
 const METRIC_DESCRIPTIONS: Record<string, string> = {
@@ -42,6 +48,12 @@ const METRIC_DESCRIPTIONS: Record<string, string> = {
   Diversity: 'Content diversity/variety',
   Audience_Accessibility: 'How accessible content is to audience',
   KnowledgeBase_Ready: 'Ready for knowledge base use',
+  // New AI-Ready metric descriptions
+  Chunk_Coherence: 'Semantic cohesion within chunks',
+  Noise_Free_Score: 'Percentage of content free from boilerplate/navigation noise',
+  Chunk_Boundary_Quality: 'Quality of chunk boundaries (fewer mid-sentence breaks)',
+  Avg_Chunk_Coherence: 'Average coherence across all chunks',
+  Avg_Noise_Free_Score: 'Average noise-free score across all chunks',
 }
 
 export function AITrustScoreDisplay({ productId, showTitle = true }: AITrustScoreDisplayProps) {
