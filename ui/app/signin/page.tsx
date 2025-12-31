@@ -31,9 +31,6 @@ export default function SignInPage() {
                 </span>
               </h1>
             </Link>
-            <p className="text-base md:text-lg text-gray-600">
-              Sign in to your account to continue
-            </p>
           </div>
 
           {/* Auth Card */}
