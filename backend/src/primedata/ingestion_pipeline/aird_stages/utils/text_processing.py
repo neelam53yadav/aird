@@ -39,16 +39,62 @@ def _compile_flags(flag_str: Optional[str]) -> int:
 
 def normalize_wrapped_lines(text: str) -> str:
     """
-    Fix common PDF line-wrap artifacts:
-      - join hyphenated breaks: 'inter-\nnational' -> 'international'
-      - join short soft breaks within paragraphs when previous line didn't end a sentence
-      - collapse 3+ blank lines to 2
+    Comprehensive PDF text normalization.
+    
+    Fixes common PDF line-wrap artifacts:
+    - De-hyphenate: 'exam-\nple' -> 'example'
+    - Join wrapped lines into sentences/paragraphs using heuristics
+    - Remove excessive whitespace
+    - Preserve paragraph boundaries (blank lines)
+    
+    This is critical for PDFs which often have hard line breaks that break
+    paragraph detection and chunking.
     """
-    t = text.replace("\r\n", "\n").replace("\r", "\n")
-    t = re.sub(r"(\w)-\n(\w)", r"\1\2", t)  # de-hyphenate
-    t = re.sub(r"(?m)(?<![.!?]['\")\]])\n(?=[a-zA-Z0-9])", " ", t)  # soft join
-    t = re.sub(r"\n{3,}", "\n\n", t)
-    return t
+    if not text:
+        return ""
+
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+
+    # De-hyphenate: "exam-\nple" -> "example"
+    text = re.sub(r"(\w)-\n(\w)", r"\1\2", text)
+
+    # Remove excessive whitespace (but preserve newlines for paragraph detection)
+    text = re.sub(r"[ \t]+", " ", text)
+
+    # Join lines that look like hard-wrapped sentences:
+    # If a line doesn't end with sentence punctuation and next line starts lowercase -> join.
+    lines = [ln.strip() for ln in text.split("\n")]
+    out = []
+    for ln in lines:
+        if not ln:
+            out.append("")  # keep blank lines (para breaks)
+            continue
+
+        if not out:
+            out.append(ln)
+            continue
+
+        prev = out[-1]
+        if prev == "":
+            out.append(ln)
+            continue
+
+        # Check if previous line ends with sentence punctuation
+        prev_ends_sentence = bool(re.search(r'[.!?]["\')\]]*\s*$', prev))
+        # Check if current line starts with lowercase (likely continuation)
+        next_starts_lower = bool(re.match(r"^[a-z]", ln))
+
+        # Join typical wrap: previous doesn't end sentence AND next starts lowercase
+        if (not prev_ends_sentence) and next_starts_lower:
+            out[-1] = prev + " " + ln
+        else:
+            out.append(ln)
+
+    # Re-collapse multiple blank lines to max 2 (paragraph boundaries)
+    normalized = "\n".join(out)
+    normalized = re.sub(r"\n{3,}", "\n\n", normalized)
+
+    return normalized.strip()
 
 
 def redact_pii(text: str) -> str:

@@ -136,18 +136,64 @@ def _split_long_sentence_at_words(text: str, max_tokens: int, overlap_chars: int
 
 
 def paragraph_chunk(body: str, max_tokens: int, overlap_paras: int, hard_overlap_chars: int) -> List[str]:
-    """Paragraph-based chunking with overlap for better semantic preservation.
+    """Paragraph-based chunking with multi-heuristic detection for PDFs.
 
-    Splits on double newlines (paragraph boundaries) to preserve semantic units.
-    Falls back to sentence chunking if paragraphs are too large, ensuring we never
-    cut mid-sentence.
+    Uses multiple strategies to detect paragraph boundaries:
+    1. Double newlines (standard paragraph breaks)
+    2. Indentation changes (common in PDFs)
+    3. Line length heuristics (short lines often indicate breaks)
+    4. Falls back to sentence chunking if paragraphs are too large or not found.
+
+    This is critical for PDFs which often lack clear paragraph boundaries.
     """
-    # Split on paragraph boundaries (double newlines or multiple whitespace)
+    if not body or not body.strip():
+        return []
+    
+    # Strategy 1: Split on double newlines (standard paragraph breaks)
     paras = re.split(r"\n\s*\n+", body)
     paras = [p.strip() for p in paras if p and p.strip()]
-
-    if not paras:
-        # Fallback to sentence chunking if no paragraphs found
+    
+    # Strategy 2: If no clear paragraphs found, try indentation-based detection
+    if len(paras) <= 1 or all(len(p) < 50 for p in paras):
+        # Try to detect paragraphs by indentation changes
+        lines = body.split("\n")
+        para_groups = []
+        current_para = []
+        prev_indent = None
+        
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                if current_para:
+                    para_groups.append("\n".join(current_para))
+                    current_para = []
+                continue
+            
+            # Detect indentation (leading spaces)
+            indent = len(line) - len(line.lstrip())
+            
+            # If indentation changes significantly, start new paragraph
+            if prev_indent is not None and abs(indent - prev_indent) > 2:
+                if current_para:
+                    para_groups.append("\n".join(current_para))
+                    current_para = [stripped]
+                else:
+                    current_para.append(stripped)
+            else:
+                current_para.append(stripped)
+            
+            prev_indent = indent
+        
+        if current_para:
+            para_groups.append("\n".join(current_para))
+        
+        # Use indentation-based paragraphs if we found more than double-newline method
+        if len(para_groups) > len(paras):
+            paras = [p.strip() for p in para_groups if p and p.strip()]
+    
+    # Strategy 3: If still no good paragraphs, fall back to sentence chunking
+    if not paras or (len(paras) == 1 and tokens_estimate(paras[0]) > max_tokens * 2):
+        # No clear paragraph structure, use sentence chunking
         return sentence_chunk(body, max_tokens, max(1, overlap_paras * 2), hard_overlap_chars)
 
     chunks, buf = [], []
@@ -179,7 +225,7 @@ def paragraph_chunk(body: str, max_tokens: int, overlap_paras: int, hard_overlap
     if buf:
         chunks.append("\n\n".join(buf))
 
-    # Final pass: ensure no chunk exceeds max_tokens (shouldn't happen, but safety check)
+    # Final pass: ensure no chunk exceeds max_tokens (safety check)
     out: List[str] = []
     for c in chunks:
         if tokens_estimate(c) > max_tokens:
