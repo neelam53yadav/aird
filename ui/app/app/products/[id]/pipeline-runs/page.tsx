@@ -93,7 +93,7 @@ export default function PipelineRunsPage() {
     if (hasRunningRuns && !polling) {
       setPolling(true)
       const interval = setInterval(() => {
-        loadPipelineRuns(false) // Don't show loading spinner during polling
+        loadPipelineRuns(currentPage, false) // Don't show loading spinner during polling
       }, 5000) // Poll every 5 seconds
 
       return () => {
@@ -103,7 +103,7 @@ export default function PipelineRunsPage() {
     } else if (!hasRunningRuns) {
       setPolling(false)
     }
-  }, [pipelineRuns, polling, loadPipelineRuns])
+  }, [pipelineRuns, polling, loadPipelineRuns, currentPage])
 
   const handleTriggerPipeline = async (forceRun: boolean = false) => {
     setTriggering(true)
