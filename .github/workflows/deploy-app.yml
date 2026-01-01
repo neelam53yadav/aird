@@ -727,29 +727,8 @@ jobs:
           DEPLOY_DIR="${DEPLOY_PATH_EXPANDED}"
           cd "\${DEPLOY_DIR}"
           
-          # Explicitly load environment variables from .env file
-          if [ -f .env ]; then
-            echo "Loading environment variables from .env file..."
-            set -a  # automatically export all variables
-            source .env
-            set +a  # stop automatically exporting
-            echo "✅ Environment variables loaded from .env"
-          elif [ -f .env.production ]; then
-            echo "Loading environment variables from .env.production file..."
-            set -a
-            source .env.production
-            set +a
-            echo "✅ Environment variables loaded from .env.production"
-          else
-            echo "⚠️  Warning: No .env or .env.production file found"
-          fi
-          
-          # Verify critical variables are loaded (for debugging)
-          if [ -n "\${SMTP_ENABLED}" ]; then
-            echo "✅ SMTP_ENABLED is set"
-          else
-            echo "⚠️  SMTP_ENABLED is not set"
-          fi
+          # Note: Docker Compose automatically loads .env file from the current directory
+          # No need to manually export environment variables
           
           # Determine Docker command (with or without sudo)
           if docker ps > /dev/null 2>&1; then
