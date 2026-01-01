@@ -202,12 +202,6 @@ class ApiClient {
             
             // If token is expired or expires in less than 5 minutes, refresh it
             if (exp && (exp - now) < 300) {
-              console.log('Token expiring soon or expired, refreshing...', {
-                exp,
-                now,
-                timeUntilExpiry: exp - now,
-              })
-              
               // Refresh token by calling exchangeToken
               const { exchangeToken } = await import('@/lib/auth-utils')
               const refreshResult = await exchangeToken()
@@ -215,15 +209,11 @@ class ApiClient {
               if (refreshResult.success && refreshResult.token) {
                 // Use the token directly from the response
                 cookieToken = refreshResult.token
-                console.log('Token refreshed successfully')
-              } else {
-                console.warn('Token refresh failed, using existing token')
               }
             }
           }
         } catch (e) {
           // If we can't decode the token, just use it as-is
-          console.warn('Could not check token expiration:', e)
         }
       }
 
@@ -242,16 +232,6 @@ class ApiClient {
       // Check if this is an anonymous endpoint
       const isAnonymousEndpoint = anonymousEndpoints.some(endpoint => url.includes(endpoint))
 
-      // Debug logging
-      console.log('API Client - Request:', {
-        url,
-        method,
-        hasCookie: !!cookieToken,
-        cookieLength: cookieToken?.length || 0,
-        isAnonymousEndpoint,
-        allCookies: document.cookie.substring(0, 200), // First 200 chars
-      })
-
       // Always include Authorization header if we have a token
       // BUT skip for anonymous endpoints (login, signup, etc.)
       // This is required for cross-origin requests (different port = different origin)
@@ -261,16 +241,6 @@ class ApiClient {
       
       if (cookieToken && !isAnonymousEndpoint) {
         headers['Authorization'] = `Bearer ${cookieToken}`
-        console.log('API Client - Authorization header set:', {
-          hasHeader: true,
-          tokenPrefix: cookieToken.substring(0, 20) + '...',
-        })
-      } else if (cookieToken && isAnonymousEndpoint) {
-        console.log('API Client - Skipping Authorization header for anonymous endpoint:', url)
-      } else {
-        console.warn('API Client - No token found in cookie!', {
-          allCookies: document.cookie,
-        })
       }
 
       const options: RequestInit = {
@@ -288,19 +258,9 @@ class ApiClient {
 
       // If we get 401, try refreshing token and retry once
       if (status === 401) {
-        console.log('Got 401, attempting token refresh and retry...', {
-          hadToken: !!cookieToken,
-          url,
-        })
         try {
           const { exchangeToken } = await import('@/lib/auth-utils')
           const refreshResult = await exchangeToken()
-          
-          console.log('Token refresh result:', { 
-            success: refreshResult.success, 
-            hasToken: !!refreshResult.token,
-            tokenLength: refreshResult.token?.length || 0,
-          })
           
           if (refreshResult.success && refreshResult.token) {
             // Use the token directly from the response (more reliable than reading cookie)
@@ -311,15 +271,11 @@ class ApiClient {
             options.headers = headers
             
             // Retry the request
-            console.log('Retrying request with refreshed token...')
             response = await fetch(url, options)
             status = response.status
-            console.log('Retry result:', { status, ok: response.ok })
-          } else {
-            console.warn('Token refresh failed or no token returned - may need to re-authenticate')
           }
         } catch (refreshError) {
-          console.error('Token refresh failed on 401:', refreshError)
+          // Token refresh failed, will return 401 response
         }
       }
 

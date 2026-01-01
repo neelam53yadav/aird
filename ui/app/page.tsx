@@ -29,14 +29,12 @@ export default function HomePage() {
   useEffect(() => {
     const initializeAuth = async () => {
       if (status === 'authenticated' && session) {
-        console.log("User is authenticated, exchanging token and redirecting to dashboard")
         try {
           await exchangeToken()
           // Wait a bit to ensure cookie is set before redirect
           await new Promise(resolve => setTimeout(resolve, 100))
           router.push('/dashboard')
         } catch (error) {
-          console.error("Token exchange failed:", error)
           router.push('/dashboard')
         }
       }
@@ -54,7 +52,6 @@ export default function HomePage() {
   }, [])
 
   const handleGoogleSignIn = async () => {
-    console.log("Starting Google sign in...")
     try {
       const result = await signIn("google", { 
         callbackUrl: "/dashboard",
@@ -62,14 +59,11 @@ export default function HomePage() {
       })
       
       if (result?.ok) {
-        const exchangeResult = await exchangeToken()
-        if (exchangeResult.success) {
-          console.log("Token exchange successful, redirecting to dashboard")
-        }
+        await exchangeToken()
         router.push('/dashboard')
       }
     } catch (error) {
-      console.error("Sign in error:", error)
+      // Sign in error handled silently
     }
   }
 
