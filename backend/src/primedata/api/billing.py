@@ -74,6 +74,13 @@ async def create_checkout_session(
     Returns:
         Checkout session URL and ID
     """
+    # Check if Stripe is configured
+    if not stripe.api_key:
+        raise HTTPException(
+            status_code=503, 
+            detail="🚀 You're in beta! We've unlocked all premium features for free so you can fully explore and test the platform. Go ahead and try any plan - no credit card needed. Payment options will be available soon."
+        )
+    
     try:
         # Get workspace
         workspace = db.query(Workspace).filter(Workspace.id == request.workspace_id).first()
@@ -124,6 +131,12 @@ async def create_checkout_session(
         return CheckoutSessionResponse(checkout_url=session.url, session_id=session.id)
 
     except stripe.error.StripeError as e:
+        # Check if it's an API key error
+        if "No API key provided" in str(e) or "api_key" in str(e).lower():
+            raise HTTPException(
+                status_code=503,
+                detail="🚀 You're in beta! We've unlocked all premium features for free so you can fully explore and test the platform. Go ahead and try any plan - no credit card needed. Payment options will be available soon."
+            )
         raise HTTPException(status_code=400, detail=f"Stripe error: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to create checkout session: {str(e)}")
@@ -144,6 +157,13 @@ async def get_customer_portal(
     Returns:
         Customer portal URL
     """
+    # Check if Stripe is configured
+    if not stripe.api_key:
+        raise HTTPException(
+            status_code=503,
+            detail="🚀 You're in beta! We've unlocked all premium features for free so you can fully explore and test the platform. Go ahead and try any plan - no credit card needed. Payment options will be available soon."
+        )
+    
     try:
         # Get billing profile
         billing_profile = db.query(BillingProfile).filter(BillingProfile.workspace_id == workspace_id).first()
@@ -160,6 +180,12 @@ async def get_customer_portal(
         return BillingPortalResponse(portal_url=portal_session.url)
 
     except stripe.error.StripeError as e:
+        # Check if it's an API key error
+        if "No API key provided" in str(e) or "api_key" in str(e).lower():
+            raise HTTPException(
+                status_code=503,
+                detail="🚀 You're in beta! We've unlocked all premium features for free so you can fully explore and test the platform. Go ahead and try any plan - no credit card needed. Payment options will be available soon."
+            )
         raise HTTPException(status_code=400, detail=f"Stripe error: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to create portal session: {str(e)}")
