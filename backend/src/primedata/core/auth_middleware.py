@@ -39,6 +39,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
             r"^/api/v1/auth/verify-email/$",  # With trailing slash
             r"^/api/v1/auth/resend-verification$",  # Resend verification endpoint - must be anonymous
             r"^/api/v1/auth/resend-verification/$",  # With trailing slash
+            r"^/api/v1/auth/forgot-password$",  # Forgot password endpoint - must be anonymous
+            r"^/api/v1/auth/forgot-password/$",  # With trailing slash
+            r"^/api/v1/auth/reset-password$",  # Reset password endpoint - must be anonymous
+            r"^/api/v1/auth/reset-password/$",  # With trailing slash
             r"^/api/v1/contact/submit$",  # Contact form endpoint - must be anonymous
             r"^/api/v1/contact/submit/$",  # With trailing slash
         ]

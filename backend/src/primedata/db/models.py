@@ -183,6 +183,9 @@ class User(Base):
     email_verified = Column(Boolean, default=False, nullable=False)
     verification_token = Column(String(255), unique=True, nullable=True, index=True)
     verification_token_expires = Column(DateTime(timezone=True), nullable=True)
+    # Password reset fields
+    password_reset_token = Column(String(255), unique=True, nullable=True, index=True)
+    password_reset_token_expires = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

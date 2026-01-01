@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { Button } from "./ui/button"
 import { exchangeToken } from "@/lib/auth-utils"
 import { getApiUrl } from "@/lib/config"
@@ -501,7 +502,17 @@ export function AuthButtons({ className }: AuthButtonsProps) {
             : "Sign in"}
         </Button>
 
-        <div className="text-center">
+        <div className="text-center space-y-2">
+          {!isSignUp && (
+            <div>
+              <Link
+                href="/forgot-password"
+                className="text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors"
+              >
+                Forgot your password?
+              </Link>
+            </div>
+          )}
           <button
             type="button"
             onClick={() => {

@@ -286,9 +286,14 @@ export default function AppLayout({ children }: AppLayoutProps) {
                         Settings
                       </Link>
                       <button
-                        onClick={() => {
+                        onClick={async () => {
                           setUserMenuOpen(false)
-                          signOut({ callbackUrl: '/' })
+                          
+                          // Clear the backend API token cookie
+                          document.cookie = 'primedata_api_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; samesite=lax'
+                          
+                          // Sign out from NextAuth (this clears NextAuth session cookies)
+                          await signOut({ callbackUrl: '/' })
                         }}
                         className="w-full text-left flex items-center px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
                       >

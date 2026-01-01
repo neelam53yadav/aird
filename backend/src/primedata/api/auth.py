@@ -17,7 +17,7 @@ from primedata.core.password import hash_password, verify_password
 from primedata.core.security import get_current_user
 from primedata.db.database import get_db
 from primedata.db.models import AuthProvider, User, Workspace, WorkspaceMember, WorkspaceRole
-from primedata.services.email_service import send_verification_email
+from primedata.services.email_service import send_verification_email, send_password_reset_email
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -113,6 +113,31 @@ class VerifyEmailRequest(BaseModel):
     """Request model for email verification."""
 
     token: str
+
+
+class ForgotPasswordRequest(BaseModel):
+    """Request model for forgot password."""
+    
+    email: str
+
+
+class ForgotPasswordResponse(BaseModel):
+    """Response model for forgot password."""
+    
+    message: str
+
+
+class ResetPasswordRequest(BaseModel):
+    """Request model for password reset."""
+    
+    token: str
+    new_password: str
+
+
+class ResetPasswordResponse(BaseModel):
+    """Response model for password reset."""
+    
+    message: str
 
 
 @router.post("/api/v1/auth/validate-email", response_model=EmailValidationResponse)
@@ -374,6 +399,118 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
             "picture_url": user.picture_url,
         },
         default_workspace_id=default_workspace_id,
+    )
+
+
+@router.post("/api/v1/auth/forgot-password", response_model=ForgotPasswordResponse)
+async def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    """
+    Request password reset email.
+    """
+    email = request.email.strip().lower()
+    
+    # Find user by email
+    user = db.query(User).filter(User.email == email).first()
+    
+    # Check if user exists
+    if not user:
+        logger.warning(f"Password reset requested for non-existent email: {email}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No account found with this email address."
+        )
+    
+    # Only allow password reset for email/password users
+    if user.auth_provider != AuthProvider.SIMPLE:
+        logger.warning(f"Password reset requested for OAuth user: {email}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password reset is not available for accounts signed in with Google. Please use Google sign-in instead."
+        )
+    
+    # Check if email is verified
+    if not user.email_verified:
+        logger.warning(f"Password reset requested for unverified email: {email}")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Please verify your email address before resetting your password. Check your inbox for the verification email."
+        )
+    
+    # Generate reset token
+    reset_token = secrets.token_urlsafe(32)
+    reset_token_expires = datetime.now(timezone.utc) + timedelta(hours=1)
+    
+    # Save reset token to user
+    user.password_reset_token = reset_token
+    user.password_reset_token_expires = reset_token_expires
+    db.commit()
+    
+    # Send password reset email
+    email_sent = send_password_reset_email(user.email, reset_token, user.first_name or user.name)
+    if not email_sent:
+        logger.warning(f"Failed to send password reset email to {user.email}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Failed to send password reset email. Please try again later."
+        )
+    
+    logger.info(f"Password reset email sent to {user.email}")
+    return ForgotPasswordResponse(
+        message="Password reset link has been sent to your email address. Please check your inbox."
+    )
+
+
+@router.post("/api/v1/auth/reset-password", response_model=ResetPasswordResponse)
+async def reset_password(request: ResetPasswordRequest, db: Session = Depends(get_db)):
+    """
+    Reset password using reset token.
+    """
+    if not request.token or not request.new_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Token and new password are required"
+        )
+    
+    # Find user by reset token
+    user = db.query(User).filter(User.password_reset_token == request.token).first()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset token"
+        )
+    
+    # Check if token has expired
+    if user.password_reset_token_expires and user.password_reset_token_expires < datetime.now(timezone.utc):
+        # Clear expired token
+        user.password_reset_token = None
+        user.password_reset_token_expires = None
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Reset token has expired. Please request a new password reset."
+        )
+    
+    # Validate password complexity (same as signup)
+    if len(request.new_password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 8 characters long"
+        )
+    
+    # Hash new password
+    password_hash = hash_password(request.new_password)
+    
+    # Update password and clear reset token
+    user.password_hash = password_hash
+    user.password_reset_token = None
+    user.password_reset_token_expires = None
+    db.commit()
+    
+    logger.info(f"Password reset successful for user: {user.email}")
+    
+    return ResetPasswordResponse(
+        message="Password reset successfully. You can now sign in with your new password."
     )
 
 
