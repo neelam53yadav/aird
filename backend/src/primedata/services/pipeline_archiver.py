@@ -148,3 +148,4 @@ def archive_pipeline_run_metrics(db: Session, pipeline_run_id: UUID, minio_clien
     except Exception as e:
         logger.error(f"Error archiving pipeline run {pipeline_run_id}: {e}", exc_info=True)
         return None
+

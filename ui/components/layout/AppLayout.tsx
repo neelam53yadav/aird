@@ -130,7 +130,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
       )}
 
       <div className="flex-1 flex overflow-hidden">
-        {/* Mobile sidebar overlay */}
+      {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
           <div 
@@ -164,12 +164,12 @@ export default function AppLayout({ children }: AppLayoutProps) {
             >
               <ChevronLeft className={`h-4 w-4 transition-transform ${sidebarCollapsed ? 'rotate-180' : ''}`} />
             </button>
-            <button
-              onClick={() => setSidebarOpen(false)}
-              className="lg:hidden p-2 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100"
-            >
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="lg:hidden p-2 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+          >
               <X className="h-5 w-5" />
-            </button>
+          </button>
           </div>
         </div>
         
