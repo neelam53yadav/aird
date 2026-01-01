@@ -137,7 +137,7 @@ services:
       DISABLE_AUTH: ${DISABLE_AUTH:-false}
       GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-}
       # SMTP Configuration
-      SMTP_ENABLED: ${SMTP_ENABLED:-true}
+      SMTP_ENABLED: ${SMTP_ENABLED:-false}
       SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
