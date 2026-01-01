@@ -12,7 +12,6 @@ import {
   Package, 
   Database, 
   Zap, 
-  BarChart3,
   ArrowUp,
   Crown,
   Sparkles
@@ -254,12 +253,11 @@ export default function BillingPage() {
   }
 
   const currentPlan = billingData?.plan || 'free'
-  const usage = billingData?.usage || { products: 0, data_sources: 0, pipeline_runs_this_month: 0, vectors: 0 }
+  const usage = billingData?.usage || { products: 0, data_sources: 0, pipeline_runs_this_month: 0 }
   const limits = billingData?.limits || {
     max_products: 3,
     max_data_sources_per_product: 5,
     max_pipeline_runs_per_month: 10,
-    max_vectors: 10000,
     schedule_frequency: 'manual'
   }
 
@@ -315,7 +313,7 @@ export default function BillingPage() {
           {/* Usage Meters */}
           <div className="mb-8">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Current Usage</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <UsageMeter
                 label="Products"
                 current={usage.products}
@@ -336,13 +334,6 @@ export default function BillingPage() {
                 limit={limits.max_pipeline_runs_per_month}
                 icon={Zap}
                 color="bg-gradient-to-br from-purple-500 to-pink-600"
-              />
-              <UsageMeter
-                label="Vectors"
-                current={usage.vectors}
-                limit={limits.max_vectors}
-                icon={BarChart3}
-                color="bg-gradient-to-br from-orange-500 to-amber-600"
               />
             </div>
           </div>
@@ -386,10 +377,6 @@ export default function BillingPage() {
                     <li className="flex items-center space-x-2">
                       <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
                       <span>{limits.max_pipeline_runs_per_month === -1 ? 'Unlimited' : limits.max_pipeline_runs_per_month} pipeline runs per month</span>
-                    </li>
-                    <li className="flex items-center space-x-2">
-                      <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
-                      <span>{limits.max_vectors === -1 ? 'Unlimited' : limits.max_vectors.toLocaleString()} vectors</span>
                     </li>
                   </ul>
                   <Button 
@@ -449,10 +436,6 @@ export default function BillingPage() {
                       <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
                       <span>1,000 pipeline runs per month</span>
                     </li>
-                    <li className="flex items-center space-x-2">
-                      <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
-                      <span>1,000,000 vectors</span>
-                    </li>
                   </ul>
                   <Button 
                     className={`w-full ${
@@ -511,10 +494,6 @@ export default function BillingPage() {
                     <li className="flex items-center space-x-2">
                       <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
                       <span>Unlimited pipeline runs</span>
-                    </li>
-                    <li className="flex items-center space-x-2">
-                      <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
-                      <span>Unlimited vectors</span>
                     </li>
                   </ul>
                   <Button 

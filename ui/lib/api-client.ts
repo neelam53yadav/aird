@@ -58,14 +58,13 @@ export type BillingLimitsResponse = {
     max_products: number
     max_data_sources_per_product: number
     max_pipeline_runs_per_month: number
-    max_vectors: number
-    schedule_frequency: string
+    max_raw_files_size_mb?: number  // Optional for backward compatibility
   }
   usage: {
     products: number
     data_sources: number
     pipeline_runs_this_month: number
-    vectors: number
+    raw_files_size_mb?: number  // Optional for backward compatibility
   }
 }
 
