@@ -18,7 +18,8 @@ import {
   Sparkles,
   ChevronLeft,
   Bell,
-  Search
+  Search,
+  HelpCircle
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ComingSoonBadgeInline } from '@/components/ui/coming-soon-badge-inline'
@@ -34,6 +35,7 @@ const navigation = [
   { name: 'Analytics', href: '/app/analytics', icon: BarChart3 },
   { name: 'Billing', href: '/app/billing', icon: CreditCard },
   { name: 'Team', href: '/app/team', icon: Users, comingSoon: true },
+  { name: 'Support', href: '/app/support', icon: HelpCircle },
   { name: 'Settings', href: '/app/settings', icon: Settings },
 ]
 

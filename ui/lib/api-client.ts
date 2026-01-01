@@ -235,6 +235,7 @@ class ApiClient {
         '/api/v1/auth/validate-email',
         '/api/v1/auth/verify-email',
         '/api/v1/auth/resend-verification',
+        '/api/v1/contact/submit',
       ]
       
       // Check if this is an anonymous endpoint
@@ -888,6 +889,15 @@ class ApiClient {
         status: 0,
       }
     }
+  }
+
+  // Contact Form API
+  async submitContactForm(data: {
+    name: string
+    email: string
+    feedback: string
+  }): Promise<ApiResponse<{ success: boolean; message: string }>> {
+    return this.post('/api/v1/contact/submit', data)
   }
 }
 

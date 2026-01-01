@@ -13,6 +13,7 @@ from primedata.api.analytics import router as analytics_router
 from primedata.api.artifacts import router as artifacts_router
 from primedata.api.auth import router as auth_router
 from primedata.api.billing import router as billing_router
+from primedata.api.contact import router as contact_router
 from primedata.api.data_quality import router as data_quality_router
 from primedata.api.datasources import router as datasources_router
 from primedata.api.embedding_models import router as embedding_models_router
@@ -87,6 +88,7 @@ app.include_router(acl_router)  # M5
 app.include_router(settings_router)
 app.include_router(team_router)  # Team management
 app.include_router(rag_evaluation_router)  # RAG Evaluation (AI-Ready metrics)
+app.include_router(contact_router)  # Contact form (public endpoint)
 
 
 async def check_database() -> Dict[str, Any]:

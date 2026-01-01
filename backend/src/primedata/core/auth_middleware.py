@@ -39,6 +39,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
             r"^/api/v1/auth/verify-email/$",  # With trailing slash
             r"^/api/v1/auth/resend-verification$",  # Resend verification endpoint - must be anonymous
             r"^/api/v1/auth/resend-verification/$",  # With trailing slash
+            r"^/api/v1/contact/submit$",  # Contact form endpoint - must be anonymous
+            r"^/api/v1/contact/submit/$",  # With trailing slash
         ]
 
     async def dispatch(self, request: Request, call_next):
