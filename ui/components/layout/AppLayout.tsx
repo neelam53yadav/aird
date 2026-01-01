@@ -21,6 +21,7 @@ import {
   Search
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { ComingSoonBadgeInline } from '@/components/ui/coming-soon-badge-inline'
 
 interface AppLayoutProps {
   children: React.ReactNode
@@ -32,7 +33,7 @@ const navigation = [
   { name: 'Data Sources', href: '/app/datasources', icon: Database },
   { name: 'Analytics', href: '/app/analytics', icon: BarChart3 },
   { name: 'Billing', href: '/app/billing', icon: CreditCard },
-  { name: 'Team', href: '/app/team', icon: Users },
+  { name: 'Team', href: '/app/team', icon: Users, comingSoon: true },
   { name: 'Settings', href: '/app/settings', icon: Settings },
 ]
 
@@ -194,7 +195,10 @@ export default function AppLayout({ children }: AppLayoutProps) {
                     isActive ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'
                   } ${sidebarCollapsed ? 'mx-auto' : 'mr-3'}`} />
                   {!sidebarCollapsed && (
-                    <span className="truncate">{item.name}</span>
+                    <div className="flex items-center flex-1 min-w-0">
+                      <span className="truncate">{item.name}</span>
+                      {item.comingSoon && <ComingSoonBadgeInline />}
+                    </div>
                   )}
                 </Link>
               )
