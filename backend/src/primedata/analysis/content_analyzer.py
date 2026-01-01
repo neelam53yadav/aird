@@ -97,52 +97,53 @@ class ContentAnalyzer:
         }
 
         # Optimal configurations for each content type
+        # Reduced chunk sizes (700-900 tokens) for better RAG retrieval performance
         self.optimal_configs = {
             ContentType.LEGAL: {
-                "chunk_size": 2000,
-                "chunk_overlap": 400,
+                "chunk_size": 1200,  # Reduced from 2000 - still larger for legal context
+                "chunk_overlap": 240,  # ~20% overlap
                 "min_chunk_size": 200,
-                "max_chunk_size": 3000,
+                "max_chunk_size": 2000,  # Reduced from 3000
                 "strategy": ChunkingStrategy.SEMANTIC,
                 "reasoning": "Legal documents require larger chunks to preserve context and legal meaning",
             },
             ContentType.CODE: {
-                "chunk_size": 1500,
-                "chunk_overlap": 300,
+                "chunk_size": 900,  # Reduced from 1500
+                "chunk_overlap": 180,  # ~20% overlap
                 "min_chunk_size": 100,
-                "max_chunk_size": 2500,
+                "max_chunk_size": 1500,  # Reduced from 2500
                 "strategy": ChunkingStrategy.RECURSIVE,
                 "reasoning": "Code benefits from recursive chunking to preserve function/class boundaries",
             },
             ContentType.DOCUMENTATION: {
-                "chunk_size": 1200,
-                "chunk_overlap": 200,
+                "chunk_size": 800,  # Reduced from 1200
+                "chunk_overlap": 160,  # ~20% overlap
                 "min_chunk_size": 100,
-                "max_chunk_size": 2000,
+                "max_chunk_size": 1500,  # Reduced from 2000
                 "strategy": ChunkingStrategy.PARAGRAPH_BOUNDARY,
                 "reasoning": "Documentation works well with paragraph-based chunking for better readability",
             },
             ContentType.CONVERSATION: {
-                "chunk_size": 800,
-                "chunk_overlap": 100,
+                "chunk_size": 700,  # Reduced from 800
+                "chunk_overlap": 140,  # ~20% overlap
                 "min_chunk_size": 50,
-                "max_chunk_size": 1500,
+                "max_chunk_size": 1200,  # Reduced from 1500
                 "strategy": ChunkingStrategy.SENTENCE_BOUNDARY,
                 "reasoning": "Conversations benefit from smaller chunks at sentence boundaries",
             },
             ContentType.ACADEMIC: {
-                "chunk_size": 1800,
-                "chunk_overlap": 350,
+                "chunk_size": 1200,  # Reduced from 1800
+                "chunk_overlap": 240,  # ~20% overlap
                 "min_chunk_size": 150,
-                "max_chunk_size": 2500,
+                "max_chunk_size": 2000,  # Reduced from 2500
                 "strategy": ChunkingStrategy.SEMANTIC,
                 "reasoning": "Academic papers need larger chunks to preserve argument structure",
             },
             ContentType.TECHNICAL: {
-                "chunk_size": 1400,
-                "chunk_overlap": 250,
+                "chunk_size": 800,  # Reduced from 1400
+                "chunk_overlap": 160,  # ~20% overlap
                 "min_chunk_size": 100,
-                "max_chunk_size": 2200,
+                "max_chunk_size": 1500,  # Reduced from 2200
                 "strategy": ChunkingStrategy.SEMANTIC,
                 "reasoning": "Technical content benefits from semantic chunking to preserve concept boundaries",
             },

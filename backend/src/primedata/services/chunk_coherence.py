@@ -98,7 +98,11 @@ def _coherence_embedding_similarity(
     window: int,
     threshold: float
 ) -> Dict[str, Any]:
-    """Calculate coherence using sentence embedding similarity."""
+    """Calculate coherence using sentence embedding similarity with adaptive windowing.
+    
+    For large chunks, uses adaptive windowing to focus on local coherence
+    rather than comparing distant sentences which may be on different topics.
+    """
     model = get_coherence_model()
     if model is None:
         # Fallback to sentence connectivity if model not available
@@ -115,10 +119,24 @@ def _coherence_embedding_similarity(
         
         embeddings_normalized = normalize_embeddings(embeddings)
         
+        # Adaptive windowing: for large chunks, use smaller windows to focus on local coherence
+        # This prevents distant sentences (which may be on different topics) from lowering coherence
+        num_sentences = len(sentences)
+        if num_sentences > 20:
+            # Large chunk: use smaller window to focus on local coherence
+            adaptive_window = min(window, 3)
+            logger.debug(f"Large chunk ({num_sentences} sentences), using adaptive window {adaptive_window}")
+        elif num_sentences > 10:
+            # Medium chunk: use medium window
+            adaptive_window = min(window, 5)
+        else:
+            # Small chunk: use full window
+            adaptive_window = window
+        
         similarities = []
         for i in range(1, len(sentences)):
-            # Compare current sentence with previous N sentences
-            start_idx = max(0, i - window)
+            # Compare current sentence with previous N sentences (adaptive window)
+            start_idx = max(0, i - adaptive_window)
             prev_embeddings = embeddings_normalized[start_idx:i]
             current_embedding = embeddings_normalized[i]
             
