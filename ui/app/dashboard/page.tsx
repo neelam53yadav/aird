@@ -41,7 +41,7 @@ export default function DashboardPage() {
   // Exchange token when authenticated (ensures user is registered in backend)
   useEffect(() => {
     const initializeAuth = async () => {
-      if (status === 'authenticated' && session) {
+    if (status === 'authenticated' && session) {
         try {
           await exchangeToken()
           // Wait a bit to ensure cookie is set before making API requests
@@ -49,9 +49,9 @@ export default function DashboardPage() {
           // Load data after token exchange completes
           loadDashboardData()
         } catch (error) {
-          console.error("Token exchange failed on dashboard:", error)
+        console.error("Token exchange failed on dashboard:", error)
           // Still try to load data even if exchange fails
-          loadDashboardData()
+      loadDashboardData()
         }
       }
     }
@@ -105,11 +105,11 @@ export default function DashboardPage() {
             <div className="h-10 bg-gray-200 rounded-xl w-1/4 mb-2 animate-pulse"></div>
             <div className="h-6 bg-gray-200 rounded w-1/3 animate-pulse"></div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            {[...Array(4)].map((_, i) => (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+              {[...Array(4)].map((_, i) => (
               <StatCardSkeleton key={i} />
-            ))}
-          </div>
+              ))}
+            </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
             <CardSkeleton />
             <CardSkeleton />
@@ -135,11 +135,11 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5">
             <div className="flex items-center justify-between">
-              <div className="flex items-center">
+            <div className="flex items-center">
                 <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl p-3 mr-4 shadow-sm">
                   <Package className="h-6 w-6 text-white" />
-                </div>
-                <div>
+              </div>
+              <div>
                   <p className="text-sm font-medium text-gray-600 mb-1">Total Products</p>
                   <p className="text-3xl font-bold text-gray-900">{stats.totalProducts}</p>
                 </div>
@@ -149,11 +149,11 @@ export default function DashboardPage() {
 
           <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5">
             <div className="flex items-center justify-between">
-              <div className="flex items-center">
+            <div className="flex items-center">
                 <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl p-3 mr-4 shadow-sm">
                   <Database className="h-6 w-6 text-white" />
-                </div>
-                <div>
+              </div>
+              <div>
                   <p className="text-sm font-medium text-gray-600 mb-1">Data Sources</p>
                   <p className="text-3xl font-bold text-gray-900">{stats.totalDataSources}</p>
                 </div>
@@ -163,11 +163,11 @@ export default function DashboardPage() {
 
           <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5">
             <div className="flex items-center justify-between">
-              <div className="flex items-center">
+            <div className="flex items-center">
                 <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl p-3 mr-4 shadow-sm">
                   <CheckCircle className="h-6 w-6 text-white" />
-                </div>
-                <div>
+              </div>
+              <div>
                   <p className="text-sm font-medium text-gray-600 mb-1">Ready Products</p>
                   <p className="text-3xl font-bold text-gray-900">{stats.readyProducts}</p>
                 </div>
@@ -177,11 +177,11 @@ export default function DashboardPage() {
 
           <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5">
             <div className="flex items-center justify-between">
-              <div className="flex items-center">
+            <div className="flex items-center">
                 <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl p-3 mr-4 shadow-sm">
                   <Activity className="h-6 w-6 text-white" />
-                </div>
-                <div>
+              </div>
+              <div>
                   <p className="text-sm font-medium text-gray-600 mb-1">Running</p>
                   <p className="text-3xl font-bold text-gray-900">{stats.runningProducts}</p>
                 </div>
