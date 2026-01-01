@@ -8,7 +8,8 @@ from typing import Any, Dict, List, Optional, Tuple
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
-from primedata.api.billing import check_billing_limits
+from primedata.api.billing import check_billing_limits, calculate_workspace_raw_files_size_mb
+from primedata.core.plan_limits import get_plan_limit
 from primedata.connectors.azure_blob import AzureBlobConnector
 from primedata.connectors.folder import FolderConnector
 from primedata.connectors.google_drive import GoogleDriveConnector
@@ -600,6 +601,36 @@ async def sync_full(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Sync not supported for data source type: {datasource.type.value}",
             )
+
+        # Check raw files size limit before creating RawFile records
+        from primedata.db.models import BillingProfile
+        
+        billing_profile = db.query(BillingProfile).filter(
+            BillingProfile.workspace_id == datasource.workspace_id
+        ).first()
+
+        if billing_profile:
+            plan_name = billing_profile.plan.value.lower() if hasattr(billing_profile.plan, "value") else str(billing_profile.plan).lower()
+            max_size_mb = get_plan_limit(plan_name, "max_raw_files_size_mb")
+            
+            if max_size_mb != -1:  # If not unlimited
+                # Calculate current workspace total size
+                current_size_mb = calculate_workspace_raw_files_size_mb(str(datasource.workspace_id), db)
+                
+                # Calculate new files size from sync result (bytes to MB)
+                new_files_bytes = result.get("bytes", 0)
+                new_files_size_mb = new_files_bytes / (1024 * 1024)
+                
+                # Check if adding new files would exceed limit
+                total_size_mb = current_size_mb + new_files_size_mb
+                
+                if total_size_mb > max_size_mb:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail=f"Raw files size limit exceeded. Current usage: {current_size_mb:.2f} MB, "
+                               f"adding {new_files_size_mb:.2f} MB would exceed the limit of {max_size_mb} MB. "
+                               f"Please upgrade your plan or remove some files."
+                    )
 
         # Store raw file records in database
         details = result.get("details", {})

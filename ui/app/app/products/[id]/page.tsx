@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useParams } from 'next/navigation'
@@ -16,10 +16,9 @@ import { DataQualityBanner } from '@/components/DataQualityBanner'
 import { DataQualityViolationsDrawer } from '@/components/DataQualityViolationsDrawer'
 import { DataQualityRulesEditor } from '@/components/DataQualityRulesEditor'
 import { AITrustScoreDisplay } from '@/components/AITrustScoreDisplay'
-import { ChunkMetadataDisplay } from '@/components/ChunkMetadataDisplay'
-import { ACLManagement } from '@/components/ACLManagement'
 import { useToast } from '@/components/ui/toast'
 import PipelineDetailsModal from '@/components/PipelineDetailsModal'
+import { ComingSoonBadge } from '@/components/ui/coming-soon-badge'
 
 interface Product {
   id: string
@@ -84,6 +83,12 @@ export default function ProductDetailPage() {
   const [dataSources, setDataSources] = useState<DataSource[]>([])
   // MLflow metrics state removed - MLflow integration disabled
   const [loading, setLoading] = useState(true)
+  const [loadingData, setLoadingData] = useState({
+    product: true,
+    dataSources: true,
+    artifacts: false,
+    pipelineRuns: false,
+  })
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'overview' | 'ai-trust-score' | 'chunk-metadata' | 'acl' | 'datasources' | 'data-quality' | 'exports'>('overview')
   const [testingConnection, setTestingConnection] = useState<string | null>(null)
@@ -129,6 +134,7 @@ export default function ProductDetailPage() {
     details?: string
   } | null>(null)
 
+  // Fix 1 & 2: Parallelize initial API calls
   useEffect(() => {
     if (status === 'unauthenticated') {
       router.push('/')
@@ -136,40 +142,72 @@ export default function ProductDetailPage() {
     }
 
     if (status === 'authenticated' && productId) {
-      loadProduct()
-      loadDataSources()
-      // MLflow metrics loading removed - MLflow integration disabled
+      // Load product and data sources in parallel
+      Promise.all([
+        loadProduct(),
+        loadDataSources()
+      ]).catch(err => {
+        console.error('Failed to load initial data:', err)
+      })
     }
   }, [status, router, productId])
 
-  // Load raw artifacts when product changes
+  // Fix 1 & 2: Parallelize product-dependent calls when product loads
   useEffect(() => {
-    if (product && product.current_version > 0) {
-      loadPipelineArtifacts()
+    if (!product) return
+
+    // Load critical data in parallel (artifacts and pipeline runs)
+    const promises: Promise<void>[] = []
+    
+    if (product.current_version > 0) {
+      promises.push(loadPipelineArtifacts())
     }
+    promises.push(loadPipelineRuns())
+    
+    Promise.all(promises).catch(err => {
+      console.error('Failed to load product-dependent data:', err)
+    })
+
+    // Fix 4: Lazy load non-critical data - only load when needed (in tab change handler)
   }, [product])
 
-  useEffect(() => {
-    if (product) {
-      loadPipelineRuns()
-      loadDataQualityViolations()
-      loadDataQualityRules()
-      loadExports()
-    }
-  }, [product])
-
-  // Auto-refresh pipeline runs every 10 seconds
+  // Fix 7: Optimize auto-refresh - only refresh when pipeline is running
   useEffect(() => {
     if (!product) return
     
+    // Check if there are any running pipelines
+    const hasRunningPipelines = pipelineRuns.some(run => 
+      run.status === 'running' || run.status === 'queued'
+    )
+    
+    if (!hasRunningPipelines) return // Don't auto-refresh if nothing is running
+    
     const interval = setInterval(() => {
       loadPipelineRuns()
-    }, 10000)
+    }, 15000) // Increased from 10s to 15s to reduce load
     
     return () => clearInterval(interval)
-  }, [product])
+  }, [product, pipelineRuns])
+
+  // Fix 4: Lazy load data when switching to relevant tabs
+  useEffect(() => {
+    if (!product) return
+
+    // Load data quality violations only when data-quality tab is active
+    if (activeTab === 'data-quality' && dataQualityViolations.length === 0 && !loadingViolations) {
+      loadDataQualityViolations()
+      loadDataQualityRules()
+    }
+
+    // Load exports only when exports tab is active
+    if (activeTab === 'exports' && exports.length === 0 && !loadingExports) {
+      loadExports()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, product?.id])
 
   const loadProduct = async () => {
+    setLoadingData(prev => ({ ...prev, product: true }))
     try {
       const response = await apiClient.getProduct(productId)
       
@@ -182,12 +220,14 @@ export default function ProductDetailPage() {
       setError('Failed to load product')
     } finally {
       setLoading(false)
+      setLoadingData(prev => ({ ...prev, product: false }))
     }
   }
 
   // MLflow metrics loading removed - MLflow integration disabled
 
   const loadDataSources = async () => {
+    setLoadingData(prev => ({ ...prev, dataSources: true }))
     try {
       const response = await apiClient.getDataSources(productId)
       
@@ -198,6 +238,8 @@ export default function ProductDetailPage() {
       }
     } catch (err) {
       console.error('Failed to load data sources:', err)
+    } finally {
+      setLoadingData(prev => ({ ...prev, dataSources: false }))
     }
   }
 
@@ -365,6 +407,7 @@ export default function ProductDetailPage() {
     if (!product) return
     
     setLoadingArtifacts(true)
+    setLoadingData(prev => ({ ...prev, artifacts: true }))
     try {
       const response = await apiClient.getPipelineArtifacts(product.id, product.current_version)
       if (response.data) {
@@ -374,6 +417,7 @@ export default function ProductDetailPage() {
       console.error('Failed to load pipeline artifacts:', err)
     } finally {
       setLoadingArtifacts(false)
+      setLoadingData(prev => ({ ...prev, artifacts: false }))
     }
   }
 
@@ -444,28 +488,30 @@ export default function ProductDetailPage() {
     }
   }
 
-  const loadPipelineRuns = async (page: number = pipelineRunsPage) => {
+  const loadPipelineRuns = async () => {
     if (!product) return
     
     setLoadingPipelineRuns(true)
+    setLoadingData(prev => ({ ...prev, pipelineRuns: true }))
     try {
-      const offset = page * PIPELINE_RUNS_PER_PAGE
-      const response = await apiClient.getPipelineRuns(product.id, PIPELINE_RUNS_PER_PAGE, offset)
+      // Always load only the first 5 runs (no pagination on overview page)
+      const response = await apiClient.getPipelineRuns(product.id, 5, 0)
       if (response.data) {
         // Handle both old format (array) and new format (object with runs, total, etc.)
         if (Array.isArray(response.data)) {
-          setPipelineRuns(response.data)
+          setPipelineRuns(response.data.slice(0, 5)) // Ensure only 5
           setPipelineRunsTotal(response.data.length)
         } else {
-          setPipelineRuns(response.data.runs || [])
+          setPipelineRuns((response.data.runs || []).slice(0, 5)) // Ensure only 5
           setPipelineRunsTotal(response.data.total || 0)
         }
-        setPipelineRunsPage(page)
+        setPipelineRunsPage(0) // Always reset to page 0
       }
     } catch (err) {
       console.error('Failed to load pipeline runs:', err)
     } finally {
       setLoadingPipelineRuns(false)
+      setLoadingData(prev => ({ ...prev, pipelineRuns: false }))
     }
   }
 
@@ -1008,12 +1054,19 @@ export default function ProductDetailPage() {
         )}
 
         {activeTab === 'chunk-metadata' && (
-          <div className="space-y-6">
-            <ChunkMetadataDisplay 
-              productId={productId} 
-              productVersion={product?.current_version}
-            />
-          </div>
+          <ComingSoonBadge
+            title="Chunk Metadata"
+            description="View and manage detailed metadata for all chunks, including embeddings, scores, and processing information."
+            icon={Layers}
+          />
+        )}
+
+        {activeTab === 'acl' && (
+          <ComingSoonBadge
+            title="Access Control"
+            description="Manage user permissions and access control lists (ACLs) for this product, including read, write, and admin roles."
+            icon={Lock}
+          />
         )}
 
         {activeTab === 'overview' && (
@@ -1178,14 +1231,14 @@ export default function ProductDetailPage() {
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
                 <Link href={`/app/products/${product.id}/datasources/new`}>
-                  <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer">
+                  <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer h-full flex flex-col">
                     <Database className="h-8 w-8 text-blue-600 mb-2" />
                     <h3 className="font-medium text-gray-900">Add Data Source</h3>
                     <p className="text-sm text-gray-600">Connect a new data source to this product</p>
                   </div>
                 </Link>
                 <div 
-                  className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer"
+                  className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer h-full flex flex-col"
                   onClick={() => setShowPipelineModal(true)}
                 >
                   <Play className="h-8 w-8 text-green-600 mb-2" />
@@ -1193,35 +1246,35 @@ export default function ProductDetailPage() {
                   <p className="text-sm text-gray-600">Execute the data processing pipeline</p>
                 </div>
                 <Link href={`/app/products/${productId}/playground`}>
-                  <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer">
+                  <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer h-full flex flex-col">
                     <Search className="h-8 w-8 text-purple-600 mb-2" />
                     <h3 className="font-medium text-gray-900">RAG Playground</h3>
                     <p className="text-sm text-gray-600">Search and explore your indexed data</p>
                   </div>
                 </Link>
-                <Link href={`/app/products/${productId}/ai-readiness`}>
-                  <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer">
-                    <TrendingUp className="h-8 w-8 text-orange-600 mb-2" />
-                    <h3 className="font-medium text-gray-900">AI Readiness</h3>
-                    <p className="text-sm text-gray-600">Assess and improve data quality</p>
-                  </div>
-                </Link>
-                <Link href={`/app/products/${productId}/pipeline-metrics`}>
-                  <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer">
-                    <BarChart3 className="h-8 w-8 text-blue-600 mb-2" />
-                    <h3 className="font-medium text-gray-900">Pipeline Metrics</h3>
-                    <p className="text-sm text-gray-600">View detailed metrics for each version</p>
-                  </div>
-                </Link>
+                <ComingSoonBadge
+                  title="AI Readiness"
+                  description="Assess and improve data quality"
+                  icon={TrendingUp}
+                  variant="compact"
+                  className="h-full"
+                />
+                <ComingSoonBadge
+                  title="Pipeline Metrics"
+                  description="View detailed metrics for each version"
+                  icon={BarChart3}
+                  variant="compact"
+                  className="h-full"
+                />
                 <Link href={`/app/products/${productId}/pipeline-runs`}>
-                  <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer">
+                  <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer h-full flex flex-col">
                     <GitBranch className="h-8 w-8 text-indigo-600 mb-2" />
-                    <h3 className="font-medium text-gray-900">Pipeline Runs</h3>
+                    <h3 className="font-medium text-gray-900">Recent Pipeline Runs</h3>
                     <p className="text-sm text-gray-600">Monitor and manage pipeline executions</p>
                   </div>
                 </Link>
                 <div 
-                  className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer"
+                  className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer h-full flex flex-col"
                   onClick={() => router.push(`/app/products/${productId}/edit`)}
                 >
                   <Settings className="h-8 w-8 text-gray-600 mb-2" />
@@ -1269,7 +1322,17 @@ export default function ProductDetailPage() {
                   
                   {/* Recent Runs Table */}
                   <div>
-                    <h3 className="text-md font-medium text-gray-900 mb-3">Recent Runs</h3>
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-md font-medium text-gray-900">Recent Runs</h3>
+                      {pipelineRunsTotal > 5 && (
+                        <Link 
+                          href={`/app/products/${productId}/pipeline-runs`}
+                          className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                        >
+                          View All ({pipelineRunsTotal})
+                        </Link>
+                      )}
+                    </div>
                     {loadingPipelineRuns ? (
                       <TableSkeleton rows={3} cols={5} />
                     ) : pipelineRuns.length === 0 ? (
@@ -1325,12 +1388,12 @@ export default function ProductDetailPage() {
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">
                                   <div className="flex space-x-2">
-                                    <button
-                                      onClick={() => setSelectedRunForDetails(run)}
+                                    <Link
+                                      href={`/app/products/${productId}/pipeline-runs`}
                                       className="text-blue-600 hover:text-blue-900 text-sm font-medium"
                                     >
                                       View Details
-                                    </button>
+                                    </Link>
                                     {run.status === 'succeeded' && (
                                       <button
                                         onClick={() => handlePromoteVersion(run.version)}
@@ -1357,32 +1420,7 @@ export default function ProductDetailPage() {
                             ))}
                           </tbody>
                         </table>
-                        {/* Pagination Controls */}
-                        {pipelineRunsTotal > PIPELINE_RUNS_PER_PAGE && (
-                          <div className="mt-4 flex items-center justify-between border-t border-gray-200 px-6 py-3 bg-white">
-                            <div className="text-sm text-gray-700">
-                              Showing {pipelineRunsPage * PIPELINE_RUNS_PER_PAGE + 1} to{' '}
-                              {Math.min((pipelineRunsPage + 1) * PIPELINE_RUNS_PER_PAGE, pipelineRunsTotal)} of{' '}
-                              {pipelineRunsTotal} runs
-                            </div>
-                            <div className="flex space-x-2">
-                              <button
-                                onClick={() => loadPipelineRuns(pipelineRunsPage - 1)}
-                                disabled={pipelineRunsPage === 0 || loadingPipelineRuns}
-                                className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                              >
-                                Previous
-                              </button>
-                              <button
-                                onClick={() => loadPipelineRuns(pipelineRunsPage + 1)}
-                                disabled={(pipelineRunsPage + 1) * PIPELINE_RUNS_PER_PAGE >= pipelineRunsTotal || loadingPipelineRuns}
-                                className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                              >
-                                Next
-                              </button>
-                            </div>
-                          </div>
-                        )}
+                        {/* No pagination - only show recent 5 runs */}
                       </div>
                     )}
                   </div>
@@ -1392,193 +1430,13 @@ export default function ProductDetailPage() {
 
             {/* Pipeline Artifacts Section */}
             {product.current_version > 0 && (
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <div className="flex justify-between items-center mb-6">
-                  <div>
-                    <h2 className="text-lg font-semibold text-gray-900">Pipeline Artifacts</h2>
-                    <p className="text-sm text-gray-600 mt-1">Generated artifacts from successful pipeline runs</p>
-                  </div>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={loadPipelineArtifacts}
-                    disabled={loadingArtifacts}
-                    className="border-2 hover:border-blue-300 hover:bg-blue-50"
-                  >
-                    {loadingArtifacts ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Loading...
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="h-4 w-4 mr-2" />
-                        Refresh
-                      </>
-                    )}
-                  </Button>
-                </div>
-                
-                {loadingArtifacts ? (
-                  <TableSkeleton rows={5} cols={5} />
-                ) : pipelineArtifacts.length === 0 ? (
-                  <div className="text-center py-12 bg-gradient-to-br from-gray-50 to-blue-50 rounded-lg border-2 border-dashed border-gray-200">
-                    <div className="bg-white rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4 shadow-sm">
-                      <Package className="h-8 w-8 text-gray-400" />
-                    </div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">No artifacts yet</h3>
-                    <p className="text-gray-600 max-w-md mx-auto">Run a pipeline to generate artifacts like fingerprint, trust reports, and validation summaries.</p>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gradient-to-r from-gray-50 to-blue-50">
-                        <tr>
-                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Artifact
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Stage
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Type
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Size
-                          </th>
-                          <th className="px-6 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            View
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {pipelineArtifacts.map((artifact) => {
-                          // Stage display names and colors
-                          const stageInfo: Record<string, { name: string; color: string }> = {
-                            preprocess: { name: 'Preprocess', color: 'bg-blue-100 text-blue-800' },
-                            scoring: { name: 'Scoring', color: 'bg-purple-100 text-purple-800' },
-                            fingerprint: { name: 'Fingerprint', color: 'bg-indigo-100 text-indigo-800' },
-                            validation: { name: 'Validation', color: 'bg-green-100 text-green-800' },
-                            policy: { name: 'Policy', color: 'bg-yellow-100 text-yellow-800' },
-                            reporting: { name: 'Reporting', color: 'bg-red-100 text-red-800' },
-                            indexing: { name: 'Indexing', color: 'bg-cyan-100 text-cyan-800' },
-                            validate_data_quality: { name: 'Data Quality', color: 'bg-orange-100 text-orange-800' },
-                            finalize: { name: 'Finalize', color: 'bg-gray-100 text-gray-800' },
-                          }
-
-                          const stage = stageInfo[artifact.stage_name] || { 
-                            name: artifact.stage_name?.replace(/_/g, ' ') || 'Unknown', 
-                            color: 'bg-gray-100 text-gray-800' 
-                          }
-
-                          // Get artifact icon
-                          const getArtifactIcon = (type: string) => {
-                            switch (type?.toLowerCase()) {
-                              case 'pdf':
-                                return <FileText className="h-4 w-4 text-red-500" />
-                              case 'json':
-                                return <FileJson className="h-4 w-4 text-yellow-500" />
-                              case 'jsonl':
-                                return <FileCode className="h-4 w-4 text-blue-500" />
-                              case 'csv':
-                                return <FileCsv className="h-4 w-4 text-green-500" />
-                              case 'vector':
-                                return <Layers className="h-4 w-4 text-indigo-500" />
-                              default:
-                                return <FileText className="h-4 w-4 text-gray-500" />
-                            }
-                          }
-
-                          // Format file size
-                          const formatFileSize = (bytes: number) => {
-                            if (bytes < 1024) return `${bytes} B`
-                            if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-                            return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
-                          }
-
-                          return (
-                            <tr key={artifact.id} className="hover:bg-blue-50/50 transition-colors">
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="flex items-center space-x-3">
-                                  {getArtifactIcon(artifact.artifact_type)}
-                                  <div>
-                                    <p className="text-sm font-medium text-gray-900">
-                                      {artifact.display_name || artifact.artifact_name.replace(/_/g, ' ')}
-                                    </p>
-                                    {artifact.description && (
-                                      <p className="text-xs text-gray-500 mt-0.5">{artifact.description}</p>
-                                    )}
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${stage.color}`}>
-                                  {stage.name}
-                                </span>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <span className="text-sm text-gray-600 uppercase font-mono">
-                                  {artifact.artifact_type}
-                                </span>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <span className="text-sm text-gray-600">
-                                  {formatFileSize(artifact.file_size)}
-                                </span>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-right">
-                                <div className="flex items-center justify-end space-x-2">
-                                  {artifact.artifact_type?.toLowerCase() === 'vector' ? (
-                                    <a
-                                      href={(() => {
-                                        // Derive Qdrant URL from current host (same host, port 6333)
-                                        if (typeof window !== 'undefined') {
-                                          const currentHost = window.location.hostname
-                                          return `http://${currentHost}:6333/dashboard`
-                                        }
-                                        // Fallback to environment variable or default
-                                        return process.env.NEXT_PUBLIC_QDRANT_URL || 'http://34.28.26.21:6333/dashboard'
-                                      })()}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-indigo-700 bg-indigo-50 rounded-md hover:bg-indigo-100 transition-colors"
-                                    >
-                                      <Layers className="h-4 w-4 mr-1.5" />
-                                      Open Qdrant
-                                    </a>
-                                  ) : (
-                                    <button
-                                      onClick={() => handleViewArtifact(artifact)}
-                                      className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-blue-700 bg-blue-50 rounded-md hover:bg-blue-100 transition-colors"
-                                    >
-                                      <FileText className="h-4 w-4 mr-1.5" />
-                                      View
-                                    </button>
-                                  )}
-                                  {artifact.download_url && (
-                                    <a
-                                      href={artifact.download_url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      download
-                                      className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors"
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      <Download className="h-4 w-4 mr-1.5" />
-                                      Download
-                                    </a>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
+              <ComingSoonBadge
+                title="Pipeline Artifacts"
+                description="View and manage all artifacts generated during pipeline execution, including trust reports, validation summaries, fingerprints, and more."
+                icon={Package}
+              />
             )}
+
           </div>
         )}
 
@@ -1681,44 +1539,47 @@ export default function ProductDetailPage() {
                           </Button>
                         </div>
                         
-                        <div className="mt-3">
-                          <Button
-                            variant="outline"
-                            size="default"
-                            className="w-full border-green-500 text-green-600 hover:bg-green-50 hover:border-green-600 hover:text-green-700 font-medium shadow-sm transition-all duration-200 hover:shadow-md"
-                            onClick={() => handleIngestDataSource(datasource.id)}
-                            disabled={ingestingDataSource === datasource.id}
-                          >
-                            {ingestingDataSource === datasource.id ? (
-                              <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin text-green-600" />
-                                <span className="text-green-600">Ingesting Data...</span>
-                              </>
-                            ) : (
-                              <>
-                                <ArrowDownToLine className="mr-2 h-4 w-4 text-green-600" />
-                                <span className="text-green-600">Run Initial Ingest</span>
-                              </>
-                            )}
-                          </Button>
-                          
-                          {ingestionResults[datasource.id] && (
-                            <div className="mt-2 flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-md px-3 py-2">
-                              <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
-                              <span className="font-medium">
-                                Successfully ingested {ingestionResults[datasource.id].files} file{ingestionResults[datasource.id].files !== 1 ? 's' : ''}
-                              </span>
-                              <span className="text-green-600">
-                                ({(ingestionResults[datasource.id].bytes / 1024 / 1024).toFixed(2)} MB)
-                              </span>
-                              {ingestionResults[datasource.id].errors > 0 && (
-                                <span className="text-orange-600 font-medium">
-                                  • {ingestionResults[datasource.id].errors} error{ingestionResults[datasource.id].errors !== 1 ? 's' : ''}
-                                </span>
+                        {/* Only show "Run Initial Ingest" for datasource types that need it (not folder/local) */}
+                        {datasource.type !== 'folder' && (
+                          <div className="mt-3">
+                            <Button
+                              variant="outline"
+                              size="default"
+                              className="w-full border-green-500 text-green-600 hover:bg-green-50 hover:border-green-600 hover:text-green-700 font-medium shadow-sm transition-all duration-200 hover:shadow-md"
+                              onClick={() => handleIngestDataSource(datasource.id)}
+                              disabled={ingestingDataSource === datasource.id}
+                            >
+                              {ingestingDataSource === datasource.id ? (
+                                <>
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin text-green-600" />
+                                  <span className="text-green-600">Ingesting Data...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <ArrowDownToLine className="mr-2 h-4 w-4 text-green-600" />
+                                  <span className="text-green-600">Run Initial Ingest</span>
+                                </>
                               )}
-                            </div>
-                          )}
-                        </div>
+                            </Button>
+                            
+                            {ingestionResults[datasource.id] && (
+                              <div className="mt-2 flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-md px-3 py-2">
+                                <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
+                                <span className="font-medium">
+                                  Successfully ingested {ingestionResults[datasource.id].files} file{ingestionResults[datasource.id].files !== 1 ? 's' : ''}
+                                </span>
+                                <span className="text-green-600">
+                                  ({(ingestionResults[datasource.id].bytes / 1024 / 1024).toFixed(2)} MB)
+                                </span>
+                                {ingestionResults[datasource.id].errors > 0 && (
+                                  <span className="text-orange-600 font-medium">
+                                    • {ingestionResults[datasource.id].errors} error{ingestionResults[datasource.id].errors !== 1 ? 's' : ''}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
                         
                       </div>
                     </div>
@@ -1981,98 +1842,11 @@ export default function ProductDetailPage() {
         )}
 
         {activeTab === 'exports' && (
-          <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h2 className="text-lg font-semibold text-gray-900">Export Bundles</h2>
-              <Button
-                onClick={() => setShowCreateExportModal(true)}
-                disabled={!product || product.current_version === 0}
-              >
-                <Package className="h-4 w-4 mr-2" />
-                Create Export
-              </Button>
-            </div>
-
-            {!product || product.current_version === 0 ? (
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
-                <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No data available for export</h3>
-                <p className="text-gray-600">Run the pipeline to process data before creating exports.</p>
-              </div>
-            ) : (
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <h3 className="text-md font-medium text-gray-900 mb-4">Available Exports</h3>
-                {loadingExports ? (
-                  <TableSkeleton rows={3} cols={5} />
-                ) : exports.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">No exports yet</h3>
-                    <p className="text-gray-600 mb-4">Create your first export bundle to download processed data.</p>
-                    <Button onClick={() => setShowCreateExportModal(true)}>
-                      <Package className="h-4 w-4 mr-2" />
-                      Create Export
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gradient-to-r from-gray-50 to-blue-50">
-                        <tr>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Bundle Name
-                          </th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Version
-                          </th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Size
-                          </th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Created
-                          </th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Actions
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {exports.map((exportBundle) => (
-                          <tr key={exportBundle.id} className="hover:bg-blue-50/50 transition-colors">
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm font-medium text-gray-900">
-                                {exportBundle.bundle_name}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                v{exportBundle.version}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {formatFileSize(exportBundle.size_bytes)}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {new Date(exportBundle.created_at).toLocaleDateString()}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                              <a
-                                href={exportBundle.download_url}
-                                download={exportBundle.bundle_name}
-                                className="text-blue-600 hover:text-blue-900"
-                              >
-                                Download
-                              </a>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          <ComingSoonBadge
+            title="Exports"
+            description="Create and download export bundles containing processed data, embeddings, and metadata for offline use or backup."
+            icon={Download}
+          />
         )}
       </div>
 

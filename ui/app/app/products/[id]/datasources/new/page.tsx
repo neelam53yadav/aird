@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { ResultModal } from '@/components/ui/modal'
+import { ComingSoonBadgeInline } from '@/components/ui/coming-soon-badge-inline'
 import AppLayout from '@/components/layout/AppLayout'
 import { apiClient } from '@/lib/api-client'
 
@@ -550,9 +551,7 @@ export default function NewDataSourcePage() {
                       }`}
                     >
                       {!isImplemented && (
-                        <span className="absolute top-3 right-3 bg-yellow-100 text-yellow-800 text-xs font-medium px-2 py-1 rounded">
-                          Coming Soon
-                        </span>
+                        <ComingSoonBadgeInline className="absolute top-3 right-3" />
                       )}
                       <div className="flex items-center mb-3">
                         <div className={`rounded-lg p-2 mr-3 ${

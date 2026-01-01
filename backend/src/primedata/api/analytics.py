@@ -3,7 +3,7 @@ Analytics API endpoints for dashboard metrics and insights.
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from ..core.security import get_current_user
 from ..db.database import get_db
-from ..db.models import DataSource, DqViolation, PipelineRun, PipelineRunStatus, Product, Workspace
+from ..db.models import DataSource, DqViolation, PipelineArtifact, PipelineRun, PipelineRunStatus, Product, RawFile, User, Workspace
 
 logger = logging.getLogger(__name__)
 
@@ -126,35 +126,194 @@ async def get_analytics_metrics(
                     "id": str(run.id),
                     "type": activity_type,
                     "message": message,
-                    "timestamp": run.started_at.isoformat() if run.started_at else datetime.utcnow().isoformat(),
+                    "timestamp": run.started_at.isoformat() if run.started_at else datetime.now(timezone.utc).isoformat(),
                     "status": status_icon,
                 }
             )
 
-        # Monthly stats (last 4 months)
+        # Monthly stats - show recent 6 months:
+        # - If user joined < 6 months ago: show all months from join date to current
+        # - If user joined >= 6 months ago: show only last 6 months (current + previous 5)
+        # Get the earliest date: workspace creation or user creation
+        # Ensure timezone-aware datetime
+        now_utc = datetime.now(timezone.utc)
+        workspace_created = workspace.created_at if workspace.created_at else now_utc
+        # If workspace_created is timezone-naive, make it timezone-aware (UTC)
+        if workspace_created.tzinfo is None:
+            workspace_created = workspace_created.replace(tzinfo=timezone.utc)
+        
+        user_created = None
+        if current_user and current_user.get("id"):
+            user = db.query(User).filter(User.id == UUID(current_user["id"])).first()
+            if user and user.created_at:
+                user_created = user.created_at
+                # If user_created is timezone-naive, make it timezone-aware (UTC)
+                if user_created.tzinfo is None:
+                    user_created = user_created.replace(tzinfo=timezone.utc)
+        
+        # Determine the earliest date - prioritize user creation date to show months from when user joined
+        if user_created:
+            earliest_date = user_created
+        else:
+            earliest_date = workspace_created
+        
+        # Calculate how many months to show (up to 6 months)
+        # Ensure timezone-aware datetime
+        current_month_start = now_utc.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        # Ensure earliest_date is timezone-aware before using replace
+        if earliest_date.tzinfo is None:
+            earliest_date = earliest_date.replace(tzinfo=timezone.utc)
+        earliest_month_start = earliest_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        
+        # Calculate months difference (number of months from join to current, inclusive)
+        months_diff = (current_month_start.year - earliest_month_start.year) * 12 + (current_month_start.month - earliest_month_start.month)
+        total_months = months_diff + 1  # +1 to include current month
+        
+        # Determine start month for display
+        # If user joined less than 6 months ago: start from join month
+        # If user joined 6+ months ago: start from 5 months before current (to show last 6 months)
+        MAX_MONTHS_TO_SHOW = 6
+        if total_months <= MAX_MONTHS_TO_SHOW:
+            # Show all months from join to current
+            display_start_month = earliest_month_start
+        else:
+            # Show only last 6 months: go back 5 months from current
+            display_start_month = current_month_start
+            for _ in range(MAX_MONTHS_TO_SHOW - 1):
+                if display_start_month.month == 1:
+                    display_start_month = display_start_month.replace(year=display_start_month.year - 1, month=12, day=1)
+                else:
+                    display_start_month = display_start_month.replace(month=display_start_month.month - 1, day=1)
+        
+        # Debug logging
+        logger.debug(f"Analytics monthly stats calculation: current_month_start={current_month_start}, earliest_month_start={earliest_month_start}, months_diff={months_diff}, total_months={total_months}, display_start_month={display_start_month}")
+        
         monthly_stats = []
-        for i in range(4):
-            month_start = datetime.utcnow().replace(day=1) - timedelta(days=30 * i)
-            month_end = month_start + timedelta(days=30)
+        
+        # Build list of months from display_start_month to current (inclusive), then reverse to get current first
+        months_to_process = []
+        temp_month = display_start_month
+        
+        # Ensure display_start_month is timezone-aware
+        if temp_month.tzinfo is None:
+            temp_month = temp_month.replace(tzinfo=timezone.utc)
+        
+        # Build the list - iterate until we include current_month_start
+        while len(months_to_process) < MAX_MONTHS_TO_SHOW:
+            # Ensure temp_month is timezone-aware
+            if temp_month.tzinfo is None:
+                temp_month = temp_month.replace(tzinfo=timezone.utc)
+            
+            months_to_process.append(temp_month)
+            
+            # Stop if we've reached or passed current month
+            if temp_month >= current_month_start:
+                break
+            
+            # Move to next month (replace preserves timezone if present)
+            if temp_month.month == 12:
+                temp_month = temp_month.replace(year=temp_month.year + 1, month=1, day=1)
+            else:
+                temp_month = temp_month.replace(month=temp_month.month + 1, day=1)
+        
+        # Reverse to show current month first
+        months_to_process.reverse()
+        
+        # Process each month
+        for month_start in months_to_process:
+            # Ensure month_start is timezone-aware
+            if month_start.tzinfo is None:
+                month_start = month_start.replace(tzinfo=timezone.utc)
+            
+            # Calculate month end (first day of next month)
+            if month_start.month == 12:
+                month_end = month_start.replace(year=month_start.year + 1, month=1, day=1)
+            else:
+                month_end = month_start.replace(month=month_start.month + 1, day=1)
+            
+            # Ensure month_end is timezone-aware
+            if month_end.tzinfo is None:
+                month_end = month_end.replace(tzinfo=timezone.utc)
 
+            # Pipeline runs for this month
             month_runs = pipeline_runs.filter(
                 and_(PipelineRun.started_at >= month_start, PipelineRun.started_at < month_end)
             ).count()
 
-            # Estimate data processed (mock calculation)
-            data_processed = month_runs * 0.5  # Mock: 0.5TB per run
+            # Products created in this month
+            month_products = db.query(Product).filter(
+                and_(
+                    Product.workspace_id == workspace_uuid,
+                    Product.created_at >= month_start,
+                    Product.created_at < month_end
+                )
+            ).count()
 
-            # Quality score for the month (mock)
-            quality_score = max(80, data_quality_score - (i * 2))
+            # Data sources created in this month
+            month_data_sources = db.query(DataSource).filter(
+                and_(
+                    DataSource.workspace_id == workspace_uuid,
+                    DataSource.created_at >= month_start,
+                    DataSource.created_at < month_end
+                )
+            ).count()
+
+            # Calculate data size from pipeline artifacts for this month
+            # Get pipeline runs for this month
+            month_pipeline_runs = pipeline_runs.filter(
+                and_(PipelineRun.started_at >= month_start, PipelineRun.started_at < month_end)
+            ).all()
+            
+            month_run_ids = [run.id for run in month_pipeline_runs]
+            data_size_bytes = 0
+            if month_run_ids:
+                # Sum up artifact sizes for runs in this month
+                artifacts = db.query(PipelineArtifact).filter(
+                    PipelineArtifact.pipeline_run_id.in_(month_run_ids)
+                ).all()
+                data_size_bytes = sum(artifact.file_size for artifact in artifacts)
+            
+            # Get workspace products subquery (used for raw files and violations)
+            workspace_products = db.query(Product.id).filter(Product.workspace_id == workspace_uuid).subquery()
+            
+            # If no artifacts, try to get from raw files processed in this month
+            if data_size_bytes == 0:
+                raw_files = db.query(RawFile).filter(
+                    and_(
+                        RawFile.product_id.in_(workspace_products),
+                        RawFile.processed_at >= month_start,
+                        RawFile.processed_at < month_end
+                    )
+                ).all()
+                data_size_bytes = sum(raw_file.file_size for raw_file in raw_files)
+            
+            # Convert to TB
+            data_processed_tb = data_size_bytes / (1024 ** 4)  # Convert bytes to TB
+
+            # Calculate success rate for this month (percentage of successful pipeline runs)
+            month_success_rate = 0.0
+            if month_runs > 0:
+                month_successful_runs = pipeline_runs.filter(
+                    and_(
+                        PipelineRun.started_at >= month_start,
+                        PipelineRun.started_at < month_end,
+                        PipelineRun.status == PipelineRunStatus.SUCCEEDED
+                    )
+                ).count()
+                month_success_rate = (month_successful_runs / month_runs) * 100
 
             monthly_stats.append(
                 {
-                    "month": month_start.strftime("%b"),
+                    "month": month_start.strftime("%b %Y"),
                     "pipeline_runs": month_runs,
-                    "data_processed": round(data_processed, 1),
-                    "quality_score": round(quality_score, 1),
+                    "products": month_products,
+                    "data_sources": month_data_sources,
+                    "data_processed": round(data_processed_tb, 2),
+                    "success_rate": round(month_success_rate, 1),
                 }
             )
+        
+        # List is already in correct order: current month first, then previous months
 
         return AnalyticsMetrics(
             total_products=total_products,

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
+import { useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
 import { ArrowLeft, Package, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -16,6 +17,7 @@ import { useToast } from '@/components/ui/toast'
 export default function NewProductPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
+  const queryClient = useQueryClient()
   const { addToast } = useToast()
   const [name, setName] = useState('')
   const [playbookId, setPlaybookId] = useState<string | undefined>(undefined)
@@ -147,6 +149,11 @@ export default function NewProductPage() {
           message: `Failed to create product: ${response.error}`,
         })
       } else {
+        // Invalidate products cache to refresh the list
+        queryClient.invalidateQueries({ queryKey: ['products'] })
+        // Also emit event for immediate update (if products page is open)
+        window.dispatchEvent(new CustomEvent('productCreated'))
+        
         addToast({
           type: 'success',
           message: `Product "${name.trim()}" created successfully${playbookId ? ` with playbook ${playbookId}` : ''}`,

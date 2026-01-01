@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import Link from 'next/link'
 import { Plus, Package, MoreVertical, Trash2, Edit, GitBranch } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -26,9 +27,7 @@ interface Product {
 export default function ProductsPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
-  const [products, setProducts] = useState<Product[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const queryClient = useQueryClient()
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleteProductId, setDeleteProductId] = useState<string | null>(null)
   const [showResultModal, setShowResultModal] = useState(false)
@@ -39,14 +38,58 @@ export default function ProductsPage() {
   } | null>(null)
   const [openDropdown, setOpenDropdown] = useState<string | null>(null)
 
+  // Fetch products with React Query caching
+  const { data: products = [], isLoading, error } = useQuery({
+    queryKey: ['products'],
+    queryFn: async () => {
+      const response = await apiClient.getProducts()
+      if (response.error) {
+        throw new Error(response.error)
+      }
+      return (response.data as Product[]) || []
+    },
+    enabled: status === 'authenticated',
+    staleTime: 30 * 1000, // 30 seconds - data is fresh for 30s
+  })
+
+  // Delete mutation with cache invalidation
+  const deleteMutation = useMutation({
+    mutationFn: async (productId: string) => {
+      const response = await apiClient.deleteProduct(productId)
+      if (response.error) {
+        throw new Error(response.error)
+      }
+      return productId
+    },
+    onSuccess: (deletedId) => {
+      // Optimistically remove from cache
+      queryClient.setQueryData<Product[]>(['products'], (old = []) =>
+        old.filter(p => p.id !== deletedId)
+      )
+      // Invalidate to sync with server
+      queryClient.invalidateQueries({ queryKey: ['products'] })
+      
+      setResultModalData({
+        type: 'success',
+        title: 'Product Deleted',
+        message: 'Product has been successfully deleted'
+      })
+      setShowResultModal(true)
+    },
+    onError: (err: Error) => {
+      setResultModalData({
+        type: 'error',
+        title: 'Delete Failed',
+        message: err.message || 'Failed to delete product'
+      })
+      setShowResultModal(true)
+    },
+  })
+
   useEffect(() => {
     if (status === 'unauthenticated') {
       router.push('/')
       return
-    }
-
-    if (status === 'authenticated') {
-      loadProducts()
     }
   }, [status, router])
 
@@ -62,24 +105,14 @@ export default function ProductsPage() {
     }
   }, [openDropdown])
 
-  const loadProducts = async () => {
-    try {
-      setLoading(true)
-      const response = await apiClient.getProducts()
-      
-      if (response.error) {
-        setError(response.error)
-      } else {
-        setProducts((response.data as Product[]) || [])
-      }
-    } catch (err) {
-      setError('Failed to load products')
-    } finally {
-      setLoading(false)
+  // Listen for product creation events (from new product page)
+  useEffect(() => {
+    const handleProductCreated = () => {
+      queryClient.invalidateQueries({ queryKey: ['products'] })
     }
-  }
-
-  // Status color helper removed - using StatusBadge component instead
+    window.addEventListener('productCreated', handleProductCreated)
+    return () => window.removeEventListener('productCreated', handleProductCreated)
+  }, [queryClient])
 
   const handleDeleteProduct = (productId: string) => {
     setDeleteProductId(productId)
@@ -89,37 +122,9 @@ export default function ProductsPage() {
 
   const confirmDeleteProduct = async () => {
     if (!deleteProductId) return
-
-    try {
-      const response = await apiClient.deleteProduct(deleteProductId)
-      
-      if (response.error) {
-        setResultModalData({
-          type: 'error',
-          title: 'Delete Failed',
-          message: response.error
-        })
-      } else {
-        // Remove the product from the list
-        setProducts(products.filter(p => p.id !== deleteProductId))
-        setResultModalData({
-          type: 'success',
-          title: 'Product Deleted',
-          message: 'Product has been successfully deleted'
-        })
-      }
-      setShowResultModal(true)
-    } catch (err) {
-      setResultModalData({
-        type: 'error',
-        title: 'Delete Failed',
-        message: 'Failed to delete product'
-      })
-      setShowResultModal(true)
-    } finally {
-      setShowDeleteModal(false)
-      setDeleteProductId(null)
-    }
+    deleteMutation.mutate(deleteProductId)
+    setShowDeleteModal(false)
+    setDeleteProductId(null)
   }
 
   const getStatusDescription = (status: string) => {
@@ -132,7 +137,7 @@ export default function ProductsPage() {
     }
   }
 
-  if (status === 'loading' || loading) {
+  if (status === 'loading' || isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -143,15 +148,8 @@ export default function ProductsPage() {
     )
   }
 
-  if (error) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-red-600 mb-4">Error: {error}</p>
-          <Button onClick={loadProducts}>Try Again</Button>
-        </div>
-      </div>
-    )
+  if (status === 'unauthenticated') {
+    return null
   }
 
   return (
@@ -175,7 +173,13 @@ export default function ProductsPage() {
 
         {/* Content */}
         <div>
-        {products.length === 0 ? (
+        {error ? (
+          <ErrorState
+            title="Failed to load products"
+            message={error instanceof Error ? error.message : 'An error occurred'}
+            onRetry={() => queryClient.invalidateQueries({ queryKey: ['products'] })}
+          />
+        ) : products.length === 0 ? (
           <div className="text-center py-16">
             <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-full w-24 h-24 flex items-center justify-center mx-auto mb-6">
               <Package className="h-12 w-12 text-blue-600" />
@@ -262,7 +266,7 @@ export default function ProductsPage() {
                   </Link>
                   <Link href={`/app/products/${product.id}/datasources/new`} className="flex-1">
                     <Button size="sm" className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-sm hover:shadow-md transition-all">
-                      Add Source
+                      Add Data Source
                     </Button>
                   </Link>
                 </div>
