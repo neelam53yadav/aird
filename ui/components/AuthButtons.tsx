@@ -7,7 +7,8 @@ import Link from "next/link"
 import { Button } from "./ui/button"
 import { exchangeToken } from "@/lib/auth-utils"
 import { getApiUrl } from "@/lib/config"
-import { Mail, Lock, User, CheckCircle2, X } from "lucide-react"
+import { apiClient } from "@/lib/api-client"
+import { Mail, Lock, User, CheckCircle2, X, RefreshCw } from "lucide-react"
 
 interface AuthButtonsProps {
   className?: string
@@ -32,6 +33,9 @@ export function AuthButtons({ className }: AuthButtonsProps) {
   const [isSignUp, setIsSignUp] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [signupSuccess, setSignupSuccess] = useState(false)
+  const [showResendVerification, setShowResendVerification] = useState(false)
+  const [resendLoading, setResendLoading] = useState(false)
+  const [resendSuccess, setResendSuccess] = useState(false)
   const router = useRouter()
 
   // Check password complexity
@@ -242,15 +246,61 @@ export function AuthButtons({ className }: AuthButtonsProps) {
           errorMessage.includes("Invalid email") || 
           errorMessage.includes("Invalid password")) {
         setError("Invalid email or password. Please check your credentials and try again.")
+        setShowResendVerification(false)
+      } else if (errorMessage.includes("verify your email address") || 
+                 errorMessage.includes("verification link has expired")) {
+        // Show resend verification button for unverified email errors
+        setError(errorMessage)
+        setShowResendVerification(true)
       } else if (errorMessage.includes("Email and password are required")) {
         setError("Please enter both email and password")
+        setShowResendVerification(false)
       } else if (errorMessage.includes("fetch failed") || errorMessage.includes("Failed to fetch")) {
         setError("Unable to connect to the server. Please check your connection and try again.")
+        setShowResendVerification(false)
       } else {
         setError(errorMessage)
+        setShowResendVerification(false)
       }
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const handleResendVerification = async () => {
+    if (!email.trim()) {
+      setError("Please enter your email address first")
+      return
+    }
+
+    setResendLoading(true)
+    setResendSuccess(false)
+    setError(null)
+
+    try {
+      const response = await apiClient.resendVerification(email.trim())
+      
+      if (response.error) {
+        setError(response.error || "Failed to send verification email. Please try again.")
+        setResendSuccess(false)
+      } else if (response.data) {
+        setResendSuccess(true)
+        setError(null)
+        setShowResendVerification(false)
+        // Clear success message after 5 seconds
+        setTimeout(() => {
+          setResendSuccess(false)
+        }, 5000)
+      } else {
+        setError("An unexpected error occurred. Please try again.")
+        setResendSuccess(false)
+      }
+    } catch (error) {
+      console.error("Resend verification error:", error)
+      setError("An error occurred while sending the verification email. Please try again later.")
+      setResendSuccess(false)
+    } finally {
+      setResendLoading(false)
     }
   }
 
@@ -314,7 +364,36 @@ export function AuthButtons({ className }: AuthButtonsProps) {
       {/* Error Message (if any) */}
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-          {error}
+          <p>{error}</p>
+          {/* Resend Verification Button */}
+          {showResendVerification && !resendSuccess && (
+            <button
+              type="button"
+              onClick={handleResendVerification}
+              disabled={resendLoading}
+              className="mt-3 w-full text-left text-red-700 hover:text-red-900 font-medium underline disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {resendLoading ? (
+                <>
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Mail className="h-4 w-4" />
+                  Resend Verification Email
+                </>
+              )}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Resend Verification Success Message */}
+      {resendSuccess && (
+        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">
+          <p className="font-semibold">Verification email sent!</p>
+          <p className="mt-1">Please check your inbox and click the verification link to activate your account.</p>
         </div>
       )}
 
@@ -523,6 +602,8 @@ export function AuthButtons({ className }: AuthButtonsProps) {
               setFirstName("")
               setLastName("")
               setEmail("")
+              setShowResendVerification(false)
+              setResendSuccess(false)
             }}
             className="text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors"
           >

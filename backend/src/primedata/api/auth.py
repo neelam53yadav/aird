@@ -140,6 +140,18 @@ class ResetPasswordResponse(BaseModel):
     message: str
 
 
+class ResendVerificationRequest(BaseModel):
+    """Request model for resend verification."""
+    
+    email: str
+
+
+class ResendVerificationResponse(BaseModel):
+    """Response model for resend verification."""
+    
+    message: str
+
+
 @router.post("/api/v1/auth/validate-email", response_model=EmailValidationResponse)
 async def validate_email_endpoint(request: EmailValidationRequest, db: Session = Depends(get_db)):
     """
@@ -361,10 +373,24 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
     
     # Check if email is verified (only for email/password auth)
     if user.auth_provider == AuthProvider.SIMPLE and not user.email_verified:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Please verify your email address before logging in. Check your inbox for the verification email."
+        # Check if verification token expired
+        token_expired = (
+            user.verification_token_expires and 
+            user.verification_token_expires < datetime.now(timezone.utc)
         )
+        
+        if token_expired:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Your verification link has expired. Please request a new verification email.",
+                headers={"X-Verification-Expired": "true"}  # Flag for frontend
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Please verify your email address before logging in. Check your inbox for the verification email.",
+                headers={"X-Verification-Pending": "true"}  # Flag for frontend
+            )
 
     # Get workspace memberships
     workspace_memberships = db.query(WorkspaceMember).filter(WorkspaceMember.user_id == user.id).all()
@@ -457,6 +483,65 @@ async def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(
     logger.info(f"Password reset email sent to {user.email}")
     return ForgotPasswordResponse(
         message="Password reset link has been sent to your email address. Please check your inbox."
+    )
+
+
+@router.post("/api/v1/auth/resend-verification", response_model=ResendVerificationResponse)
+async def resend_verification(request: ResendVerificationRequest, db: Session = Depends(get_db)):
+    """
+    Resend verification email for unverified users.
+    """
+    email = request.email.strip().lower()
+    
+    # Find user by email
+    user = db.query(User).filter(User.email == email).first()
+    
+    # Always return success message (don't reveal if email exists - security best practice)
+    if not user:
+        logger.warning(f"Resend verification requested for non-existent email: {email}")
+        return ResendVerificationResponse(
+            message="If an account exists with this email and it's unverified, a verification email has been sent."
+        )
+    
+    # Only for email/password auth
+    if user.auth_provider != AuthProvider.SIMPLE:
+        logger.warning(f"Resend verification requested for OAuth user: {email}")
+        return ResendVerificationResponse(
+            message="If an account exists with this email and it's unverified, a verification email has been sent."
+        )
+    
+    # If already verified, don't resend
+    if user.email_verified:
+        logger.info(f"Resend verification requested for already verified user: {email}")
+        return ResendVerificationResponse(
+            message="Your email is already verified. You can log in now."
+        )
+    
+    # Generate new verification token
+    verification_token = secrets.token_urlsafe(32)
+    verification_expires = datetime.now(timezone.utc) + timedelta(hours=24)
+    
+    user.verification_token = verification_token
+    user.verification_token_expires = verification_expires
+    db.commit()
+    
+    # Send verification email
+    email_sent = send_verification_email(
+        user.email, 
+        verification_token, 
+        user.first_name or user.name
+    )
+    
+    if not email_sent:
+        logger.warning(f"Failed to send verification email to {user.email}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Failed to send verification email. Please try again later."
+        )
+    
+    logger.info(f"Verification email resent to {user.email}")
+    return ResendVerificationResponse(
+        message="Verification email has been sent. Please check your inbox."
     )
 
 

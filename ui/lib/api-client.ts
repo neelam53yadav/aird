@@ -901,6 +901,11 @@ class ApiClient {
   }): Promise<ApiResponse<{ success: boolean; message: string }>> {
     return this.post('/api/v1/contact/submit', data)
   }
+
+  // Resend Verification Email
+  async resendVerification(email: string): Promise<ApiResponse<{ message: string }>> {
+    return this.post('/api/v1/auth/resend-verification', { email })
+  }
 }
 
 // Export singleton instance
