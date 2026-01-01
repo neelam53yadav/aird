@@ -280,3 +280,152 @@ def send_password_reset_email(email: str, reset_token: str, user_name: str = Non
         logger.error(f"Failed to send password reset email to {email}: {str(e)}")
         return False
 
+
+def send_contact_email(user_name: str, user_email: str, feedback: str) -> bool:
+    """
+    Send contact form submission email to feedback address.
+    
+    Args:
+        user_name: User's name
+        user_email: User's email address
+        feedback: User's feedback/query message
+        
+    Returns:
+        True if email sent successfully, False otherwise
+    """
+    settings = get_settings()
+    
+    if not settings.SMTP_ENABLED:
+        logger.warning("SMTP is disabled. Contact form email not sent.")
+        return False
+    
+    try:
+        # Feedback recipient email
+        feedback_email = "primedata.feedback@gmail.com"
+        
+        # Create message
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = f"Contact Form Submission from {user_name}"
+        msg['From'] = settings.SMTP_FROM_EMAIL
+        msg['To'] = feedback_email
+        msg['Reply-To'] = user_email  # Set reply-to to user's email
+        
+        # Email body (HTML)
+        html_body = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <style>
+                body {{
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+                    line-height: 1.6;
+                    color: #333;
+                    max-width: 600px;
+                    margin: 0 auto;
+                    padding: 20px;
+                }}
+                .container {{
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    padding: 30px;
+                    border-radius: 10px;
+                    color: white;
+                }}
+                .content {{
+                    background: white;
+                    padding: 30px;
+                    border-radius: 8px;
+                    margin-top: 20px;
+                    color: #333;
+                }}
+                .info-box {{
+                    background: #f5f5f5;
+                    padding: 15px;
+                    border-radius: 5px;
+                    margin: 15px 0;
+                    border-left: 4px solid #667eea;
+                }}
+                .feedback-box {{
+                    background: #f9f9f9;
+                    padding: 20px;
+                    border-radius: 5px;
+                    margin: 15px 0;
+                    border: 1px solid #e0e0e0;
+                    white-space: pre-wrap;
+                    word-wrap: break-word;
+                }}
+                .footer {{
+                    margin-top: 30px;
+                    padding-top: 20px;
+                    border-top: 1px solid #eee;
+                    font-size: 12px;
+                    color: #666;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1 style="margin: 0; color: white;">PrimeData Contact Form</h1>
+            </div>
+            <div class="content">
+                <h2>New Contact Form Submission</h2>
+                
+                <div class="info-box">
+                    <p><strong>Name:</strong> {user_name}</p>
+                    <p><strong>Email:</strong> <a href="mailto:{user_email}">{user_email}</a></p>
+                </div>
+                
+                <h3>Message:</h3>
+                <div class="feedback-box">
+                    {feedback}
+                </div>
+                
+                <div class="footer">
+                    <p>This email was sent from the PrimeData contact form.</p>
+                    <p>You can reply directly to this email to respond to {user_name}.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        # Plain text version
+        text_body = f"""
+        PrimeData Contact Form Submission
+        
+        Name: {user_name}
+        Email: {user_email}
+        
+        Message:
+        {feedback}
+        
+        ---
+        This email was sent from the PrimeData contact form.
+        You can reply directly to this email to respond to {user_name}.
+        """
+        
+        # Attach parts
+        msg.attach(MIMEText(text_body, 'plain'))
+        msg.attach(MIMEText(html_body, 'html'))
+        
+        # Send email
+        if settings.SMTP_USE_TLS:
+            server = smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT)
+            server.starttls()
+        elif settings.SMTP_USE_SSL:
+            server = smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT)
+        else:
+            server = smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT)
+        
+        if settings.SMTP_USERNAME and settings.SMTP_PASSWORD:
+            server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
+        
+        server.send_message(msg)
+        server.quit()
+        
+        logger.info(f"Contact form email sent successfully from {user_name} ({user_email})")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Failed to send contact form email from {user_email}: {str(e)}")
+        return False
