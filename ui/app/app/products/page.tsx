@@ -177,8 +177,7 @@ export default function ProductsPage() {
           <ErrorState
             title="Failed to load products"
             message={error instanceof Error ? error.message : 'An error occurred'}
-            actionLabel="Retry"
-            onAction={() => queryClient.invalidateQueries({ queryKey: ['products'] })}
+            onRetry={() => queryClient.invalidateQueries({ queryKey: ['products'] })}
           />
         ) : products.length === 0 ? (
           <div className="text-center py-16">

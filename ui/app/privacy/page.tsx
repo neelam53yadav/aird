@@ -87,7 +87,8 @@ export default function PrivacyPage() {
             </section>
 
             <PrivacySection id="information-collection" title="1. Information We Collect">
-              <PrivacySection subtitle="1.1 Personal Information">
+              <div className="mt-6">
+                <h3 className="text-xl font-semibold text-gray-900 mb-3">1.1 Personal Information</h3>
                 <p>
                   We collect information that you provide directly to us, including:
                 </p>
@@ -97,9 +98,10 @@ export default function PrivacyPage() {
                   <li>Profile information and preferences</li>
                   <li>Communications with our support team</li>
                 </ul>
-              </PrivacySection>
+              </div>
 
-              <PrivacySection subtitle="1.2 Usage Information">
+              <div className="mt-6">
+                <h3 className="text-xl font-semibold text-gray-900 mb-3">1.2 Usage Information</h3>
                 <p>
                   We automatically collect certain information about your use of the Service, including:
                 </p>
@@ -109,14 +111,15 @@ export default function PrivacyPage() {
                   <li>Usage patterns and feature interactions</li>
                   <li>Performance and error data</li>
                 </ul>
-              </PrivacySection>
+              </div>
 
-              <PrivacySection subtitle="1.3 Data You Process">
+              <div className="mt-6">
+                <h3 className="text-xl font-semibold text-gray-900 mb-3">1.3 Data You Process</h3>
                 <p>
                   We process data that you upload to PrimeData for the purpose of providing our services. You retain all ownership 
                   and rights to your data. We do not use your processed data for any purpose other than providing the Service.
                 </p>
-              </PrivacySection>
+              </div>
             </PrivacySection>
 
             <PrivacySection id="information-use" title="2. How We Use Your Information">
