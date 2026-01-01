@@ -12,7 +12,7 @@ interface TourProps {
 const TOUR_STORAGE_KEY = 'primedata_tour_completed'
 
 // Custom styles to match PrimeData design
-const joyrideStyles: Styles = {
+const joyrideStyles: Partial<Styles> = {
   options: {
     primaryColor: '#4f46e5', // indigo-600
     zIndex: 10000,
@@ -74,7 +74,7 @@ export function Tour({ steps, run = false, onComplete }: TourProps) {
   const handleJoyrideCallback = (data: CallBackProps) => {
     const { status } = data
 
-    if ([STATUS.FINISHED, STATUS.SKIPPED].includes(status)) {
+    if (status === STATUS.FINISHED || status === STATUS.SKIPPED) {
       setIsRunning(false)
       // Mark tour as completed
       if (typeof window !== 'undefined') {
