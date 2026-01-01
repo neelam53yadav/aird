@@ -71,6 +71,17 @@ class Settings(BaseSettings):
     AIRD_ENABLE_VALIDATION: bool = True  # Enable validation summary generation
     AIRD_ENABLE_PDF_REPORTS: bool = True  # Enable PDF report generation
 
+    # Email Configuration (SMTP)
+    SMTP_ENABLED: bool = False  # Set to True to enable email sending
+    SMTP_HOST: str = "smtp.gmail.com"  # SMTP server hostname
+    SMTP_PORT: int = 587  # SMTP server port (587 for TLS, 465 for SSL, 25 for plain)
+    SMTP_USE_TLS: bool = True  # Use TLS encryption
+    SMTP_USE_SSL: bool = False  # Use SSL encryption (alternative to TLS)
+    SMTP_USERNAME: Optional[str] = None  # SMTP username (usually your email)
+    SMTP_PASSWORD: Optional[str] = None  # SMTP password or app-specific password
+    SMTP_FROM_EMAIL: str = "noreply@primedata.com"  # From email address
+    FRONTEND_URL: str = "http://localhost:3000"  # Frontend URL for email links
+
     class Config:
         env_file = ".env"
         case_sensitive = True

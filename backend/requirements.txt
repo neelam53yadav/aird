@@ -10,6 +10,7 @@ python-multipart==0.0.6
 pydantic>=2.0.0,<3.0.0  # Compatible with Python 3.11 and 3.12 (required by pydantic-settings)
 pydantic-settings>=2.0.0,<3.0.0  # Compatible with Python 3.11 and 3.12
 email-validator>=2.0.0
+dnspython>=2.4.0  # For DNS/MX record validation
 
 # Database
 SQLAlchemy==2.0.23  # Compatible with Python 3.11 and 3.12

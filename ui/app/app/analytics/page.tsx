@@ -35,9 +35,11 @@ interface AnalyticsData {
   }>
   monthlyStats: Array<{
     month: string
-    pipelineRuns: number
-    dataProcessed: number
-    qualityScore: number
+    pipeline_runs: number
+    products: number
+    data_sources: number
+    data_processed: number
+    success_rate: number
   }>
 }
 
@@ -80,7 +82,14 @@ export default function AnalyticsPage() {
         avgProcessingTime: data.avg_processing_time || 0,
         dataQualityScore: data.data_quality_score || 0,
         recentActivity: data.recent_activity || [],
-        monthlyStats: data.monthly_stats || []
+        monthlyStats: (data.monthly_stats || []).map((stat: any) => ({
+          month: stat.month,
+          pipeline_runs: stat.pipeline_runs || 0,
+          products: stat.products || 0,
+          data_sources: stat.data_sources || 0,
+          data_processed: stat.data_processed || 0,
+          success_rate: stat.success_rate || 0
+        }))
       })
     } catch (err) {
       console.error('Failed to load analytics:', err)
@@ -235,28 +244,44 @@ export default function AnalyticsPage() {
 
           <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-6">Monthly Trends</h3>
-            <div className="space-y-4">
-              {analytics?.monthlyStats?.slice(-3).map((stat, index) => (
-                <div key={stat.month} className="border-2 border-gray-100 rounded-lg p-4 hover:border-blue-300 transition-colors">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-semibold text-gray-900">{stat.month}</span>
+            <div className="space-y-4 max-h-[600px] overflow-y-auto">
+              {analytics?.monthlyStats && analytics.monthlyStats.length > 0 ? (
+                analytics.monthlyStats.map((stat, index) => (
+                  <div key={stat.month} className="border-2 border-gray-100 rounded-lg p-4 hover:border-blue-300 transition-colors">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-base font-semibold text-gray-900">{stat.month}</span>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                      <div className="bg-blue-50 rounded-md p-3 text-center">
+                        <div className="font-bold text-blue-700 text-lg">{stat.pipeline_runs || 0}</div>
+                        <div className="text-blue-600 text-xs font-medium mt-1">Pipeline Runs</div>
+                      </div>
+                      <div className="bg-indigo-50 rounded-md p-3 text-center">
+                        <div className="font-bold text-indigo-700 text-lg">{stat.products || 0}</div>
+                        <div className="text-indigo-600 text-xs font-medium mt-1">Products</div>
+                      </div>
+                      <div className="bg-teal-50 rounded-md p-3 text-center">
+                        <div className="font-bold text-teal-700 text-lg">{stat.data_sources || 0}</div>
+                        <div className="text-teal-600 text-xs font-medium mt-1">Data Sources</div>
+                      </div>
+                      <div className="bg-green-50 rounded-md p-3 text-center">
+                        <div className="font-bold text-green-700 text-lg">
+                          {stat.data_processed >= 1 
+                            ? `${stat.data_processed.toFixed(2)}TB`
+                            : stat.data_processed >= 0.001
+                            ? `${(stat.data_processed * 1024).toFixed(2)}GB`
+                            : `${(stat.data_processed * 1024 * 1024).toFixed(2)}MB`}
+                        </div>
+                        <div className="text-green-600 text-xs font-medium mt-1">Data Size</div>
+                      </div>
+                      <div className="bg-purple-50 rounded-md p-3 text-center">
+                        <div className="font-bold text-purple-700 text-lg">{stat.success_rate?.toFixed(1) || 0}%</div>
+                        <div className="text-purple-600 text-xs font-medium mt-1">Success Rate</div>
+                      </div>
+                    </div>
                   </div>
-                  <div className="grid grid-cols-3 gap-2 text-xs">
-                    <div className="bg-blue-50 rounded-md p-2 text-center">
-                      <div className="font-semibold text-blue-700">{stat.pipelineRuns}</div>
-                      <div className="text-blue-600">Runs</div>
-                    </div>
-                    <div className="bg-green-50 rounded-md p-2 text-center">
-                      <div className="font-semibold text-green-700">{stat.dataProcessed}TB</div>
-                      <div className="text-green-600">Data</div>
-                    </div>
-                    <div className="bg-purple-50 rounded-md p-2 text-center">
-                      <div className="font-semibold text-purple-700">{stat.qualityScore}%</div>
-                      <div className="text-purple-600">Quality</div>
-                    </div>
-                  </div>
-                </div>
-              )) || (
+                ))
+              ) : (
                 <div className="text-center py-8 text-gray-500">
                   <BarChart3 className="h-12 w-12 mx-auto mb-2 text-gray-400" />
                   <p>No monthly data available</p>

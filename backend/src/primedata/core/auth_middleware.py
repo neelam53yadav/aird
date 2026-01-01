@@ -33,6 +33,18 @@ class AuthMiddleware(BaseHTTPMiddleware):
             r"^/api/v1/auth/signup/$",  # With trailing slash
             r"^/api/v1/auth/login$",  # Login endpoint
             r"^/api/v1/auth/login/$",  # With trailing slash
+            r"^/api/v1/auth/validate-email$",  # Email validation endpoint - must be anonymous
+            r"^/api/v1/auth/validate-email/$",  # With trailing slash
+            r"^/api/v1/auth/verify-email$",  # Email verification endpoint - must be anonymous
+            r"^/api/v1/auth/verify-email/$",  # With trailing slash
+            r"^/api/v1/auth/resend-verification$",  # Resend verification endpoint - must be anonymous
+            r"^/api/v1/auth/resend-verification/$",  # With trailing slash
+            r"^/api/v1/auth/forgot-password$",  # Forgot password endpoint - must be anonymous
+            r"^/api/v1/auth/forgot-password/$",  # With trailing slash
+            r"^/api/v1/auth/reset-password$",  # Reset password endpoint - must be anonymous
+            r"^/api/v1/auth/reset-password/$",  # With trailing slash
+            r"^/api/v1/contact/submit$",  # Contact form endpoint - must be anonymous
+            r"^/api/v1/contact/submit/$",  # With trailing slash
         ]
 
     async def dispatch(self, request: Request, call_next):
@@ -43,9 +55,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         # Check if route allows anonymous access (before any auth checks)
+        # IMPORTANT: Do this check BEFORE extracting any tokens/cookies
         if self._is_anonymous_route(path):
             # Skip all authentication for anonymous routes
-            # This is critical for /api/v1/auth/session/exchange as it's the first-time auth endpoint
+            # Don't even check for tokens or cookies
+            logger.debug(f"Skipping auth check for anonymous route: {path}")
             return await call_next(request)
 
         # Extract Bearer token from Authorization header OR cookie
@@ -114,9 +128,16 @@ class AuthMiddleware(BaseHTTPMiddleware):
     def _is_anonymous_route(self, path: str) -> bool:
         """Check if the given path allows anonymous access."""
         # Normalize path (remove trailing slash, handle query params)
-        normalized_path = path.rstrip("/")
+        # Split on '?' to remove query parameters
+        path_without_query = path.split('?')[0]
+        normalized_path = path_without_query.rstrip("/")
+        
+        # Add debug logging
+        logger.debug(f"Checking if route is anonymous - path: {path}, normalized: {normalized_path}")
 
         for pattern in self.anonymous_routes:
             if re.match(pattern, normalized_path):
+                logger.debug(f"Route matched anonymous pattern: {pattern}")
                 return True
+        logger.debug(f"Route did not match any anonymous patterns")
         return False

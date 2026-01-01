@@ -10,6 +10,8 @@ import { StatCardSkeleton, ListSkeleton, CardSkeleton } from '@/components/ui/sk
 import AppLayout from '@/components/layout/AppLayout'
 import { apiClient } from '@/lib/api-client'
 import { exchangeToken } from '@/lib/auth-utils'
+import { Tour, hasCompletedTour } from '@/components/Tour'
+import { Step } from 'react-joyride'
 
 interface Product {
   id: string
@@ -37,6 +39,47 @@ export default function DashboardPage() {
     readyProducts: 0,
     draftProducts: 0
   })
+  const [showTour, setShowTour] = useState(false)
+
+  // Tour steps configuration
+  const tourSteps: Step[] = [
+    {
+      target: 'body',
+      content: 'Welcome to PrimeData! This quick tour will help you understand the platform and get started quickly.',
+      placement: 'center',
+      disableBeacon: true,
+    },
+    {
+      target: '[data-tour="navigation-sidebar"]',
+      content: 'The navigation sidebar gives you quick access to all major sections. Dashboard shows your overview, Products manages your data products, Data Sources connects external systems, Analytics provides insights, and Settings lets you configure your account.',
+      placement: 'right',
+    },
+    {
+      target: '[data-tour="stats-cards"]',
+      content: 'These cards show your key metrics at a glance - total products, data sources, and their current statuses. Click on any card to see more details.',
+      placement: 'bottom',
+    },
+    {
+      target: '[data-tour="create-product"]',
+      content: 'Start here to create your first data product. Products organize your data sources and processing pipelines. Click this button to begin.',
+      placement: 'left',
+    },
+    {
+      target: '[data-tour="quick-actions"]',
+      content: 'Quick Actions provide shortcuts to common tasks. You can quickly navigate to manage products, data sources, or create new resources.',
+      placement: 'left',
+    },
+    {
+      target: '[data-tour="products-list"]',
+      content: 'Your products will appear here. Click on any product to view details, manage data sources, run pipelines, and analyze results.',
+      placement: 'top',
+    },
+    {
+      target: 'body',
+      content: 'That\'s it! You\'re ready to start. Remember: You can always access the tour again using the "Take Tour" button in the header. Happy exploring!',
+      placement: 'center',
+    },
+  ]
 
   // Exchange token when authenticated (ensures user is registered in backend)
   useEffect(() => {
@@ -49,7 +92,6 @@ export default function DashboardPage() {
           // Load data after token exchange completes
           loadDashboardData()
         } catch (error) {
-          console.error("Token exchange failed on dashboard:", error)
           // Still try to load data even if exchange fails
           loadDashboardData()
         }
@@ -58,6 +100,32 @@ export default function DashboardPage() {
     
     initializeAuth()
   }, [status, session])
+
+  // Check if tour should be shown on mount
+  useEffect(() => {
+    if (!loading && !hasCompletedTour()) {
+      // Small delay to ensure DOM is ready
+      setTimeout(() => setShowTour(true), 1000)
+    }
+  }, [loading])
+
+  // Listen for tour start event from header button
+  useEffect(() => {
+    const handleStartTour = () => {
+      setShowTour(true)
+    }
+    
+    window.addEventListener('startTour', handleStartTour)
+    return () => window.removeEventListener('startTour', handleStartTour)
+  }, [])
+
+  // Check if tour should be shown on mount
+  useEffect(() => {
+    if (!loading && !hasCompletedTour()) {
+      // Small delay to ensure DOM is ready
+      setTimeout(() => setShowTour(true), 1000)
+    }
+  }, [loading])
 
   const loadDashboardData = async () => {
     try {
@@ -69,10 +137,34 @@ export default function DashboardPage() {
         const productsData = productsResponse.data as Product[]
         setProducts(productsData)
         
+        // Load all data sources
+        let totalDataSourcesCount = 0
+        try {
+          const dataSourcesResponse = await apiClient.getDataSources()
+          if (dataSourcesResponse.data) {
+            const allDataSources = dataSourcesResponse.data as DataSource[]
+            totalDataSourcesCount = allDataSources.length
+            setDataSources(allDataSources)
+          }
+        } catch (error) {
+          console.error('Failed to load data sources:', error)
+          // Fallback: count data sources from products
+          for (const product of productsData) {
+            try {
+              const productDataSources = await apiClient.getDataSources(product.id)
+              if (productDataSources.data) {
+                totalDataSourcesCount += (productDataSources.data as DataSource[]).length
+              }
+            } catch (err) {
+              // Skip if product doesn't have data sources
+            }
+          }
+        }
+        
         // Calculate stats
         const stats = {
           totalProducts: productsData.length,
-          totalDataSources: 0, // Will be calculated from data sources
+          totalDataSources: totalDataSourcesCount,
           runningProducts: productsData.filter(p => p.status === 'running').length,
           failedProducts: productsData.filter(p => p.status === 'failed').length,
           readyProducts: productsData.filter(p => p.status === 'ready').length,
@@ -80,13 +172,6 @@ export default function DashboardPage() {
         }
         setStats(stats)
       }
-
-      // Load data sources (we'll need to get this from all products)
-      // For now, we'll estimate based on products
-      setStats(prev => ({
-        ...prev,
-        totalDataSources: products.length * 2 // Rough estimate
-      }))
       
     } catch (error) {
       console.error('Failed to load dashboard data:', error)
@@ -131,105 +216,129 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        {/* Enhanced Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl p-3 mr-4 shadow-sm">
-                  <Package className="h-6 w-6 text-white" />
+        {/* Enhanced Stats Cards - Now Clickable */}
+        <div data-tour="stats-cards" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          {/* Total Products - Clickable */}
+          <Link href="/app/products" className="block">
+            <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5 cursor-pointer group">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl p-3 mr-4 shadow-sm group-hover:scale-110 transition-transform">
+                    <Package className="h-6 w-6 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-600 mb-1">Total Products</p>
+                    <p className="text-3xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors">{stats.totalProducts}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-600 mb-1">Total Products</p>
-                  <p className="text-3xl font-bold text-gray-900">{stats.totalProducts}</p>
-                </div>
+                <ArrowUpRight className="h-5 w-5 text-gray-400 group-hover:text-blue-600 transition-colors" />
               </div>
             </div>
-          </div>
+          </Link>
 
-          <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl p-3 mr-4 shadow-sm">
-                  <Database className="h-6 w-6 text-white" />
+          {/* Data Sources - Clickable */}
+          <Link href="/app/datasources" className="block">
+            <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5 cursor-pointer group">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl p-3 mr-4 shadow-sm group-hover:scale-110 transition-transform">
+                    <Database className="h-6 w-6 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-600 mb-1">Data Sources</p>
+                    <p className="text-3xl font-bold text-gray-900 group-hover:text-green-600 transition-colors">{stats.totalDataSources}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-600 mb-1">Data Sources</p>
-                  <p className="text-3xl font-bold text-gray-900">{stats.totalDataSources}</p>
-                </div>
+                <ArrowUpRight className="h-5 w-5 text-gray-400 group-hover:text-green-600 transition-colors" />
               </div>
             </div>
-          </div>
+          </Link>
 
-          <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl p-3 mr-4 shadow-sm">
-                  <CheckCircle className="h-6 w-6 text-white" />
+          {/* Ready Products - Clickable */}
+          <Link href="/app/products?status=ready" className="block">
+            <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5 cursor-pointer group">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl p-3 mr-4 shadow-sm group-hover:scale-110 transition-transform">
+                    <CheckCircle className="h-6 w-6 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-600 mb-1">Ready Products</p>
+                    <p className="text-3xl font-bold text-gray-900 group-hover:text-green-600 transition-colors">{stats.readyProducts}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-600 mb-1">Ready Products</p>
-                  <p className="text-3xl font-bold text-gray-900">{stats.readyProducts}</p>
-                </div>
+                <ArrowUpRight className="h-5 w-5 text-gray-400 group-hover:text-green-600 transition-colors" />
               </div>
             </div>
-          </div>
+          </Link>
 
-          <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl p-3 mr-4 shadow-sm">
-                  <Activity className="h-6 w-6 text-white" />
+          {/* Running Products - Clickable */}
+          <Link href="/app/products?status=running" className="block">
+            <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5 cursor-pointer group">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl p-3 mr-4 shadow-sm group-hover:scale-110 transition-transform">
+                    <Activity className="h-6 w-6 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-600 mb-1">Running</p>
+                    <p className="text-3xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors">{stats.runningProducts}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-600 mb-1">Running</p>
-                  <p className="text-3xl font-bold text-gray-900">{stats.runningProducts}</p>
-                </div>
+                <ArrowUpRight className="h-5 w-5 text-gray-400 group-hover:text-blue-600 transition-colors" />
               </div>
             </div>
-          </div>
+          </Link>
         </div>
 
-        {/* Status Overview */}
+        {/* Status Overview - Make status items clickable too */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100">
             <h3 className="text-lg font-semibold text-gray-900 mb-6">Product Status Overview</h3>
             <div className="space-y-4">
-              <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-100">
-                <div className="flex items-center">
-                  <div className="w-4 h-4 bg-gradient-to-r from-green-500 to-emerald-600 rounded-full mr-3 shadow-sm"></div>
-                  <span className="text-sm font-medium text-gray-700">Ready</span>
+              <Link href="/app/products?status=ready" className="block">
+                <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-100 hover:bg-green-100 hover:border-green-200 transition-all cursor-pointer group">
+                  <div className="flex items-center">
+                    <div className="w-4 h-4 bg-gradient-to-r from-green-500 to-emerald-600 rounded-full mr-3 shadow-sm"></div>
+                    <span className="text-sm font-medium text-gray-700 group-hover:text-green-700">Ready</span>
+                  </div>
+                  <span className="text-lg font-bold text-gray-900 group-hover:text-green-700">{stats.readyProducts}</span>
                 </div>
-                <span className="text-lg font-bold text-gray-900">{stats.readyProducts}</span>
-              </div>
-              <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-100">
-                <div className="flex items-center">
-                  <div className="w-4 h-4 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full mr-3 shadow-sm animate-pulse"></div>
-                  <span className="text-sm font-medium text-gray-700">Running</span>
+              </Link>
+              <Link href="/app/products?status=running" className="block">
+                <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-100 hover:bg-blue-100 hover:border-blue-200 transition-all cursor-pointer group">
+                  <div className="flex items-center">
+                    <div className="w-4 h-4 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full mr-3 shadow-sm animate-pulse"></div>
+                    <span className="text-sm font-medium text-gray-700 group-hover:text-blue-700">Running</span>
+                  </div>
+                  <span className="text-lg font-bold text-gray-900 group-hover:text-blue-700">{stats.runningProducts}</span>
                 </div>
-                <span className="text-lg font-bold text-gray-900">{stats.runningProducts}</span>
-              </div>
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100">
-                <div className="flex items-center">
-                  <div className="w-4 h-4 bg-gradient-to-r from-gray-500 to-slate-600 rounded-full mr-3 shadow-sm"></div>
-                  <span className="text-sm font-medium text-gray-700">Draft</span>
+              </Link>
+              <Link href="/app/products?status=draft" className="block">
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100 hover:bg-gray-100 hover:border-gray-200 transition-all cursor-pointer group">
+                  <div className="flex items-center">
+                    <div className="w-4 h-4 bg-gradient-to-r from-gray-500 to-slate-600 rounded-full mr-3 shadow-sm"></div>
+                    <span className="text-sm font-medium text-gray-700 group-hover:text-gray-800">Draft</span>
+                  </div>
+                  <span className="text-lg font-bold text-gray-900 group-hover:text-gray-800">{stats.draftProducts}</span>
                 </div>
-                <span className="text-lg font-bold text-gray-900">{stats.draftProducts}</span>
-              </div>
-              <div className="flex items-center justify-between p-3 bg-red-50 rounded-lg border border-red-100">
-                <div className="flex items-center">
-                  <div className="w-4 h-4 bg-gradient-to-r from-red-500 to-rose-600 rounded-full mr-3 shadow-sm"></div>
-                  <span className="text-sm font-medium text-gray-700">Failed</span>
+              </Link>
+              <Link href="/app/products?status=failed" className="block">
+                <div className="flex items-center justify-between p-3 bg-red-50 rounded-lg border border-red-100 hover:bg-red-100 hover:border-red-200 transition-all cursor-pointer group">
+                  <div className="flex items-center">
+                    <div className="w-4 h-4 bg-gradient-to-r from-red-500 to-rose-600 rounded-full mr-3 shadow-sm"></div>
+                    <span className="text-sm font-medium text-gray-700 group-hover:text-red-700">Failed</span>
+                  </div>
+                  <span className="text-lg font-bold text-gray-900 group-hover:text-red-700">{stats.failedProducts}</span>
                 </div>
-                <span className="text-lg font-bold text-gray-900">{stats.failedProducts}</span>
-              </div>
+              </Link>
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100">
+          <div data-tour="quick-actions" className="bg-white p-6 rounded-xl shadow-md border border-gray-100">
             <h3 className="text-lg font-semibold text-gray-900 mb-6">Quick Actions</h3>
             <div className="space-y-3">
-              <Link href="/app/products/new">
+              <Link href="/app/products/new" data-tour="create-product">
                 <Button className="w-full justify-start bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg transition-all">
                   <Plus className="h-4 w-4 mr-2" />
                   Create New Product
@@ -252,7 +361,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Recent Products */}
-        <div className="bg-white rounded-xl shadow-md border border-gray-100">
+        <div data-tour="products-list" className="bg-white rounded-xl shadow-md border border-gray-100">
           <div className="p-6 border-b border-gray-200">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold text-gray-900">Recent Products</h3>
@@ -311,6 +420,9 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* Tour Component */}
+      <Tour steps={tourSteps} run={showTour} onComplete={() => setShowTour(false)} />
     </AppLayout>
   )
 }

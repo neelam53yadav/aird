@@ -18,9 +18,10 @@ from pydantic import BaseModel
 from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 
+from ..core.plan_limits import get_plan_limits, get_plan_limit
 from ..core.security import get_current_user
 from ..db.database import get_db
-from ..db.models import BillingPlan, BillingProfile, DataSource, PipelineRun, Product, Workspace
+from ..db.models import BillingPlan, BillingProfile, DataSource, PipelineRun, Product, RawFile, Workspace
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +75,13 @@ async def create_checkout_session(
     Returns:
         Checkout session URL and ID
     """
+    # Check if Stripe is configured
+    if not stripe.api_key:
+        raise HTTPException(
+            status_code=503, 
+            detail="🚀 You're in beta! We've unlocked all premium features for free so you can fully explore and test the platform. Go ahead and try any plan - no credit card needed. Payment options will be available soon."
+        )
+    
     try:
         # Get workspace
         workspace = db.query(Workspace).filter(Workspace.id == request.workspace_id).first()
@@ -124,6 +132,12 @@ async def create_checkout_session(
         return CheckoutSessionResponse(checkout_url=session.url, session_id=session.id)
 
     except stripe.error.StripeError as e:
+        # Check if it's an API key error
+        if "No API key provided" in str(e) or "api_key" in str(e).lower():
+            raise HTTPException(
+                status_code=503,
+                detail="🚀 You're in beta! We've unlocked all premium features for free so you can fully explore and test the platform. Go ahead and try any plan - no credit card needed. Payment options will be available soon."
+            )
         raise HTTPException(status_code=400, detail=f"Stripe error: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to create checkout session: {str(e)}")
@@ -144,6 +158,13 @@ async def get_customer_portal(
     Returns:
         Customer portal URL
     """
+    # Check if Stripe is configured
+    if not stripe.api_key:
+        raise HTTPException(
+            status_code=503,
+            detail="🚀 You're in beta! We've unlocked all premium features for free so you can fully explore and test the platform. Go ahead and try any plan - no credit card needed. Payment options will be available soon."
+        )
+    
     try:
         # Get billing profile
         billing_profile = db.query(BillingProfile).filter(BillingProfile.workspace_id == workspace_id).first()
@@ -160,6 +181,12 @@ async def get_customer_portal(
         return BillingPortalResponse(portal_url=portal_session.url)
 
     except stripe.error.StripeError as e:
+        # Check if it's an API key error
+        if "No API key provided" in str(e) or "api_key" in str(e).lower():
+            raise HTTPException(
+                status_code=503,
+                detail="🚀 You're in beta! We've unlocked all premium features for free so you can fully explore and test the platform. Go ahead and try any plan - no credit card needed. Payment options will be available soon."
+            )
         raise HTTPException(status_code=400, detail=f"Stripe error: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to create portal session: {str(e)}")
@@ -188,36 +215,19 @@ async def get_billing_limits(workspace_id: str, db: Session = Depends(get_db), c
             db.add(billing_profile)
             db.commit()
 
-        # Define plan limits
-        plan_limits = {
-            "free": {
-                "max_products": 3,
-                "max_data_sources_per_product": 5,
-                "max_pipeline_runs_per_month": 10,
-                "max_vectors": 10000,
-                "schedule_frequency": "manual",
-            },
-            "pro": {
-                "max_products": 25,
-                "max_data_sources_per_product": 50,
-                "max_pipeline_runs_per_month": 1000,
-                "max_vectors": 1000000,
-                "schedule_frequency": "hourly",
-            },
-            "enterprise": {
-                "max_products": -1,  # Unlimited
-                "max_data_sources_per_product": -1,  # Unlimited
-                "max_pipeline_runs_per_month": -1,  # Unlimited
-                "max_vectors": -1,  # Unlimited
-                "schedule_frequency": "realtime",
-            },
-        }
-
-        # Get plan value (handle both enum and string, case-insensitive)
+        # Get plan limits from central configuration
         current_plan = (
             billing_profile.plan.value.lower() if hasattr(billing_profile.plan, "value") else str(billing_profile.plan).lower()
         )
-        limits = plan_limits.get(current_plan, plan_limits["free"])
+        plan_limits_dict = get_plan_limits(current_plan)
+
+        # Build limits response (exclude internal fields like schedule_frequency)
+        limits = {
+            "max_products": plan_limits_dict.get("max_products", -1),
+            "max_data_sources_per_product": plan_limits_dict.get("max_data_sources_per_product", -1),
+            "max_pipeline_runs_per_month": plan_limits_dict.get("max_pipeline_runs_per_month", -1),
+            "max_raw_files_size_mb": plan_limits_dict.get("max_raw_files_size_mb", -1),
+        }
 
         # Calculate actual usage
         usage = calculate_workspace_usage(workspace_id, db)
@@ -312,40 +322,20 @@ def calculate_workspace_usage(workspace_id: str, db: Session) -> Dict[str, Any]:
         or 0
     )
 
-    # Count vectors in Qdrant (sum across all products in workspace)
-    vectors_count = 0
-    try:
-        from ..indexing.qdrant_client import QdrantClient
-
-        qdrant_client = QdrantClient()
-        if qdrant_client.is_connected():
-            # Get all products in workspace
-            products = db.query(Product).filter(Product.workspace_id == workspace_uuid).all()
-
-            for product in products:
-                # Try to get collection info for current version
-                if product.current_version > 0:
-                    collection_name = qdrant_client.find_collection_name(
-                        workspace_id=str(workspace_uuid),
-                        product_id=str(product.id),
-                        version=product.current_version,
-                        product_name=product.name,
-                    )
-                    if collection_name:
-                        collection_info = qdrant_client.get_collection_info(collection_name)
-                        if collection_info:
-                            vectors_count += collection_info.get("vectors_count", 0)
-        else:
-            logger.warning("Qdrant not connected, cannot count vectors")
-    except Exception as e:
-        logger.warning(f"Failed to count vectors from Qdrant: {e}")
-        # Continue without vector count
+    # Calculate total raw files size in bytes (sum across all raw files in workspace)
+    raw_files_size_bytes = (
+        db.query(func.sum(RawFile.file_size))
+        .filter(RawFile.workspace_id == workspace_uuid)
+        .scalar() or 0
+    )
+    # Convert to MB (1 MB = 1024 * 1024 bytes)
+    raw_files_size_mb = raw_files_size_bytes / (1024 * 1024)
 
     return {
         "products": products_count,
         "data_sources": data_sources_count,
         "pipeline_runs_this_month": pipeline_runs_count,
-        "vectors": vectors_count,
+        "raw_files_size_mb": round(raw_files_size_mb, 2),  # Round to 2 decimal places
     }
 
 
@@ -356,7 +346,7 @@ def check_billing_limits(workspace_id: str, limit_type: str, current_count: int,
     Args:
         workspace_id: Workspace ID (string or UUID)
         limit_type: Type of limit to check
-        current_count: Current count of the resource
+        current_count: Current count/value of the resource
         db: Database session
 
     Returns:
@@ -373,23 +363,11 @@ def check_billing_limits(workspace_id: str, limit_type: str, current_count: int,
         if not billing_profile:
             return True  # No billing profile, assume free tier
 
-        # Define limits based on plan
-        limits = {
-            "free": {"max_products": 3, "max_data_sources_per_product": 5, "max_pipeline_runs_per_month": 10},
-            "pro": {"max_products": 25, "max_data_sources_per_product": 50, "max_pipeline_runs_per_month": 1000},
-            "enterprise": {
-                "max_products": -1,  # Unlimited
-                "max_data_sources_per_product": -1,
-                "max_pipeline_runs_per_month": -1,
-            },
-        }
-
-        # Get plan value (handle both enum and string, case-insensitive)
-        plan_value = (
+        # Get plan limits from central configuration
+        plan_name = (
             billing_profile.plan.value.lower() if hasattr(billing_profile.plan, "value") else str(billing_profile.plan).lower()
         )
-        plan_limits = limits.get(plan_value, limits["free"])
-        limit = plan_limits.get(limit_type)
+        limit = get_plan_limit(plan_name, limit_type)
 
         if limit is None:
             return True  # No limit defined
@@ -401,3 +379,32 @@ def check_billing_limits(workspace_id: str, limit_type: str, current_count: int,
 
     except Exception:
         return True  # Default to allowing if check fails
+
+
+def calculate_workspace_raw_files_size_mb(workspace_id: str, db: Session) -> float:
+    """
+    Calculate total raw files size in MB for a workspace.
+
+    Args:
+        workspace_id: Workspace ID (string or UUID)
+        db: Database session
+
+    Returns:
+        Total size in MB (rounded to 2 decimal places)
+    """
+    try:
+        workspace_uuid = UUID(workspace_id) if isinstance(workspace_id, str) else workspace_id
+
+        # Sum all raw file sizes for this workspace
+        total_bytes = (
+            db.query(func.sum(RawFile.file_size))
+            .filter(RawFile.workspace_id == workspace_uuid)
+            .scalar() or 0
+        )
+
+        # Convert to MB
+        size_mb = total_bytes / (1024 * 1024)
+        return round(size_mb, 2)
+    except Exception as e:
+        logger.error(f"Error calculating workspace raw files size: {e}", exc_info=True)
+        return 0.0
