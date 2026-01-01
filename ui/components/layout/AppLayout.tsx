@@ -19,10 +19,12 @@ import {
   ChevronLeft,
   Bell,
   Search,
-  HelpCircle
+  HelpCircle,
+  Play
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ComingSoonBadgeInline } from '@/components/ui/coming-soon-badge-inline'
+import { resetTour } from '@/components/Tour'
 
 interface AppLayoutProps {
   children: React.ReactNode
@@ -177,7 +179,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
         </div>
         
         {/* Enhanced Navigation */}
-        <nav className="mt-6 px-3">
+        <nav data-tour="navigation-sidebar" className="mt-6 px-3">
           <div className="space-y-1">
             {navigation.map((item) => {
               const isActive = pathname.startsWith(item.href)
@@ -227,6 +229,24 @@ export default function AppLayout({ children }: AppLayoutProps) {
             </div>
             
             <div className="flex items-center space-x-3">
+              {/* Take Tour Button */}
+              {pathname === '/dashboard' && (
+                <button
+                  onClick={() => {
+                    resetTour()
+                    // Trigger tour by reloading or using a state management approach
+                    if (typeof window !== 'undefined') {
+                      window.dispatchEvent(new CustomEvent('startTour'))
+                    }
+                  }}
+                  className="hidden md:flex items-center gap-2 px-3 py-2 text-sm font-medium text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition-colors border border-indigo-200 hover:border-indigo-300"
+                  title="Take Product Tour"
+                >
+                  <Play className="h-4 w-4" />
+                  <span>Take Tour</span>
+                </button>
+              )}
+              
               {/* Search button (placeholder for future) */}
               <button
                 className="hidden md:flex p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"

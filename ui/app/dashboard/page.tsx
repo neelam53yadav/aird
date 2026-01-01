@@ -10,6 +10,8 @@ import { StatCardSkeleton, ListSkeleton, CardSkeleton } from '@/components/ui/sk
 import AppLayout from '@/components/layout/AppLayout'
 import { apiClient } from '@/lib/api-client'
 import { exchangeToken } from '@/lib/auth-utils'
+import { Tour, hasCompletedTour } from '@/components/Tour'
+import { Step } from 'react-joyride'
 
 interface Product {
   id: string
@@ -37,6 +39,47 @@ export default function DashboardPage() {
     readyProducts: 0,
     draftProducts: 0
   })
+  const [showTour, setShowTour] = useState(false)
+
+  // Tour steps configuration
+  const tourSteps: Step[] = [
+    {
+      target: 'body',
+      content: 'Welcome to PrimeData! This quick tour will help you understand the platform and get started quickly.',
+      placement: 'center',
+      disableBeacon: true,
+    },
+    {
+      target: '[data-tour="navigation-sidebar"]',
+      content: 'The navigation sidebar gives you quick access to all major sections. Dashboard shows your overview, Products manages your data products, Data Sources connects external systems, Analytics provides insights, and Settings lets you configure your account.',
+      placement: 'right',
+    },
+    {
+      target: '[data-tour="stats-cards"]',
+      content: 'These cards show your key metrics at a glance - total products, data sources, and their current statuses. Click on any card to see more details.',
+      placement: 'bottom',
+    },
+    {
+      target: '[data-tour="create-product"]',
+      content: 'Start here to create your first data product. Products organize your data sources and processing pipelines. Click this button to begin.',
+      placement: 'left',
+    },
+    {
+      target: '[data-tour="quick-actions"]',
+      content: 'Quick Actions provide shortcuts to common tasks. You can quickly navigate to manage products, data sources, or create new resources.',
+      placement: 'left',
+    },
+    {
+      target: '[data-tour="products-list"]',
+      content: 'Your products will appear here. Click on any product to view details, manage data sources, run pipelines, and analyze results.',
+      placement: 'top',
+    },
+    {
+      target: 'body',
+      content: 'That\'s it! You\'re ready to start. Remember: You can always access the tour again using the "Take Tour" button in the header. Happy exploring!',
+      placement: 'center',
+    },
+  ]
 
   // Exchange token when authenticated (ensures user is registered in backend)
   useEffect(() => {
@@ -58,6 +101,32 @@ export default function DashboardPage() {
     
     initializeAuth()
   }, [status, session])
+
+  // Check if tour should be shown on mount
+  useEffect(() => {
+    if (!loading && !hasCompletedTour()) {
+      // Small delay to ensure DOM is ready
+      setTimeout(() => setShowTour(true), 1000)
+    }
+  }, [loading])
+
+  // Listen for tour start event from header button
+  useEffect(() => {
+    const handleStartTour = () => {
+      setShowTour(true)
+    }
+    
+    window.addEventListener('startTour', handleStartTour)
+    return () => window.removeEventListener('startTour', handleStartTour)
+  }, [])
+
+  // Check if tour should be shown on mount
+  useEffect(() => {
+    if (!loading && !hasCompletedTour()) {
+      // Small delay to ensure DOM is ready
+      setTimeout(() => setShowTour(true), 1000)
+    }
+  }, [loading])
 
   const loadDashboardData = async () => {
     try {
@@ -149,7 +218,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Enhanced Stats Cards - Now Clickable */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div data-tour="stats-cards" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           {/* Total Products - Clickable */}
           <Link href="/app/products" className="block">
             <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5 cursor-pointer group">
@@ -267,10 +336,10 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100">
+          <div data-tour="quick-actions" className="bg-white p-6 rounded-xl shadow-md border border-gray-100">
             <h3 className="text-lg font-semibold text-gray-900 mb-6">Quick Actions</h3>
             <div className="space-y-3">
-              <Link href="/app/products/new">
+              <Link href="/app/products/new" data-tour="create-product">
                 <Button className="w-full justify-start bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg transition-all">
                   <Plus className="h-4 w-4 mr-2" />
                   Create New Product
@@ -293,7 +362,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Recent Products */}
-        <div className="bg-white rounded-xl shadow-md border border-gray-100">
+        <div data-tour="products-list" className="bg-white rounded-xl shadow-md border border-gray-100">
           <div className="p-6 border-b border-gray-200">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold text-gray-900">Recent Products</h3>
@@ -352,6 +421,9 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* Tour Component */}
+      <Tour steps={tourSteps} run={showTour} onComplete={() => setShowTour(false)} />
     </AppLayout>
   )
 }
