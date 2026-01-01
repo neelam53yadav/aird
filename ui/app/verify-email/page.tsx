@@ -25,9 +25,6 @@ export default function VerifyEmailPage() {
       return
     }
 
-    // Log token for debugging (remove in production)
-    console.log("Verification token received:", token?.substring(0, 20) + "...", "Length:", token?.length)
-    
     verifyEmail(token)
   }, [token])
 

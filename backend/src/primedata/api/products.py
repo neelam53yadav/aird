@@ -209,12 +209,15 @@ async def list_products(
         query = query.filter(Product.workspace_id == workspace_id)
 
     products = query.all()
-    # Lazy-load JSON fields from S3 if needed
+    # Fix 5: Optimize backend - Skip loading large JSON fields for list view
+    # These fields are only needed in detail view, not list view
+    # This avoids unnecessary S3 calls when listing products
     from primedata.services.lazy_json_loader import load_product_json_field
 
     result = []
     for product in products:
-        # Create response with lazy-loaded fields
+        # Create response - skip preprocessing_stats and chunk_metrics for list view
+        # These are large fields that trigger S3 calls and aren't needed in list view
         product_dict = {
             "id": product.id,
             "workspace_id": product.workspace_id,
@@ -226,11 +229,11 @@ async def list_products(
             "aird_enabled": product.aird_enabled,
             "playbook_id": product.playbook_id,
             "playbook_selection": product.playbook_selection,
-            "preprocessing_stats": load_product_json_field(product, "preprocessing_stats"),
+            "preprocessing_stats": None,  # Skip loading for list view (not needed)
             "trust_score": product.trust_score,
             "policy_status": product.policy_status.value if product.policy_status else None,
             "policy_violations": product.policy_violations,
-            "chunk_metrics": load_product_json_field(product, "chunk_metrics"),
+            "chunk_metrics": None,  # Skip loading for list view (not needed)
             "validation_summary_path": product.validation_summary_path,
             "trust_report_path": product.trust_report_path,
             "chunking_config": product.chunking_config,

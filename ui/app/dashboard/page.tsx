@@ -92,7 +92,6 @@ export default function DashboardPage() {
           // Load data after token exchange completes
           loadDashboardData()
         } catch (error) {
-          console.error("Token exchange failed on dashboard:", error)
           // Still try to load data even if exchange fails
           loadDashboardData()
         }

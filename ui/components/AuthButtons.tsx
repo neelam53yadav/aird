@@ -102,12 +102,7 @@ export function AuthButtons({ className }: AuthButtonsProps) {
 
       if (result?.ok) {
         // Exchange token to register user in backend
-        const exchangeResult = await exchangeToken()
-        if (exchangeResult.success) {
-          console.log("Token exchange successful")
-        } else {
-          console.warn("Token exchange failed, but continuing with redirect")
-        }
+        await exchangeToken()
         router.push("/dashboard")
       } else if (result?.error) {
         setError(result.error || "Google sign in failed")
@@ -195,13 +190,8 @@ export function AuthButtons({ className }: AuthButtonsProps) {
         })
 
         if (result?.ok) {
-          const exchangeResult = await exchangeToken()
-          if (exchangeResult.success) {
-            console.log("Token exchange successful")
-            await new Promise((resolve) => setTimeout(resolve, 100))
-          } else {
-            console.warn("Token exchange failed, but continuing with redirect")
-          }
+          await exchangeToken()
+          await new Promise((resolve) => setTimeout(resolve, 100))
           router.push("/dashboard")
         } else {
           throw new Error("Failed to sign in after signup")
@@ -215,21 +205,14 @@ export function AuthButtons({ className }: AuthButtonsProps) {
         })
 
         if (result?.ok) {
-          const exchangeResult = await exchangeToken()
-          if (exchangeResult.success) {
-            console.log("Token exchange successful")
-            await new Promise((resolve) => setTimeout(resolve, 100))
-          } else {
-            console.warn("Token exchange failed, but continuing with redirect")
-          }
+          await exchangeToken()
+          await new Promise((resolve) => setTimeout(resolve, 100))
           router.push("/dashboard")
         } else {
           throw new Error(result?.error || "Sign in failed")
         }
       }
     } catch (error) {
-      console.error("Email auth error:", error)
-      
       // Extract error message from NextAuth error
       let errorMessage = "Authentication failed"
       

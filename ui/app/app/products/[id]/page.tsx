@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useParams } from 'next/navigation'
@@ -83,6 +83,12 @@ export default function ProductDetailPage() {
   const [dataSources, setDataSources] = useState<DataSource[]>([])
   // MLflow metrics state removed - MLflow integration disabled
   const [loading, setLoading] = useState(true)
+  const [loadingData, setLoadingData] = useState({
+    product: true,
+    dataSources: true,
+    artifacts: false,
+    pipelineRuns: false,
+  })
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'overview' | 'ai-trust-score' | 'chunk-metadata' | 'acl' | 'datasources' | 'data-quality' | 'exports'>('overview')
   const [testingConnection, setTestingConnection] = useState<string | null>(null)
@@ -128,6 +134,7 @@ export default function ProductDetailPage() {
     details?: string
   } | null>(null)
 
+  // Fix 1 & 2: Parallelize initial API calls
   useEffect(() => {
     if (status === 'unauthenticated') {
       router.push('/')
@@ -135,40 +142,72 @@ export default function ProductDetailPage() {
     }
 
     if (status === 'authenticated' && productId) {
-      loadProduct()
-      loadDataSources()
-      // MLflow metrics loading removed - MLflow integration disabled
+      // Load product and data sources in parallel
+      Promise.all([
+        loadProduct(),
+        loadDataSources()
+      ]).catch(err => {
+        console.error('Failed to load initial data:', err)
+      })
     }
   }, [status, router, productId])
 
-  // Load raw artifacts when product changes
+  // Fix 1 & 2: Parallelize product-dependent calls when product loads
   useEffect(() => {
-    if (product && product.current_version > 0) {
-      loadPipelineArtifacts()
+    if (!product) return
+
+    // Load critical data in parallel (artifacts and pipeline runs)
+    const promises: Promise<void>[] = []
+    
+    if (product.current_version > 0) {
+      promises.push(loadPipelineArtifacts())
     }
+    promises.push(loadPipelineRuns())
+    
+    Promise.all(promises).catch(err => {
+      console.error('Failed to load product-dependent data:', err)
+    })
+
+    // Fix 4: Lazy load non-critical data - only load when needed (in tab change handler)
   }, [product])
 
-  useEffect(() => {
-    if (product) {
-      loadPipelineRuns()
-      loadDataQualityViolations()
-      loadDataQualityRules()
-      loadExports()
-    }
-  }, [product])
-
-  // Auto-refresh pipeline runs every 10 seconds
+  // Fix 7: Optimize auto-refresh - only refresh when pipeline is running
   useEffect(() => {
     if (!product) return
     
+    // Check if there are any running pipelines
+    const hasRunningPipelines = pipelineRuns.some(run => 
+      run.status === 'running' || run.status === 'queued'
+    )
+    
+    if (!hasRunningPipelines) return // Don't auto-refresh if nothing is running
+    
     const interval = setInterval(() => {
       loadPipelineRuns()
-    }, 10000)
+    }, 15000) // Increased from 10s to 15s to reduce load
     
     return () => clearInterval(interval)
-  }, [product])
+  }, [product, pipelineRuns])
+
+  // Fix 4: Lazy load data when switching to relevant tabs
+  useEffect(() => {
+    if (!product) return
+
+    // Load data quality violations only when data-quality tab is active
+    if (activeTab === 'data-quality' && dataQualityViolations.length === 0 && !loadingViolations) {
+      loadDataQualityViolations()
+      loadDataQualityRules()
+    }
+
+    // Load exports only when exports tab is active
+    if (activeTab === 'exports' && exports.length === 0 && !loadingExports) {
+      loadExports()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, product?.id])
 
   const loadProduct = async () => {
+    setLoadingData(prev => ({ ...prev, product: true }))
     try {
       const response = await apiClient.getProduct(productId)
       
@@ -181,12 +220,14 @@ export default function ProductDetailPage() {
       setError('Failed to load product')
     } finally {
       setLoading(false)
+      setLoadingData(prev => ({ ...prev, product: false }))
     }
   }
 
   // MLflow metrics loading removed - MLflow integration disabled
 
   const loadDataSources = async () => {
+    setLoadingData(prev => ({ ...prev, dataSources: true }))
     try {
       const response = await apiClient.getDataSources(productId)
       
@@ -197,6 +238,8 @@ export default function ProductDetailPage() {
       }
     } catch (err) {
       console.error('Failed to load data sources:', err)
+    } finally {
+      setLoadingData(prev => ({ ...prev, dataSources: false }))
     }
   }
 
@@ -364,6 +407,7 @@ export default function ProductDetailPage() {
     if (!product) return
     
     setLoadingArtifacts(true)
+    setLoadingData(prev => ({ ...prev, artifacts: true }))
     try {
       const response = await apiClient.getPipelineArtifacts(product.id, product.current_version)
       if (response.data) {
@@ -373,6 +417,7 @@ export default function ProductDetailPage() {
       console.error('Failed to load pipeline artifacts:', err)
     } finally {
       setLoadingArtifacts(false)
+      setLoadingData(prev => ({ ...prev, artifacts: false }))
     }
   }
 
@@ -447,6 +492,7 @@ export default function ProductDetailPage() {
     if (!product) return
     
     setLoadingPipelineRuns(true)
+    setLoadingData(prev => ({ ...prev, pipelineRuns: true }))
     try {
       // Always load only the first 5 runs (no pagination on overview page)
       const response = await apiClient.getPipelineRuns(product.id, 5, 0)
@@ -465,6 +511,7 @@ export default function ProductDetailPage() {
       console.error('Failed to load pipeline runs:', err)
     } finally {
       setLoadingPipelineRuns(false)
+      setLoadingData(prev => ({ ...prev, pipelineRuns: false }))
     }
   }
 

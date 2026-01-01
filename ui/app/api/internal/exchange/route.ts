@@ -29,8 +29,6 @@ export async function POST(request: NextRequest) {
                          cookies.get('__Secure-authjs.session-token')?.value
 
     if (!nextAuthToken) {
-      console.error("NextAuth session token not found in cookies")
-      console.log("Available cookies:", Array.from(cookies.getAll()).map(c => c.name))
       return NextResponse.json(
         { error: "NextAuth session token not found" },
         { status: 401 }
@@ -51,7 +49,6 @@ export async function POST(request: NextRequest) {
 
     if (!exchangeResponse.ok) {
       const errorData = await exchangeResponse.json().catch(() => ({ detail: "Exchange failed" }))
-      console.error("Backend session exchange failed:", exchangeResponse.status, errorData)
       return NextResponse.json(
         { error: errorData.detail || "Backend token exchange failed" },
         { status: exchangeResponse.status || 500 }
@@ -62,8 +59,6 @@ export async function POST(request: NextRequest) {
     const backendToken = exchangeData.access_token
 
     if (!backendToken) {
-      console.error("No backend access token found after exchange")
-      console.log("Decoded token keys:", Object.keys(decodedToken))
       return NextResponse.json(
         { error: "Backend access token not found in session" },
         { status: 401 }
@@ -87,7 +82,6 @@ export async function POST(request: NextRequest) {
 
     return nextResponse
   } catch (error) {
-    console.error("Token exchange error:", error)
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
