@@ -33,10 +33,11 @@ def char_chunk(text: str, max_tokens: int, overlap_chars: int) -> List[str]:
 
 
 def sentence_chunk(body: str, max_tokens: int, overlap_sents: int, hard_overlap_chars: int) -> List[str]:
-    """Sentence-based chunking with overlap, falling back to char chunking for long sentences.
+    """Sentence-based chunking with overlap, with improved handling of long sentences.
 
     This preserves semantic boundaries better than character-based chunking by respecting
-    sentence boundaries and maintaining context within chunks.
+    sentence boundaries and maintaining context within chunks. For sentences that exceed
+    max_tokens, it attempts to split at word boundaries rather than mid-sentence.
     """
     sents = re.split(SENT_SPLIT_RE, body)
     sents = [s.strip() for s in sents if s and s.strip()]
@@ -45,26 +46,93 @@ def sentence_chunk(body: str, max_tokens: int, overlap_sents: int, hard_overlap_
 
     chunks, buf = [], []
     for s in sents:
-        cand = " ".join(buf + [s])
-        if tokens_estimate(cand) <= max_tokens:
-            buf.append(s)
-        else:
+        # Check if single sentence exceeds max_tokens
+        sent_tokens = tokens_estimate(s)
+        if sent_tokens > max_tokens:
+            # Flush buffer first if it exists
             if buf:
                 chunks.append(" ".join(buf))
-            # Keep last N sentences for overlap (preserve context)
-            buf = buf[-overlap_sents:] if overlap_sents > 0 else []
-            buf.append(s)
+                buf = []
+            
+            # For very long sentences, split at word boundaries (not mid-word)
+            # This is better than char_chunk which can break mid-word
+            long_sentence_chunks = _split_long_sentence_at_words(s, max_tokens, hard_overlap_chars)
+            chunks.extend(long_sentence_chunks)
+            # For overlap, keep the last chunk
+            if long_sentence_chunks and overlap_sents > 0:
+                buf = [long_sentence_chunks[-1]]
+            else:
+                buf = []
+        else:
+            cand = " ".join(buf + [s])
+            if tokens_estimate(cand) <= max_tokens:
+                buf.append(s)
+            else:
+                if buf:
+                    chunks.append(" ".join(buf))
+                # Keep last N sentences for overlap (preserve context)
+                buf = buf[-overlap_sents:] if overlap_sents > 0 else []
+                buf.append(s)
+    
     if buf:
         chunks.append(" ".join(buf))
 
+    # Final validation: ensure no chunk exceeds max_tokens
+    # If any do, split at word boundaries (not mid-sentence)
     out: List[str] = []
     for c in chunks:
         if tokens_estimate(c) > max_tokens:
-            # If chunk is still too large, split it further but preserve as much context as possible
-            out.extend(char_chunk(c, max_tokens, hard_overlap_chars))
+            # Split at word boundaries to avoid mid-sentence breaks
+            out.extend(_split_long_sentence_at_words(c, max_tokens, hard_overlap_chars))
         else:
             out.append(c)
     return out
+
+
+def _split_long_sentence_at_words(text: str, max_tokens: int, overlap_chars: int) -> List[str]:
+    """Split a long sentence at word boundaries to avoid mid-word breaks.
+    
+    This is used when a single sentence exceeds max_tokens. It splits at word
+    boundaries (spaces) rather than arbitrary character positions.
+    """
+    words = text.split()
+    if not words:
+        return [text]
+    
+    max_chars = max_tokens * 4  # Approximate chars per token
+    chunks = []
+    current_chunk = []
+    current_length = 0
+    
+    for word in words:
+        word_length = len(word) + 1  # +1 for space
+        if current_length + word_length > max_chars and current_chunk:
+            # Flush current chunk
+            chunks.append(" ".join(current_chunk))
+            # Start new chunk with overlap
+            if overlap_chars > 0 and current_chunk:
+                # Keep last few words for overlap
+                overlap_words = []
+                overlap_length = 0
+                for w in reversed(current_chunk):
+                    if overlap_length + len(w) + 1 <= overlap_chars:
+                        overlap_words.insert(0, w)
+                        overlap_length += len(w) + 1
+                    else:
+                        break
+                current_chunk = overlap_words
+                current_length = overlap_length
+            else:
+                current_chunk = []
+                current_length = 0
+        
+        current_chunk.append(word)
+        current_length += word_length
+    
+    if current_chunk:
+        chunks.append(" ".join(current_chunk))
+    
+    return chunks if chunks else [text]
 
 
 def paragraph_chunk(body: str, max_tokens: int, overlap_paras: int, hard_overlap_chars: int) -> List[str]:

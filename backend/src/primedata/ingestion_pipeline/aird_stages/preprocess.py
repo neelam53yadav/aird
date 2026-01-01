@@ -929,9 +929,37 @@ class PreprocessStage(AirdStage):
 
                 # Build records for each chunk
                 for idx, chunk_text in enumerate(chunks):
-                    # Check for mid-sentence boundary
-                    if not re.search(r"[.!?]['\")\]]*\s*$", chunk_text):
+                    # Check for mid-sentence boundary (improved regex)
+                    # Look for sentence-ending punctuation followed by optional quotes/parentheses and whitespace/newline
+                    # Also check if chunk ends with a complete word (not mid-word)
+                    chunk_stripped = chunk_text.strip()
+                    chunk_tokens = tokens_estimate(chunk_text)
+                    
+                    ends_with_punctuation = bool(re.search(r"[.!?]['\")\]]*\s*$", chunk_stripped))
+                    ends_with_word_boundary = bool(re.search(r"\w\s*$", chunk_stripped))  # Ends with word char + optional whitespace
+                    
+                    # Consider it mid-sentence if:
+                    # 1. Doesn't end with sentence punctuation, AND
+                    # 2. Doesn't end at a natural word boundary (or is very short)
+                    is_mid_sentence = not ends_with_punctuation and (not ends_with_word_boundary or len(chunk_stripped) < 20)
+                    
+                    if is_mid_sentence:
                         mid_sentence_ends += 1
+                        # Diagnostic logging for mid-sentence breaks
+                        if chunks_processed < 10 or mid_sentence_ends <= 5:  # Log first few for diagnostics
+                            self.logger.warning(
+                                f"⚠️ Mid-sentence break detected in chunk {chunks_processed + 1} "
+                                f"(section: {canon_section}, page: {page_num}, tokens: {chunk_tokens}): "
+                                f"'{chunk_stripped[-50:]}...'"
+                            )
+                    
+                    # Diagnostic logging: log chunk statistics periodically
+                    if chunks_processed < 5 or (chunks_processed % 50 == 0):
+                        self.logger.info(
+                            f"📊 Chunk {chunks_processed + 1}: tokens={chunk_tokens}, "
+                            f"chars={len(chunk_text)}, ends_with_punct={ends_with_punctuation}, "
+                            f"mid_sentence={is_mid_sentence}"
+                        )
 
                     # Track progress
                     chunks_processed += 1

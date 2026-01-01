@@ -6,6 +6,7 @@ Measures semantic cohesion within chunks to ensure they stay on one topic.
 import logging
 from typing import Dict, List, Any, Optional
 import numpy as np
+import regex as re
 
 logger = logging.getLogger(__name__)
 
@@ -55,8 +56,24 @@ def calculate_chunk_coherence(
             "is_coherent": False
         }
     
-    # Split into sentences (simple approach)
-    sentences = [s.strip() for s in chunk_text.split('.') if s.strip()]
+    # Split into sentences using improved approach
+    # First try: split on sentence-ending punctuation followed by space and capital letter
+    # This handles most cases while avoiding abbreviations
+    sent_pattern = re.compile(r'[.!?]+(?=\s+[A-Z0-9"\'\(\[\{]|$)')
+    sentences = [s.strip() for s in sent_pattern.split(chunk_text) if s.strip()]
+    
+    # Fallback: if regex didn't work well, use simple split but filter out very short segments
+    # and common abbreviation patterns
+    if len(sentences) < 2:
+        # Split on periods but be smarter about it
+        parts = chunk_text.split('.')
+        sentences = []
+        for part in parts:
+            part = part.strip()
+            # Skip very short parts (likely abbreviations) unless it's the last one
+            if part and (len(part) > 3 or part == parts[-1]):
+                sentences.append(part)
+    
     if len(sentences) < 2:
         # Single sentence chunks are considered coherent
         return {
@@ -90,15 +107,24 @@ def _coherence_embedding_similarity(
     try:
         embeddings = model.encode(sentences, convert_to_numpy=True)
         
+        # Normalize embeddings for cosine similarity
+        def normalize_embeddings(emb):
+            norms = np.linalg.norm(emb, axis=1, keepdims=True)
+            norms = np.where(norms == 0, 1, norms)  # Avoid division by zero
+            return emb / norms
+        
+        embeddings_normalized = normalize_embeddings(embeddings)
+        
         similarities = []
         for i in range(1, len(sentences)):
             # Compare current sentence with previous N sentences
             start_idx = max(0, i - window)
-            prev_embeddings = embeddings[start_idx:i]
-            current_embedding = embeddings[i]
+            prev_embeddings = embeddings_normalized[start_idx:i]
+            current_embedding = embeddings_normalized[i]
             
-            # Calculate average similarity with previous sentences
+            # Calculate cosine similarity (dot product of normalized vectors)
             if len(prev_embeddings) > 0:
+                # Cosine similarity = dot product of normalized vectors
                 similarities_matrix = np.dot(prev_embeddings, current_embedding)
                 avg_similarity = float(np.mean(similarities_matrix))
                 similarities.append(avg_similarity)
