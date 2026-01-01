@@ -58,14 +58,13 @@ export type BillingLimitsResponse = {
     max_products: number
     max_data_sources_per_product: number
     max_pipeline_runs_per_month: number
-    max_vectors: number
-    schedule_frequency: string
+    max_raw_files_size_mb?: number  // Optional for backward compatibility
   }
   usage: {
     products: number
     data_sources: number
     pipeline_runs_this_month: number
-    vectors: number
+    raw_files_size_mb?: number  // Optional for backward compatibility
   }
 }
 
@@ -109,14 +108,14 @@ export type PipelineRun = {
   [key: string]: any
 }
 
+import { getApiUrl } from "./config"
+
 class ApiClient {
   private baseUrl: string
 
   constructor() {
-    // Get API base URL from environment variable, with fallback
-    this.baseUrl = process.env.NEXT_PUBLIC_API_BASE || 
-                   process.env.NEXT_PUBLIC_API_URL || 
-                   'http://localhost:8000'
+    // Get API base URL from centralized config
+    this.baseUrl = getApiUrl()
   }
 
   /**
@@ -203,12 +202,6 @@ class ApiClient {
             
             // If token is expired or expires in less than 5 minutes, refresh it
             if (exp && (exp - now) < 300) {
-              console.log('Token expiring soon or expired, refreshing...', {
-                exp,
-                now,
-                timeUntilExpiry: exp - now,
-              })
-              
               // Refresh token by calling exchangeToken
               const { exchangeToken } = await import('@/lib/auth-utils')
               const refreshResult = await exchangeToken()
@@ -216,43 +209,38 @@ class ApiClient {
               if (refreshResult.success && refreshResult.token) {
                 // Use the token directly from the response
                 cookieToken = refreshResult.token
-                console.log('Token refreshed successfully')
-              } else {
-                console.warn('Token refresh failed, using existing token')
               }
             }
           }
         } catch (e) {
           // If we can't decode the token, just use it as-is
-          console.warn('Could not check token expiration:', e)
         }
       }
 
-      // Debug logging
-      console.log('API Client - Request:', {
-        url,
-        method,
-        hasCookie: !!cookieToken,
-        cookieLength: cookieToken?.length || 0,
-        allCookies: document.cookie.substring(0, 200), // First 200 chars
-      })
+      // List of endpoints that should NEVER have auth headers
+      const anonymousEndpoints = [
+        '/api/v1/auth/login',
+        '/api/v1/auth/signup',
+        '/api/v1/auth/validate-email',
+        '/api/v1/auth/verify-email',
+        '/api/v1/auth/resend-verification',
+        '/api/v1/auth/forgot-password',
+        '/api/v1/auth/reset-password',
+        '/api/v1/contact/submit',
+      ]
+      
+      // Check if this is an anonymous endpoint
+      const isAnonymousEndpoint = anonymousEndpoints.some(endpoint => url.includes(endpoint))
 
       // Always include Authorization header if we have a token
+      // BUT skip for anonymous endpoints (login, signup, etc.)
       // This is required for cross-origin requests (different port = different origin)
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
       }
       
-      if (cookieToken) {
+      if (cookieToken && !isAnonymousEndpoint) {
         headers['Authorization'] = `Bearer ${cookieToken}`
-        console.log('API Client - Authorization header set:', {
-          hasHeader: true,
-          tokenPrefix: cookieToken.substring(0, 20) + '...',
-        })
-      } else {
-        console.warn('API Client - No token found in cookie!', {
-          allCookies: document.cookie,
-        })
       }
 
       const options: RequestInit = {
@@ -270,19 +258,9 @@ class ApiClient {
 
       // If we get 401, try refreshing token and retry once
       if (status === 401) {
-        console.log('Got 401, attempting token refresh and retry...', {
-          hadToken: !!cookieToken,
-          url,
-        })
         try {
           const { exchangeToken } = await import('@/lib/auth-utils')
           const refreshResult = await exchangeToken()
-          
-          console.log('Token refresh result:', { 
-            success: refreshResult.success, 
-            hasToken: !!refreshResult.token,
-            tokenLength: refreshResult.token?.length || 0,
-          })
           
           if (refreshResult.success && refreshResult.token) {
             // Use the token directly from the response (more reliable than reading cookie)
@@ -293,15 +271,11 @@ class ApiClient {
             options.headers = headers
             
             // Retry the request
-            console.log('Retrying request with refreshed token...')
             response = await fetch(url, options)
             status = response.status
-            console.log('Retry result:', { status, ok: response.ok })
-          } else {
-            console.warn('Token refresh failed or no token returned - may need to re-authenticate')
           }
         } catch (refreshError) {
-          console.error('Token refresh failed on 401:', refreshError)
+          // Token refresh failed, will return 401 response
         }
       }
 
@@ -872,6 +846,20 @@ class ApiClient {
         status: 0,
       }
     }
+  }
+
+  // Contact Form API
+  async submitContactForm(data: {
+    name: string
+    email: string
+    feedback: string
+  }): Promise<ApiResponse<{ success: boolean; message: string }>> {
+    return this.post('/api/v1/contact/submit', data)
+  }
+
+  // Resend Verification Email
+  async resendVerification(email: string): Promise<ApiResponse<{ message: string }>> {
+    return this.post('/api/v1/auth/resend-verification', { email })
   }
 }
 

@@ -179,6 +179,13 @@ class User(Base):
     roles = Column(JSON, nullable=False, default=list)  # List of roles
     is_active = Column(Boolean, default=True)
     password_hash = Column(String(255), nullable=True)  # Nullable for OAuth users (Google, etc.)
+    # Email verification fields
+    email_verified = Column(Boolean, default=False, nullable=False)
+    verification_token = Column(String(255), unique=True, nullable=True, index=True)
+    verification_token_expires = Column(DateTime(timezone=True), nullable=True)
+    # Password reset fields
+    password_reset_token = Column(String(255), unique=True, nullable=True, index=True)
+    password_reset_token_expires = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

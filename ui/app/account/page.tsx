@@ -31,7 +31,6 @@ export default function AccountPage() {
       exchangeToken()
         .then((result) => {
           if (!result.success) {
-            console.warn("Token exchange failed")
             setLoading(false)
             return undefined as any // Return undefined to match fetch return type
           }

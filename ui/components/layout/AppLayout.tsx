@@ -18,9 +18,13 @@ import {
   Sparkles,
   ChevronLeft,
   Bell,
-  Search
+  Search,
+  HelpCircle,
+  Play
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { ComingSoonBadgeInline } from '@/components/ui/coming-soon-badge-inline'
+import { resetTour } from '@/components/Tour'
 
 interface AppLayoutProps {
   children: React.ReactNode
@@ -32,7 +36,8 @@ const navigation = [
   { name: 'Data Sources', href: '/app/datasources', icon: Database },
   { name: 'Analytics', href: '/app/analytics', icon: BarChart3 },
   { name: 'Billing', href: '/app/billing', icon: CreditCard },
-  { name: 'Team', href: '/app/team', icon: Users },
+  { name: 'Team', href: '/app/team', icon: Users, comingSoon: true },
+  { name: 'Support', href: '/app/support', icon: HelpCircle },
   { name: 'Settings', href: '/app/settings', icon: Settings },
 ]
 
@@ -174,7 +179,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
         </div>
         
         {/* Enhanced Navigation */}
-        <nav className="mt-6 px-3">
+        <nav data-tour="navigation-sidebar" className="mt-6 px-3">
           <div className="space-y-1">
             {navigation.map((item) => {
               const isActive = pathname.startsWith(item.href)
@@ -194,7 +199,10 @@ export default function AppLayout({ children }: AppLayoutProps) {
                     isActive ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'
                   } ${sidebarCollapsed ? 'mx-auto' : 'mr-3'}`} />
                   {!sidebarCollapsed && (
-                    <span className="truncate">{item.name}</span>
+                    <div className="flex items-center flex-1 min-w-0">
+                      <span className="truncate">{item.name}</span>
+                      {item.comingSoon && <ComingSoonBadgeInline />}
+                    </div>
                   )}
                 </Link>
               )
@@ -221,6 +229,24 @@ export default function AppLayout({ children }: AppLayoutProps) {
             </div>
             
             <div className="flex items-center space-x-3">
+              {/* Take Tour Button */}
+              {pathname === '/dashboard' && (
+                <button
+                  onClick={() => {
+                    resetTour()
+                    // Trigger tour by reloading or using a state management approach
+                    if (typeof window !== 'undefined') {
+                      window.dispatchEvent(new CustomEvent('startTour'))
+                    }
+                  }}
+                  className="hidden md:flex items-center gap-2 px-3 py-2 text-sm font-medium text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition-colors border border-indigo-200 hover:border-indigo-300"
+                  title="Take Product Tour"
+                >
+                  <Play className="h-4 w-4" />
+                  <span>Take Tour</span>
+                </button>
+              )}
+              
               {/* Search button (placeholder for future) */}
               <button
                 className="hidden md:flex p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
@@ -280,9 +306,14 @@ export default function AppLayout({ children }: AppLayoutProps) {
                         Settings
                       </Link>
                       <button
-                        onClick={() => {
+                        onClick={async () => {
                           setUserMenuOpen(false)
-                          signOut({ callbackUrl: '/' })
+                          
+                          // Clear the backend API token cookie
+                          document.cookie = 'primedata_api_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; samesite=lax'
+                          
+                          // Sign out from NextAuth (this clears NextAuth session cookies)
+                          await signOut({ callbackUrl: '/' })
                         }}
                         className="w-full text-left flex items-center px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
                       >

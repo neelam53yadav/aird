@@ -20,7 +20,6 @@ export async function exchangeToken(): Promise<{ success: boolean; token?: strin
     })
 
     if (!response.ok) {
-      console.error('Token exchange failed:', response.status, response.statusText)
       return { success: false }
     }
 
@@ -36,26 +35,11 @@ export async function exchangeToken(): Promise<{ success: boolean; token?: strin
       // Set cookie with proper attributes
       document.cookie = `primedata_api_token=${encodeURIComponent(data.token)}; path=/; max-age=${maxAge}; ${isProduction ? 'secure; ' : ''}samesite=lax`
       
-      // Verify cookie was set
-      const cookieSet = document.cookie.includes('primedata_api_token=')
-      
-      console.log('Cookie set client-side:', {
-        hasToken: !!data.token,
-        tokenLength: data.token.length,
-        cookieSet: cookieSet,
-        allCookies: document.cookie.substring(0, 200), // First 200 chars
-      })
-      
-      if (!cookieSet) {
-        console.error('WARNING: Cookie was not set successfully!')
-      }
-      
       return { success: true, token: data.token }
     }
     
     return { success: data.ok === true }
   } catch (error) {
-    console.error('Token exchange error:', error)
     return { success: false }
   }
 }

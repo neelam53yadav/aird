@@ -12,7 +12,6 @@ import {
   Package, 
   Database, 
   Zap, 
-  BarChart3,
   ArrowUp,
   Crown,
   Sparkles
@@ -154,15 +153,26 @@ export default function BillingPage() {
     try {
       const response = await apiClient.createCheckoutSession(workspaceId, plan)
       if (response.error) {
-        setMessage(`Error: ${response.error}`)
+        // Check if it's a beta/explore message
+        if (response.error.includes('beta') || response.error.includes('explore') || response.error.includes('try') || response.error.includes('free')) {
+          setMessage(response.error)
+        } else {
+          setMessage(`Error: ${response.error}`)
+        }
+        setTimeout(() => setMessage(null), 12000) // Longer timeout for longer message
       } else if (response.data?.checkout_url) {
         // Redirect to Stripe checkout
         window.location.href = response.data.checkout_url
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to create checkout session:', err)
-      setMessage(`Redirecting to ${plan} plan checkout... This would open Stripe checkout in a real implementation.`)
-      setTimeout(() => setMessage(null), 5000)
+      const errorMessage = err?.response?.data?.detail || err?.message || 'Failed to create checkout session'
+      if (errorMessage.includes('beta') || errorMessage.includes('explore') || errorMessage.includes('try') || errorMessage.includes('free')) {
+        setMessage(errorMessage)
+      } else {
+        setMessage(`Error: ${errorMessage}`)
+      }
+      setTimeout(() => setMessage(null), 12000)
     }
   }
 
@@ -175,14 +185,25 @@ export default function BillingPage() {
     try {
       const response = await apiClient.getCustomerPortal(workspaceId)
       if (response.error) {
-        setMessage(`Error: ${response.error}`)
+        // Check if it's a beta/explore message
+        if (response.error.includes('beta') || response.error.includes('explore') || response.error.includes('try') || response.error.includes('free')) {
+          setMessage(response.error)
+        } else {
+          setMessage(`Error: ${response.error}`)
+        }
+        setTimeout(() => setMessage(null), 12000)
       } else if (response.data?.portal_url) {
         window.location.href = response.data.portal_url
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to get customer portal:', err)
-      setMessage('Failed to open billing portal')
-      setTimeout(() => setMessage(null), 5000)
+      const errorMessage = err?.response?.data?.detail || err?.message || 'Failed to open billing portal'
+      if (errorMessage.includes('beta') || errorMessage.includes('explore') || errorMessage.includes('try') || errorMessage.includes('free')) {
+        setMessage(errorMessage)
+      } else {
+        setMessage(`Error: ${errorMessage}`)
+      }
+      setTimeout(() => setMessage(null), 12000)
     }
   }
 
@@ -232,12 +253,11 @@ export default function BillingPage() {
   }
 
   const currentPlan = billingData?.plan || 'free'
-  const usage = billingData?.usage || { products: 0, data_sources: 0, pipeline_runs_this_month: 0, vectors: 0 }
+  const usage = billingData?.usage || { products: 0, data_sources: 0, pipeline_runs_this_month: 0 }
   const limits = billingData?.limits || {
     max_products: 3,
     max_data_sources_per_product: 5,
     max_pipeline_runs_per_month: 10,
-    max_vectors: 10000,
     schedule_frequency: 'manual'
   }
 
@@ -253,10 +273,39 @@ export default function BillingPage() {
 
           {/* Message Display */}
           {message && (
-            <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl">
-              <div className="flex items-center">
-                <CheckCircle className="h-5 w-5 text-blue-500 mr-3" />
-                <p className="text-sm font-medium text-blue-800">{message}</p>
+            <div className={`mb-6 p-5 rounded-xl border-2 ${
+              message.includes('beta') || message.includes('explore') || message.includes('try') || message.includes('free') || message.includes('🚀')
+                ? 'bg-gradient-to-r from-emerald-50 via-teal-50 to-cyan-50 border-emerald-200'
+                : message.includes('Error')
+                ? 'bg-gradient-to-r from-red-50 to-rose-50 border-red-200'
+                : 'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200'
+            }`}>
+              <div className="flex items-start">
+                {message.includes('beta') || message.includes('explore') || message.includes('try') || message.includes('free') || message.includes('🚀') ? (
+                  <>
+                    <Sparkles className="h-6 w-6 text-emerald-600 mr-4 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <p className="text-base font-bold text-emerald-900">Explore All Features Free!</p>
+                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                          <TrendingUp className="h-3 w-3 mr-1" />
+                          Beta Access
+                        </span>
+                      </div>
+                      <p className="text-sm text-emerald-800 leading-relaxed">{message}</p>
+                    </div>
+                  </>
+                ) : message.includes('Error') ? (
+                  <>
+                    <XCircle className="h-5 w-5 text-red-500 mr-3 flex-shrink-0" />
+                    <p className="text-sm font-medium text-red-800">{message}</p>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="h-5 w-5 text-blue-500 mr-3 flex-shrink-0" />
+                    <p className="text-sm font-medium text-blue-800">{message}</p>
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -264,7 +313,7 @@ export default function BillingPage() {
           {/* Usage Meters */}
           <div className="mb-8">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Current Usage</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <UsageMeter
                 label="Products"
                 current={usage.products}
@@ -285,13 +334,6 @@ export default function BillingPage() {
                 limit={limits.max_pipeline_runs_per_month}
                 icon={Zap}
                 color="bg-gradient-to-br from-purple-500 to-pink-600"
-              />
-              <UsageMeter
-                label="Vectors"
-                current={usage.vectors}
-                limit={limits.max_vectors}
-                icon={BarChart3}
-                color="bg-gradient-to-br from-orange-500 to-amber-600"
               />
             </div>
           </div>
@@ -335,10 +377,6 @@ export default function BillingPage() {
                     <li className="flex items-center space-x-2">
                       <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
                       <span>{limits.max_pipeline_runs_per_month === -1 ? 'Unlimited' : limits.max_pipeline_runs_per_month} pipeline runs per month</span>
-                    </li>
-                    <li className="flex items-center space-x-2">
-                      <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
-                      <span>{limits.max_vectors === -1 ? 'Unlimited' : limits.max_vectors.toLocaleString()} vectors</span>
                     </li>
                   </ul>
                   <Button 
@@ -398,10 +436,6 @@ export default function BillingPage() {
                       <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
                       <span>1,000 pipeline runs per month</span>
                     </li>
-                    <li className="flex items-center space-x-2">
-                      <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
-                      <span>1,000,000 vectors</span>
-                    </li>
                   </ul>
                   <Button 
                     className={`w-full ${
@@ -460,10 +494,6 @@ export default function BillingPage() {
                     <li className="flex items-center space-x-2">
                       <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
                       <span>Unlimited pipeline runs</span>
-                    </li>
-                    <li className="flex items-center space-x-2">
-                      <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
-                      <span>Unlimited vectors</span>
                     </li>
                   </ul>
                   <Button 
