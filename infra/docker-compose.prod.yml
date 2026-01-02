@@ -28,6 +28,8 @@ services:
       AIRFLOW__WEBSERVER__EXPOSE_CONFIG: 'true'
       AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY:-your-secret-key-here}
       AIRFLOW__WEBSERVER__BASE_URL: https://airdops.com/airflow
+      AIRFLOW__WEBSERVER__WEB_SERVER_URL_PREFIX: /airflow
+      AIRFLOW__WEBSERVER__ENABLE_PROXY_FIX: 'True'
       _AIRFLOW_DB_UPGRADE: 'true'
       _AIRFLOW_WWW_USER_CREATE: 'true'
       _AIRFLOW_WWW_USER_USERNAME: ${AIRFLOW_USERNAME:-admin}
