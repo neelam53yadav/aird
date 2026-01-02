@@ -36,6 +36,10 @@ class PlaygroundQuery(BaseModel):
     use: Optional[str] = Field(
         default="current", description="Use 'current' for current version or 'prod' for production alias"
     )
+    compat_mode: Optional[bool] = Field(
+        default=False,
+        description="If true, allow dimension mismatch and use collection's embedding model (for debugging)"
+    )
 
 
 class PlaygroundResult(BaseModel):
@@ -128,25 +132,177 @@ async def query_playground(
                     status_code=status.HTTP_404_NOT_FOUND, detail=f"Collection not found. Please run a pipeline first."
                 )
 
-        # Generate query embedding using the product's embedding configuration
+        # Get embedding configuration for the specific version being queried
+        # Priority: PipelineRun metrics > Collection dimension > Product config (with validation)
         from ..indexing.embeddings import EmbeddingGenerator
-
-        # Get embedding configuration from product
-        embedding_config = product.embedding_config or {}
-        model_name = embedding_config.get("embedder_name", "minilm")
-        dimension = embedding_config.get("embedding_dimension", 384)
-
-        logger.info(f"Generating query embedding for product {product.id} using model {model_name} with dimension {dimension}")
-
-        # Initialize embedding generator with product's config and workspace context for API keys
+        from ..db.models import PipelineRun
+        
+        # Try to get embedding_config from PipelineRun for this version
+        version_embedding_config = None
+        pipeline_run = None
+        if version_to_use:
+            pipeline_run = db.query(PipelineRun).filter(
+                PipelineRun.product_id == product.id,
+                PipelineRun.version == version_to_use
+            ).first()
+            
+            if pipeline_run and pipeline_run.metrics:
+                # Check if embedding_config is stored in metrics
+                indexing_stage = pipeline_run.metrics.get("aird_stages", {}).get("indexing", {})
+                if indexing_stage:
+                    # Try to get from stage metrics
+                    embedding_model = indexing_stage.get("metrics", {}).get("embedding_model")
+                    if embedding_model:
+                        # We have the model name, need to get dimension
+                        from ..core.embedding_config import get_embedding_model_config
+                        model_config = get_embedding_model_config(embedding_model)
+                        if model_config:
+                            version_embedding_config = {
+                                "embedder_name": embedding_model,
+                                "embedding_dimension": model_config.dimension
+                            }
+                            logger.info(
+                                f"Found embedding config from PipelineRun v{version_to_use}: "
+                                f"{version_embedding_config['embedder_name']} ({version_embedding_config['embedding_dimension']} dims)"
+                            )
+        
+        # Get collection info to determine actual dimension (source of truth)
+        collection_info = qdrant_client.get_collection_info(collection_name)
+        if not collection_info:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Collection {collection_name} not found or could not be accessed."
+            )
+        
+        # Get the actual dimension from the collection (source of truth)
+        stored_dimension = collection_info.get("config", {}).get("params", {}).get("vectors", {}).get("size")
+        if not stored_dimension:
+            stored_dimension = collection_info.get("vector_size")
+        
+        if not stored_dimension:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Could not determine vector dimension for collection {collection_name}"
+            )
+        
+        logger.info(f"Collection {collection_name} uses dimension {stored_dimension}")
+        
+        # Get current product embedding config (for comparison)
+        product_embedding_config = product.embedding_config or {}
+        product_model_name = product_embedding_config.get("embedder_name", "minilm")
+        product_dimension = product_embedding_config.get("embedding_dimension", 384)
+        
+        # Determine which embedding config to use
+        use_version_config = False
+        embedding_config_to_use = None
+        
+        if version_embedding_config:
+            # We have version-specific config - validate it matches collection
+            version_dimension = version_embedding_config.get("embedding_dimension")
+            if version_dimension == stored_dimension:
+                # Perfect match - use version config
+                embedding_config_to_use = version_embedding_config
+                use_version_config = True
+                logger.info(
+                    f"✅ Using embedding config from PipelineRun v{version_to_use}: "
+                    f"{embedding_config_to_use['embedder_name']} (matches collection dimension {stored_dimension})"
+                )
+            else:
+                logger.warning(
+                    f"⚠️ Version embedding config dimension ({version_dimension}) doesn't match collection ({stored_dimension}). "
+                    f"Will use collection dimension to determine model."
+                )
+        
+        # If we don't have version config or it doesn't match, determine from collection dimension
+        if not embedding_config_to_use:
+            # Map dimension to model (fallback - not ideal but necessary for backward compatibility)
+            dimension_to_model = {
+                384: "minilm",
+                768: "mpnet",
+                1024: "e5-large",
+            }
+            
+            model_name = dimension_to_model.get(stored_dimension)
+            
+            if not model_name:
+                # Unknown dimension - try to find matching model from registry
+                logger.warning(f"Dimension {stored_dimension} not in standard mapping. Searching registry...")
+                from ..core.embedding_config import EmbeddingModelRegistry
+                registry = EmbeddingModelRegistry()
+                matching_model = None
+                for model_id, model_config in registry.models.items():
+                    if model_config.dimension == stored_dimension:
+                        matching_model = model_id
+                        break
+                
+                if matching_model:
+                    model_name = matching_model
+                    logger.info(f"Found matching model for dimension {stored_dimension}: {model_name}")
+                else:
+                    # No matching model found
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=(
+                            f"Collection '{collection_name}' uses dimension {stored_dimension}, "
+                            f"but no matching embedding model found. "
+                            f"Product is configured for {product_model_name} (dimension {product_dimension}). "
+                            f"Please re-index the collection with a supported embedding model."
+                        )
+                    )
+            
+            embedding_config_to_use = {
+                "embedder_name": model_name,
+                "embedding_dimension": stored_dimension
+            }
+            logger.info(
+                f"Using dimension-based model lookup: {model_name} (dimension {stored_dimension}) "
+                f"to match collection {collection_name}"
+            )
+        
+        # STRICT MODE: Check if product config differs from collection config
+        # This prevents silent mismatches
+        compat_mode = query_data.compat_mode or (query_data.use == "current")  # Allow compat mode for current version queries
+        strict_mode = query_data.use == "prod" and not query_data.compat_mode  # Strict mode for production queries
+        
+        if strict_mode and not use_version_config:
+            # Production queries should use the exact config that was used to index
+            if product_dimension != stored_dimension:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        f"Configuration mismatch: Production collection (v{version_to_use}) was indexed with "
+                        f"dimension {stored_dimension} ({embedding_config_to_use['embedder_name']}), "
+                        f"but product is currently configured for dimension {product_dimension} ({product_model_name}). "
+                        f"To fix: Either re-index and promote a new version with the current configuration, "
+                        f"or update the product configuration to match the production collection. "
+                        f"Query will use {embedding_config_to_use['embedder_name']} to match the collection."
+                    )
+                )
+        elif product_dimension != stored_dimension:
+            # Log warning but allow (compat mode for current version)
+            logger.warning(
+                f"⚠️ Dimension mismatch: Collection uses {stored_dimension} ({embedding_config_to_use['embedder_name']}), "
+                f"but product config specifies {product_dimension} ({product_model_name}). "
+                f"Using collection's dimension for query compatibility."
+            )
+        
+        # Generate query embedding using the determined config
+        model_name = embedding_config_to_use["embedder_name"]
+        dimension = embedding_config_to_use["embedding_dimension"]
+        
+        logger.info(
+            f"Generating query embedding using model {model_name} with dimension {dimension} "
+            f"to match collection {collection_name}"
+        )
+        
         embedding_generator = EmbeddingGenerator(
             model_name=model_name, dimension=dimension, workspace_id=product.workspace_id, db=db
         )
-
+        
         # Check which model is actually being used
         model_info = embedding_generator.get_model_info()
         logger.info(f"Query embedding model info: {model_info}")
-
+        
         if model_info.get("fallback_mode"):
             logger.warning(f"⚠️ CRITICAL: Query embedding is using hash-based fallback! Search results will be poor.")
             logger.warning(
@@ -154,9 +310,22 @@ async def query_playground(
             )
         else:
             logger.info(f"✅ Query embedding using {model_info.get('model_type')} model (not fallback)")
-
+        
         query_embedding = embedding_generator.embed(query_data.query)
-        logger.info(f"Generated query embedding with dimension {len(query_embedding)}")
+        query_dimension = len(query_embedding)
+        logger.info(f"Generated query embedding with dimension {query_dimension}")
+        
+        # Final validation - should always match now
+        if query_dimension != stored_dimension:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=(
+                    f"Embedding dimension mismatch: Generated query embedding has dimension {query_dimension}, "
+                    f"but collection requires {stored_dimension}. This should not happen - please report this error."
+                )
+            )
+        
+        logger.info(f"✅ Query embedding dimension ({query_dimension}) matches collection dimension ({stored_dimension})")
 
         # Apply ACL filtering (M5) - using Qdrant as single source of truth
         acl_applied = False
@@ -223,21 +392,9 @@ async def query_playground(
             logger.warning(f"ACL filtering failed, proceeding without filter: {e}", exc_info=True)
             # Continue without ACL filtering if there's an error
 
-        # Verify collection info matches query embedding dimension
-        collection_info = qdrant_client.get_collection_info(collection_name)
-        if collection_info:
-            stored_dimension = collection_info.get("config", {}).get("params", {}).get("vectors", {}).get("size")
-            query_dimension = len(query_embedding)
-            logger.info(
-                f"Collection: {collection_name}, Stored dimension: {stored_dimension}, Query dimension: {query_dimension}"
-            )
-            if stored_dimension and stored_dimension != query_dimension:
-                logger.error(f"⚠️ DIMENSION MISMATCH! Stored vectors: {stored_dimension}, Query embedding: {query_dimension}")
-                logger.error(f"This will cause poor search results. Verify both use the same embedding model.")
-            else:
-                logger.info(f"✅ Dimensions match: {query_dimension}")
-        else:
-            logger.warning(f"Could not get collection info for {collection_name}")
+        # Note: Dimension validation is already done above before generating the embedding
+        # This section is kept for backward compatibility but should not be needed
+        # since we validate dimensions upfront and ensure they match
 
         # Search in Qdrant
         logger.info(f"Searching collection {collection_name} with query: '{query_data.query[:50]}...'")
