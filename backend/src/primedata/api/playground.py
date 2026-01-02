@@ -401,6 +401,19 @@ async def get_playground_status(
 
         # Get collection info
         collection_info = qdrant_client.get_collection_info(collection_name)
+        
+        # Handle case where collection_info is None (e.g., version mismatch or collection doesn't exist)
+        if collection_info is None:
+            logger.warning(f"Could not retrieve collection info for {collection_name}. This may indicate a Qdrant version mismatch.")
+            return {
+                "ready": False,
+                "current_version": product.current_version,
+                "promoted_version": product.promoted_version,
+                "collection_name": collection_name,
+                "points_count": 0,
+                "vectors_count": 0,
+                "error": "Could not retrieve collection information. Check Qdrant server and client version compatibility.",
+            }
 
         return {
             "ready": True,

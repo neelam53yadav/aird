@@ -290,7 +290,16 @@ class QdrantClient:
             }
 
         except Exception as e:
-            logger.error(f"Failed to get collection info for {collection_name}: {e}")
+            error_msg = str(e)
+            # Check if this is a Pydantic validation error (version mismatch)
+            if "validation error" in error_msg.lower() or "ParsingModel" in error_msg:
+                logger.error(
+                    f"Failed to get collection info for {collection_name}: {e}\n"
+                    f"This likely indicates a version mismatch between Qdrant server and Python client. "
+                    f"Ensure Qdrant server is upgraded to match the client version (1.16.2)."
+                )
+            else:
+                logger.error(f"Failed to get collection info for {collection_name}: {e}")
             return None
 
     def delete_collection(self, collection_name: str) -> bool:
