@@ -19,7 +19,7 @@ RUN pip install --no-cache-dir \
     sqlalchemy==1.4.53 \
     psycopg2-binary \
     minio \
-    qdrant-client \
+    qdrant-client==1.16.2 \
     sentence-transformers \
     openai>=1.0.0 \
     pydantic \

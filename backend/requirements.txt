@@ -27,7 +27,7 @@ bcrypt<4.0.0,>=3.2.0  # Compatible with Python 3.11 and 3.12
 httpx==0.25.2  # Compatible with Python 3.11 and 3.12
 
 # Vector Database
-qdrant-client==1.7.0  # Compatible with Python 3.11 and 3.12
+qdrant-client==1.16.2  # Compatible with Qdrant server v1.16.2
 
 # Storage (Object Storage)
 minio==7.2.0  # Compatible with Python 3.11 and 3.12
