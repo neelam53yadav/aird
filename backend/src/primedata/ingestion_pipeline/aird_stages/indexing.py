@@ -201,7 +201,20 @@ class IndexingStage(AirdStage):
                     started_at=started_at,
                 )
 
-            qdrant_client.ensure_collection(collection_name, actual_dimension)
+            collection_created = qdrant_client.ensure_collection(collection_name, actual_dimension)
+            if not collection_created:
+                if close_db:
+                    db.close()
+                return self._create_result(
+                    status=StageStatus.FAILED,
+                    metrics={},
+                    error=(
+                        f"Failed to create Qdrant collection '{collection_name}'. "
+                        f"This usually indicates a Qdrant server resource limit issue (check 'too many open files' in Qdrant logs). "
+                        f"Ensure Qdrant container has ulimits.nofile set to at least 65536."
+                    ),
+                    started_at=started_at,
+                )
 
             # Process all files - collect all records first, then batch-embed
             all_records_data = []  # Store record data for batch processing
