@@ -654,9 +654,10 @@ jobs:
           # Build frontend if needed (changed OR doesn't exist)
           if [ "$REBUILD_FRONTEND" = "true" ] || [ "$IMAGES_EXIST" != "true" ]; then
             echo "🔨 Building frontend image (using cache)..."
+            # Use domain instead of IP for production
+            API_URL="https://airdops.com"
+            AIRFLOW_URL="https://airdops.com/airflow"
             VM_IP="${{ steps.get-vm-ip.outputs.vm_ip }}"
-            API_URL="http://${VM_IP}:8000"
-            AIRFLOW_URL="http://${VM_IP}:8080"
             ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${VM_IP} \
               "cd ${DEPLOY_PATH_EXPANDED} && \
                ${DOCKER_CMD} build --cache-from infra-frontend:latest --build-arg NEXT_PUBLIC_API_URL=\"${API_URL}\" --build-arg NEXT_PUBLIC_API_BASE=\"${API_URL}\" --build-arg NEXT_PUBLIC_AIRFLOW_URL=\"${AIRFLOW_URL}\" -t infra-frontend:latest -t infra-frontend:${IMAGE_TAG} -f ui/Dockerfile ui/"
