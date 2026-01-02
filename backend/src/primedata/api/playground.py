@@ -407,14 +407,14 @@ async def query_playground(
         # Search in Qdrant
         logger.info(f"Searching collection {collection_name} with query: '{query_data.query[:50]}...'")
         try:
-        search_results = qdrant_client.search_points(
-            collection_name=collection_name,
-            query_vector=query_embedding.tolist(),
-            limit=query_data.top_k,
-            score_threshold=0.0,  # Return all results, let user see scores
-            filter_conditions=filter_conditions,  # M5: ACL filter
-        )
-        logger.info(f"Found {len(search_results)} search results")
+            search_results = qdrant_client.search_points(
+                collection_name=collection_name,
+                query_vector=query_embedding.tolist(),
+                limit=query_data.top_k,
+                score_threshold=0.0,  # Return all results, let user see scores
+                filter_conditions=filter_conditions,  # M5: ACL filter
+            )
+            logger.info(f"Found {len(search_results)} search results")
         except ConnectionError as e:
             logger.error(f"Qdrant connection error during search: {e}")
             raise HTTPException(
