@@ -135,7 +135,7 @@ export default function VerifyEmailPage() {
             href="/"
             className="inline-block text-2xl font-bold bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent hover:from-blue-500 hover:via-indigo-500 hover:to-purple-500 transition-all duration-200"
           >
-            PrimeData
+            AIRDOps
           </Link>
         </div>
       </div>

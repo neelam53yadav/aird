@@ -109,7 +109,7 @@ export default function SystemHealthPage() {
             <div>
               <h1 className="text-3xl font-bold text-gray-900">System Health</h1>
               <p className="text-gray-600 mt-1">
-                Monitor the health and status of all PrimeData services and dependencies.
+                Monitor the health and status of all AIRDOps services and dependencies.
               </p>
             </div>
           </div>

@@ -119,7 +119,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 </span>
               </div>
               <p className="text-sm font-medium flex-1 text-center">
-                You're using PrimeData Beta. We're actively improving features and performance. 
+                You're using AIRDOps Beta. We're actively improving features and performance. 
                 <span className="hidden sm:inline"> Your feedback helps us build better.</span>
               </p>
               <button
@@ -152,13 +152,16 @@ export default function AppLayout({ children }: AppLayoutProps) {
         {/* Enhanced Sidebar header */}
         <div className="flex items-center justify-between h-16 px-4 border-b-2 border-gray-100 bg-gradient-to-r from-blue-50/50 to-indigo-50/50">
           {!sidebarCollapsed && (
-            <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-              PrimeData
-            </h1>
+            <div>
+              <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                AIRDOps
+              </h1>
+              <p className="text-xs text-gray-500 mt-0.5">Making Data AI-Ready</p>
+            </div>
           )}
           {sidebarCollapsed && (
             <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center mx-auto">
-              <span className="text-white font-bold text-sm">P</span>
+              <span className="text-white font-bold text-sm">A</span>
             </div>
           )}
           <div className="flex items-center gap-2">
@@ -224,7 +227,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 <Menu className="h-6 w-6" />
               </button>
               <h2 className="ml-2 text-xl font-semibold text-gray-900">
-                {navigation.find(item => item.href === pathname)?.name || 'PrimeData'}
+                {navigation.find(item => item.href === pathname)?.name || 'AIRDOps'}
               </h2>
             </div>
             
