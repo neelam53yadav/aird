@@ -505,14 +505,18 @@ jobs:
             else
               echo "Generating service account key using gcloud..."
               # Generate a service account key for the service account used in the workflow
-              gcloud iam service-accounts keys create /tmp/gcp-credentials.json \
+              # Note: Key creation may be disabled for security (GCP best practice)
+              if gcloud iam service-accounts keys create /tmp/gcp-credentials.json \
                 --iam-account=github-actions@project-f3c8a334-a3f2-4f66-a06.iam.gserviceaccount.com \
-                --project=project-f3c8a334-a3f2-4f66-a06 || {
-                echo "⚠️  Warning: Failed to generate service account key. This requires the service account to have key creation permissions."
-                echo "   You may need to manually upload a service account JSON key to /opt/primedata/gcp-credentials.json on the VM."
-                exit 0  # Don't fail the workflow, just warn
-              }
-              CREDS_FILE="/tmp/gcp-credentials.json"
+                --project=project-f3c8a334-a3f2-4f66-a06 2>&1; then
+                CREDS_FILE="/tmp/gcp-credentials.json"
+                echo "✅ Service account key created successfully"
+              else
+                echo "ℹ️  Info: Service account key creation is disabled (GCP security best practice)."
+                echo "   The VM will use Workload Identity or existing credentials if available."
+                echo "   If GCS operations fail, manually upload a service account JSON key to /opt/primedata/gcp-credentials.json on the VM."
+                CREDS_FILE=""  # Continue without the key file
+              fi
             fi
             
             # Ensure /opt/primedata exists
