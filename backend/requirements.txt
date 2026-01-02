@@ -40,7 +40,7 @@ google-auth-oauthlib>=1.1.0,<2.0.0  # Compatible with Python 3.11 and 3.12
 
 # ML & AI
 mlflow==2.8.1  # Compatible with Python 3.11 and 3.12
-sentence-transformers==2.2.2  # Compatible with Python 3.11 and 3.12
+sentence-transformers>=2.7.0,<3.0.0  # Modern version compatible with latest huggingface_hub
 openai>=1.0.0,<2.0.0  # Compatible with Python 3.11 and 3.12
 
 # Data Processing
