@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Package, Database, Settings, Play, Pause, Search, TrendingUp, BarChart3, AlertTriangle, GitBranch, FileText, Download, FileSpreadsheet, Upload, Loader2, ArrowDownToLine, CheckCircle2, Home, Shield, Layers, Lock, FileCheck, FileJson, FileCode, FileSpreadsheet as FileCsv, RefreshCw, X } from 'lucide-react'
+import { ArrowLeft, Package, Database, Settings, Play, Pause, Search, TrendingUp, BarChart3, AlertTriangle, GitBranch, FileText, Download, FileSpreadsheet, Upload, Loader2, ArrowDownToLine, CheckCircle2, Home, Shield, Layers, Lock, FileCheck, FileJson, FileCode, FileSpreadsheet as FileCsv, RefreshCw, X, Eye } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { TableSkeleton, CardSkeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
@@ -428,7 +428,8 @@ export default function ProductDetailPage() {
 
     try {
       if (artifact.artifact_type?.toLowerCase() === 'vector') {
-        // For vectors, we'll show Qdrant link - no content to load
+        // For vectors, show info message - no downloadable content
+        setArtifactContent('Vector artifacts are stored in Qdrant. Use the RAG Playground to query them.')
         setLoadingArtifactContent(false)
         return
       }
@@ -438,10 +439,12 @@ export default function ProductDetailPage() {
           type: 'error',
           message: 'No download URL available for this artifact',
         })
+        setArtifactContent('No download URL available for this artifact. Please contact support.')
         setLoadingArtifactContent(false)
         return
       }
 
+      // Fetch artifact content using presigned URL
       const response = await fetch(artifact.download_url, {
         method: 'GET',
         headers: {
@@ -464,11 +467,8 @@ export default function ProductDetailPage() {
         const text = await response.text()
         setArtifactContent(text)
       } else if (contentType.includes('application/pdf') || artifact.artifact_type?.toLowerCase() === 'pdf') {
-        // For PDF, open in new tab instead of modal
-        window.open(artifact.download_url, '_blank')
-        setViewingArtifact(null)
-        setLoadingArtifactContent(false)
-        return
+        // For PDF, show message and provide download link
+        setArtifactContent('PDF files cannot be displayed in the viewer. Please use the download button to view the file.')
       } else {
         // For JSONL or other text formats
         const text = await response.text()
@@ -1430,11 +1430,133 @@ export default function ProductDetailPage() {
 
             {/* Pipeline Artifacts Section */}
             {product.current_version > 0 && (
-              <ComingSoonBadge
-                title="Pipeline Artifacts"
-                description="View and manage all artifacts generated during pipeline execution, including trust reports, validation summaries, fingerprints, and more."
-                icon={Package}
-              />
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                      <Package className="h-5 w-5 text-blue-600" />
+                      Pipeline Artifacts
+                    </h2>
+                    <p className="text-sm text-gray-600 mt-1">
+                      View and manage all artifacts generated during pipeline execution
+                    </p>
+                  </div>
+                </div>
+
+                {loadingData.artifacts ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                  </div>
+                ) : pipelineArtifacts.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-600">No artifacts available for this version</p>
+                    <p className="text-sm text-gray-500 mt-2">Artifacts will appear here after pipeline execution</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Artifact Name
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Type
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Stage
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Size
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Actions
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {pipelineArtifacts.map((artifact: any, index: number) => {
+                          const formatFileSize = (bytes: number) => {
+                            if (bytes < 1024) return `${bytes} B`
+                            if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+                            return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+                          }
+
+                          const getArtifactIcon = (type: string) => {
+                            switch (type?.toLowerCase()) {
+                              case 'json':
+                              case 'jsonl':
+                                return <FileJson className="h-4 w-4 text-yellow-600" />
+                              case 'csv':
+                                return <FileSpreadsheet className="h-4 w-4 text-green-600" />
+                              case 'pdf':
+                                return <FileText className="h-4 w-4 text-red-600" />
+                              case 'vector':
+                                return <Layers className="h-4 w-4 text-purple-600" />
+                              default:
+                                return <FileText className="h-4 w-4 text-gray-600" />
+                            }
+                          }
+
+                          return (
+                            <tr key={artifact.id || index} className="hover:bg-gray-50">
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="flex items-center gap-2">
+                                  {getArtifactIcon(artifact.artifact_type)}
+                                  <span className="text-sm font-medium text-gray-900">
+                                    {artifact.display_name || artifact.artifact_name?.replace(/_/g, ' ') || 'Unknown Artifact'}
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
+                                  {artifact.artifact_type?.toUpperCase() || 'UNKNOWN'}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span className="text-sm text-gray-600">
+                                  {artifact.stage_name?.replace(/_/g, ' ') || 'N/A'}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span className="text-sm text-gray-600">
+                                  {artifact.file_size ? formatFileSize(artifact.file_size) : 'N/A'}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleViewArtifact(artifact)}
+                                    className="flex items-center gap-1"
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                    View
+                                  </Button>
+                                  {artifact.download_url && (
+                                    <a
+                                      href={artifact.download_url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      download
+                                      className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                                    >
+                                      <Download className="h-4 w-4 mr-1" />
+                                      Download
+                                    </a>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             )}
 
           </div>
@@ -1973,24 +2095,31 @@ export default function ProductDetailPage() {
             <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
               {/* Header */}
               <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4 flex items-center justify-between">
-                <div>
+                <div className="flex-1">
                   <h3 className="text-lg font-semibold text-white">
-                    {viewingArtifact.display_name || viewingArtifact.artifact_name.replace(/_/g, ' ')}
+                    {viewingArtifact.display_name || viewingArtifact.artifact_name?.replace(/_/g, ' ') || 'Unknown Artifact'}
                   </h3>
-                  <p className="text-sm text-blue-100 mt-1">
-                    {viewingArtifact.artifact_type?.toUpperCase() || 'UNKNOWN'} • {(() => {
-                      const formatFileSize = (bytes: number) => {
-                        if (bytes < 1024) return `${bytes} B`
-                        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-                        return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
-                      }
-                      return formatFileSize(viewingArtifact.file_size)
-                    })()}
-                  </p>
+                  <div className="flex items-center gap-3 mt-1">
+                    <p className="text-sm text-blue-100">
+                      {viewingArtifact.artifact_type?.toUpperCase() || 'UNKNOWN'} • {(() => {
+                        const formatFileSize = (bytes: number) => {
+                          if (bytes < 1024) return `${bytes} B`
+                          if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+                          return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+                        }
+                        return formatFileSize(viewingArtifact.file_size || 0)
+                      })()}
+                    </p>
+                    {viewingArtifact.stage_name && (
+                      <span className="text-xs text-blue-200 bg-blue-700/30 px-2 py-1 rounded">
+                        Stage: {viewingArtifact.stage_name.replace(/_/g, ' ')}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <button
                   onClick={() => setViewingArtifact(null)}
-                  className="text-white hover:text-gray-200 transition-colors"
+                  className="text-white hover:text-gray-200 transition-colors ml-4"
                 >
                   <X className="h-5 w-5" />
                 </button>
@@ -2001,6 +2130,7 @@ export default function ProductDetailPage() {
                 {loadingArtifactContent ? (
                   <div className="flex items-center justify-center py-12">
                     <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                    <p className="ml-3 text-gray-600">Loading artifact content...</p>
                   </div>
                 ) : artifactContent ? (
                   <div className="bg-gray-900 rounded-lg p-4">
@@ -2011,30 +2141,44 @@ export default function ProductDetailPage() {
                 ) : (
                   <div className="text-center py-8 text-gray-500">
                     <p>Unable to load artifact content</p>
+                    {viewingArtifact.download_url && (
+                      <p className="text-sm mt-2">You can download the artifact using the download button below.</p>
+                    )}
                   </div>
                 )}
               </div>
 
               {/* Footer */}
-              <div className="bg-gray-50 px-6 py-3 flex justify-end space-x-3">
-                {viewingArtifact.download_url && (
-                  <a
-                    href={viewingArtifact.download_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    download
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 inline-flex items-center"
+              <div className="bg-gray-50 px-6 py-3 flex justify-between items-center">
+                <div className="text-sm text-gray-600">
+                  {viewingArtifact.description && (
+                    <p className="italic">{viewingArtifact.description}</p>
+                  )}
+                </div>
+                <div className="flex justify-end space-x-3">
+                  {viewingArtifact.download_url ? (
+                    <a
+                      href={viewingArtifact.download_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      download
+                      className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-blue-700 rounded-md hover:bg-blue-700 inline-flex items-center transition-colors"
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      Download (Presigned URL)
+                    </a>
+                  ) : (
+                    <span className="px-4 py-2 text-sm text-gray-500 italic">
+                      Download URL not available
+                    </span>
+                  )}
+                  <button
+                    onClick={() => setViewingArtifact(null)}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
                   >
-                    <Download className="h-4 w-4 mr-2" />
-                    Download
-                  </a>
-                )}
-                <button
-                  onClick={() => setViewingArtifact(null)}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-                >
-                  Close
-                </button>
+                    Close
+                  </button>
+                </div>
               </div>
             </div>
           </div>
