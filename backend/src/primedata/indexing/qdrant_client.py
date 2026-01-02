@@ -13,6 +13,15 @@ from uuid import UUID
 
 logger = logging.getLogger(__name__)
 
+# Version detection for API compatibility
+try:
+    from importlib.metadata import version
+    QDRANT_CLIENT_VERSION = version("qdrant-client")
+    logger.debug(f"Detected qdrant-client version: {QDRANT_CLIENT_VERSION}")
+except Exception:
+    QDRANT_CLIENT_VERSION = None
+    logger.warning("Could not detect qdrant-client version, using default API")
+
 
 class QdrantClient:
     """Client for interacting with Qdrant vector database."""
@@ -222,43 +231,105 @@ class QdrantClient:
 
         Returns:
             List of search results
+
+        Raises:
+            Exception: If search fails due to an error (not just no results)
         """
         if not self.is_connected():
-            logger.error("Qdrant client not connected")
-            return []
+            raise ConnectionError("Qdrant client not connected")
 
         try:
             from qdrant_client.http import models
 
-            # Build search request
-            search_request = models.SearchRequest(vector=query_vector, limit=limit, with_payload=True, with_vector=False)
+            # Build query filter if needed
+            query_filter = None
+            if filter_conditions:
+                query_filter = self._build_filter(filter_conditions)
 
-            if score_threshold is not None:
-                search_request.score_threshold = score_threshold
+            # For qdrant-client 1.16.2+, use query_points API (more stable)
+            # Check version to determine which API to use
+            use_query_points = True
+            if QDRANT_CLIENT_VERSION:
+                try:
+                    from packaging import version as pkg_version
+                    # Use query_points for 1.16.0+
+                    use_query_points = pkg_version.parse(QDRANT_CLIENT_VERSION) >= pkg_version.parse("1.16.0")
+                except ImportError:
+                    # packaging not available, default to query_points (safer for newer versions)
+                    logger.debug("packaging module not available, defaulting to query_points API")
+                    use_query_points = True
+                except Exception:
+                    # If version parsing fails, default to query_points
+                    logger.debug(f"Version parsing failed for {QDRANT_CLIENT_VERSION}, defaulting to query_points")
+                    use_query_points = True
 
-            if filter_conditions is not None:
-                search_request.filter = self._build_filter(filter_conditions)
+            if use_query_points:
+                # Use query_points API (stable in 1.16.2+)
+                try:
+                    results = self.client.query_points(
+                        collection_name=collection_name,
+                        query=query_vector,  # Direct vector list
+                        limit=limit,
+                        query_filter=query_filter,
+                        with_payload=True,
+                        with_vectors=False,
+                        score_threshold=score_threshold,
+                    )
 
-            # Perform search
-            results = self.client.search(
-                collection_name=collection_name,
-                query_vector=query_vector,
-                limit=limit,
-                score_threshold=score_threshold,
-                query_filter=search_request.filter if filter_conditions else None,
-            )
+                    # Convert QueryResponse to list of dicts
+                    search_results = []
+                    # query_points returns a QueryResponse object with points attribute
+                    for point in results.points:
+                        search_results.append({
+                            "id": point.id,
+                            "score": point.score,
+                            "payload": point.payload if hasattr(point, 'payload') else {}
+                        })
 
-            # Convert results to list of dicts
-            search_results = []
-            for result in results:
-                search_results.append({"id": result.id, "score": result.score, "payload": result.payload})
+                    logger.info(f"Found {len(search_results)} results for search in collection {collection_name}")
+                    return search_results
 
-            logger.info(f"Found {len(search_results)} results for search in collection {collection_name}")
-            return search_results
+                except AttributeError as e:
+                    # query_points might not exist in older versions, fall back to search()
+                    logger.warning(f"query_points API not available, trying search() fallback: {e}")
+                    use_query_points = False
+
+            # Fallback to search() API for older versions or if query_points fails
+            if not use_query_points:
+                try:
+                    results = self.client.search(
+                        collection_name=collection_name,
+                        query_vector=query_vector,
+                        limit=limit,
+                        score_threshold=score_threshold,
+                        query_filter=query_filter,
+                    )
+
+                    # Convert results to list of dicts
+                    search_results = []
+                    for result in results:
+                        search_results.append({
+                            "id": result.id,
+                            "score": result.score,
+                            "payload": result.payload if hasattr(result, 'payload') else {}
+                        })
+
+                    logger.info(f"Found {len(search_results)} results for search in collection {collection_name}")
+                    return search_results
+
+                except AttributeError as e:
+                    raise RuntimeError(
+                        f"Neither query_points() nor search() API available in qdrant-client. "
+                        f"Version: {QDRANT_CLIENT_VERSION}, Error: {e}"
+                    )
 
         except Exception as e:
-            logger.error(f"Failed to search points in collection {collection_name}: {e}")
-            return []
+            # Re-raise as-is if it's already a specific exception type
+            if isinstance(e, (ConnectionError, RuntimeError)):
+                raise
+            # Otherwise, wrap in a more descriptive error
+            logger.error(f"Failed to search points in collection {collection_name}: {e}", exc_info=True)
+            raise RuntimeError(f"Search failed for collection {collection_name}: {str(e)}") from e
 
     def get_collection_info(self, collection_name: str) -> Optional[Dict[str, Any]]:
         """

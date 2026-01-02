@@ -241,14 +241,33 @@ async def query_playground(
 
         # Search in Qdrant
         logger.info(f"Searching collection {collection_name} with query: '{query_data.query[:50]}...'")
-        search_results = qdrant_client.search_points(
-            collection_name=collection_name,
-            query_vector=query_embedding.tolist(),
-            limit=query_data.top_k,
-            score_threshold=0.0,  # Return all results, let user see scores
-            filter_conditions=filter_conditions,  # M5: ACL filter
-        )
-        logger.info(f"Found {len(search_results)} search results")
+        try:
+            search_results = qdrant_client.search_points(
+                collection_name=collection_name,
+                query_vector=query_embedding.tolist(),
+                limit=query_data.top_k,
+                score_threshold=0.0,  # Return all results, let user see scores
+                filter_conditions=filter_conditions,  # M5: ACL filter
+            )
+            logger.info(f"Found {len(search_results)} search results")
+        except ConnectionError as e:
+            logger.error(f"Qdrant connection error during search: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Vector database connection failed: {str(e)}"
+            )
+        except RuntimeError as e:
+            logger.error(f"Search operation failed: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Search failed: {str(e)}"
+            )
+        except Exception as e:
+            logger.error(f"Unexpected error during search: {e}", exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Search operation failed: {str(e)}"
+            )
 
         # Initialize MinIO client for presigned URLs
         minio_client = MinIOClient()
