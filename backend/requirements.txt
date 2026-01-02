@@ -52,6 +52,7 @@ numpy<2.0.0,>=1.24.0  # Compatible with Python 3.11 and 3.12 (explicit upper bou
 tenacity==8.2.3  # Compatible with Python 3.11 and 3.12
 loguru==0.7.2  # Compatible with Python 3.11 and 3.12
 pypdf==3.17.4  # Compatible with Python 3.11 and 3.12
+packaging>=23.0,<25.0  # For version parsing and compatibility checks
 
 # Payment Processing
 stripe>=5.0.0,<6.0.0  # Compatible with Python 3.11 and 3.12
