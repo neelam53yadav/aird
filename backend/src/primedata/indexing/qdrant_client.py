@@ -117,7 +117,16 @@ class QdrantClient:
             return True
 
         except Exception as e:
-            logger.error(f"Failed to ensure collection {collection_name}: {e}")
+            error_msg = str(e)
+            if "too many open files" in error_msg.lower() or "os error 24" in error_msg.lower():
+                logger.error(
+                    f"Failed to ensure collection {collection_name}: {e}\n"
+                    f"This is a Qdrant server resource limit issue. "
+                    f"Check that the Qdrant container has ulimits.nofile set to at least 65536. "
+                    f"Current limit may be too low (often 1024 or 4096 by default)."
+                )
+            else:
+                logger.error(f"Failed to ensure collection {collection_name}: {e}")
             return False
 
     def upsert_points(self, collection_name: str, points: List[Dict[str, Any]], batch_size: int = 50) -> bool:
