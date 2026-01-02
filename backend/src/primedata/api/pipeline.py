@@ -1047,9 +1047,19 @@ async def get_pipeline_artifacts(
                             logger.warning(f"Presigned URL for artifact {artifact.id} doesn't contain signature parameters")
                             download_url = None
                     else:
-                        logger.warning(f"Failed to generate presigned URL for artifact {artifact.id}")
+                        logger.warning(
+                            f"Failed to generate presigned URL for artifact {artifact.id} "
+                            f"(bucket={artifact.storage_bucket}, key={artifact.storage_key[:50] if artifact.storage_key else 'None'}...)"
+                        )
                 except Exception as e:
-                    logger.warning(f"Failed to generate presigned URL for artifact {artifact.id}: {e}")
+                    # Log the full exception details to understand what's failing
+                    error_type = type(e).__name__
+                    error_msg = str(e)
+                    logger.warning(
+                        f"Failed to generate presigned URL for artifact {artifact.id}: {error_type}: {error_msg}. "
+                        f"Bucket: '{artifact.storage_bucket}', Key: '{artifact.storage_key[:80] if artifact.storage_key else 'None'}...'",
+                        exc_info=True
+                    )
                     download_url = None
 
         # Get display name

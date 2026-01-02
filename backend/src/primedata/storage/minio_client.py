@@ -329,13 +329,24 @@ class MinIOClient:
                 except Exception as e:
                     # Catch any other exceptions during signed URL generation
                     error_str = str(e)
-                    if "billing account" in error_str.lower() or "disabled" in error_str.lower():
+                    error_type = type(e).__name__
+                    
+                    # Check for specific GCS API errors
+                    if "billing account" in error_str.lower() or "disabled" in error_str.lower() or "closed" in error_str.lower():
                         logger.error(
-                            f"GCS billing account issue prevents signed URL generation for {bucket}/{key}: {e}. "
-                            f"Please enable billing for your GCP project to use presigned URLs."
+                            f"GCS billing account issue prevents signed URL generation for {bucket}/{key}: "
+                            f"{error_type}: {error_str}. Please enable billing for your GCP project to use presigned URLs."
+                        )
+                    elif "Forbidden" in error_str or "403" in error_str:
+                        logger.error(
+                            f"GCS permission/billing error for {bucket}/{key}: {error_type}: {error_str}. "
+                            f"This may be due to disabled billing account or insufficient permissions."
                         )
                     else:
-                        logger.error(f"Failed to generate signed URL for {bucket}/{key}: {e}", exc_info=True)
+                        logger.error(
+                            f"Failed to generate signed URL for {bucket}/{key}: {error_type}: {error_str}",
+                            exc_info=True
+                        )
                     return None
             else:
                 # Generate presigned URL for MinIO
