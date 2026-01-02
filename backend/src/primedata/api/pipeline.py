@@ -1014,26 +1014,43 @@ async def get_pipeline_artifacts(
                 # Keep original file_size if available
         else:
             # For non-vector artifacts, generate presigned URL
-            try:
-                download_url = minio_client.presign(
-                    artifact.storage_bucket,
-                    artifact.storage_key,
-                    expiry=3600,  # 1 hour expiry
+            # Skip artifacts that don't have files in storage
+            if not artifact.storage_bucket or artifact.storage_bucket.lower() in ("none", "qdrant"):
+                # These artifacts don't have physical files in MinIO/GCS
+                # - "none": Metadata-only artifacts (e.g., policy evaluation results)
+                # - "qdrant": Vector artifacts stored in Qdrant
+                logger.debug(
+                    f"Artifact {artifact.id} has storage_bucket='{artifact.storage_bucket}', "
+                    f"skipping presigned URL generation (no file in storage)"
                 )
-                # Validate the presigned URL
-                if download_url:
-                    # Check if it's a valid signed URL (contains signature parameters)
-                    if 'X-Goog-Signature' in download_url or 'Signature' in download_url or 'Expires' in download_url:
-                        logger.debug(f"Generated valid presigned URL for artifact {artifact.id}")
-                    else:
-                        # If it's a direct GCS URL without signature, it won't work for private blobs
-                        logger.warning(f"Presigned URL for artifact {artifact.id} doesn't contain signature parameters")
-                        download_url = None
-                else:
-                    logger.warning(f"Failed to generate presigned URL for artifact {artifact.id}")
-            except Exception as e:
-                logger.warning(f"Failed to generate presigned URL for artifact {artifact.id}: {e}")
                 download_url = None
+            elif not artifact.storage_key or artifact.storage_key.strip() == "":
+                logger.warning(
+                    f"Artifact {artifact.id} has invalid storage_key: '{artifact.storage_key}'. "
+                    f"Skipping presigned URL generation."
+                )
+                download_url = None
+            else:
+                try:
+                    download_url = minio_client.presign(
+                        artifact.storage_bucket,
+                        artifact.storage_key,
+                        expiry=3600,  # 1 hour expiry
+                    )
+                    # Validate the presigned URL
+                    if download_url:
+                        # Check if it's a valid signed URL (contains signature parameters)
+                        if 'X-Goog-Signature' in download_url or 'Signature' in download_url or 'Expires' in download_url:
+                            logger.debug(f"Generated valid presigned URL for artifact {artifact.id}")
+                        else:
+                            # If it's a direct GCS URL without signature, it won't work for private blobs
+                            logger.warning(f"Presigned URL for artifact {artifact.id} doesn't contain signature parameters")
+                            download_url = None
+                    else:
+                        logger.warning(f"Failed to generate presigned URL for artifact {artifact.id}")
+                except Exception as e:
+                    logger.warning(f"Failed to generate presigned URL for artifact {artifact.id}: {e}")
+                    download_url = None
 
         # Get display name
         display_name = artifact_display_names.get(artifact.artifact_name, artifact.artifact_name.replace("_", " ").title())
