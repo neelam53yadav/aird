@@ -474,13 +474,6 @@ jobs:
             echo "deploy_path=~/primedata" >> $GITHUB_OUTPUT
           fi
 
-      - name: Cleanup old credential files on VM
-        run: |
-          echo "Cleaning up old GitHub Actions credential files on VM..."
-          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
-            "rm -f /opt/primedata/gha-creds-*.json ~/primedata/gha-creds-*.json 2>/dev/null || true"
-          echo "✅ Cleanup complete"
-
       - name: Copy files to VM
         run: |
           DEPLOY_PATH="${{ steps.prepare-vm-dir.outputs.deploy_path }}"
@@ -489,6 +482,40 @@ jobs:
             --exclude='gha-creds-*.json' --exclude='*.tmp' --exclude='.env.local' \
             -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
             ./ ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }}:${DEPLOY_PATH}/
+
+      - name: Copy GCP credentials to VM (if not exists)
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Setting up GCP credentials on VM..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          
+          # Check if credentials file already exists on VM
+          CREDS_EXIST=$(ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+            "test -f /opt/primedata/gcp-credentials.json && echo 'exists' || echo 'missing'")
+          
+          if [ "$CREDS_EXIST" = "missing" ]; then
+            echo "GCP credentials file not found. Creating it..."
+            
+            # Ensure /opt/primedata exists
+            ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+              "sudo mkdir -p /opt/primedata && sudo chown -R ${{ secrets.VM_USERNAME }}:${{ secrets.VM_USERNAME }} /opt/primedata" 2>/dev/null || \
+              ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+                "mkdir -p /opt/primedata"
+            
+            # Copy the credentials file from GitHub Actions runner to VM
+            scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+              /tmp/gcp-credentials.json \
+              ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }}:/opt/primedata/gcp-credentials.json
+            
+            # Set proper permissions (readable by user, not by others)
+            ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+              "chmod 600 /opt/primedata/gcp-credentials.json"
+            
+            echo "✅ GCP credentials file created at /opt/primedata/gcp-credentials.json"
+          else
+            echo "✅ GCP credentials file already exists at /opt/primedata/gcp-credentials.json (skipping)"
+          fi
 
       - name: Verify Docker on VM
         run: |
