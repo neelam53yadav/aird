@@ -30,6 +30,9 @@ class MinIOClient:
     Supports both MinIO (local development) and GCS (production) via Application Default Credentials.
     Set USE_GCS=true to use GCS instead of MinIO.
     """
+    
+    # Class-level cache for GCS presigned URL warnings (log once per unique file)
+    _gcs_warning_logged = set()
 
     def __init__(self):
         """Initialize storage client from environment variables.
@@ -283,12 +286,18 @@ class MinIOClient:
                 except AttributeError as e:
                     if "private key" in str(e).lower() or "sign credentials" in str(e).lower():
                         # Compute Engine credentials don't have a private key for signing
-                        logger.warning(
-                            f"Cannot generate signed URL for {bucket}/{key}: {e}\n"
-                            f"Using Compute Engine credentials which don't support URL signing. "
-                            f"Consider using a service account JSON key file (GOOGLE_APPLICATION_CREDENTIALS) "
-                            f"or use IAM-based access control instead of presigned URLs."
-                        )
+                        # Only log warning once per unique file to reduce noise
+                        warning_key = f"{bucket}/{key}"
+                        if warning_key not in MinIOClient._gcs_warning_logged:
+                            logger.warning(
+                                f"Cannot generate signed URL for {bucket}/{key}: {e}\n"
+                                f"Using Compute Engine credentials which don't support URL signing. "
+                                f"Consider using a service account JSON key file (GOOGLE_APPLICATION_CREDENTIALS) "
+                                f"or use IAM-based access control instead of presigned URLs."
+                            )
+                            MinIOClient._gcs_warning_logged.add(warning_key)
+                        else:
+                            logger.debug(f"Skipping duplicate GCS presigned URL warning for {bucket}/{key}")
                         # Optionally, try to return a public URL if the blob is public
                         try:
                             public_url = blob.public_url

@@ -377,7 +377,7 @@ class QdrantClient:
             except AttributeError as attr_error:
                 # In qdrant-client 1.16.2, some attributes might not exist
                 # Try to use points_count as fallback for vectors_count (each point has one vector)
-                logger.warning(f"Attribute access failed: {attr_error}. Trying fallback.")
+                logger.debug(f"Attribute access failed (expected in qdrant-client 1.16.2): {attr_error}. Using fallback.")
                 try:
                     vectors_count = points_count  # Safe fallback: each point has one vector
                     indexed_vectors_count = points_count  # Assume all are indexed if we can't determine
