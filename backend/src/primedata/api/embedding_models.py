@@ -5,7 +5,7 @@ This module provides REST API endpoints to serve embedding model configurations
 to the frontend, ensuring consistency and centralized management.
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
@@ -23,8 +23,8 @@ class EmbeddingModelResponse(BaseModel):
     description: str
     dimension: int
     requires_api_key: bool
-    cost_per_token: float = None
-    metadata: Dict[str, Any] = None
+    cost_per_token: Optional[float] = None
+    metadata: Optional[Dict[str, Any]] = None
 
 
 class EmbeddingModelsListResponse(BaseModel):
