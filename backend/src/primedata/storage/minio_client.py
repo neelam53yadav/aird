@@ -4,24 +4,24 @@ Supports both MinIO (local) and GCS (Google Cloud Storage) via Application Defau
 """
 
 import json
-import logging
 import os
 from typing import Any, Dict, List, Optional
 
+from loguru import logger
 from minio import Minio
 from minio.error import S3Error
-
-logger = logging.getLogger(__name__)
 
 # Try to import google-cloud-storage (optional, only needed for GCS)
 try:
     from google.auth.exceptions import DefaultCredentialsError
     from google.cloud import storage as gcs_storage
-
+    from google.api_core import exceptions as gcs_exceptions
+    
     GCS_AVAILABLE = True
 except ImportError:
     GCS_AVAILABLE = False
     logger.warning("google-cloud-storage not available. GCS support disabled.")
+    gcs_exceptions = None  # Fallback if not available
 
 
 class MinIOClient:
@@ -331,8 +331,20 @@ class MinIOClient:
                     error_str = str(e)
                     error_type = type(e).__name__
                     
-                    # Check for specific GCS API errors
-                    if "billing account" in error_str.lower() or "disabled" in error_str.lower() or "closed" in error_str.lower():
+                    # Check for GCS API exceptions specifically
+                    if gcs_exceptions and isinstance(e, (gcs_exceptions.Forbidden, gcs_exceptions.GoogleAPIError)):
+                        if "billing account" in error_str.lower() or "disabled" in error_str.lower() or "closed" in error_str.lower():
+                            logger.error(
+                                f"GCS billing account issue prevents signed URL generation for {bucket}/{key}: "
+                                f"{error_type}: {error_str}. Please enable billing for your GCP project to use presigned URLs."
+                            )
+                        else:
+                            logger.error(
+                                f"GCS API error for {bucket}/{key}: {error_type}: {error_str}. "
+                                f"This may be due to disabled billing account, insufficient permissions, or other GCS configuration issues."
+                            )
+                    # Check for specific GCS API errors in error string
+                    elif "billing account" in error_str.lower() or "disabled" in error_str.lower() or "closed" in error_str.lower():
                         logger.error(
                             f"GCS billing account issue prevents signed URL generation for {bucket}/{key}: "
                             f"{error_type}: {error_str}. Please enable billing for your GCP project to use presigned URLs."
@@ -343,9 +355,8 @@ class MinIOClient:
                             f"This may be due to disabled billing account or insufficient permissions."
                         )
                     else:
-                        logger.error(
-                            f"Failed to generate signed URL for {bucket}/{key}: {error_type}: {error_str}",
-                            exc_info=True
+                        logger.exception(  # loguru's exception() method includes full traceback
+                            f"Failed to generate signed URL for {bucket}/{key}: {error_type}: {error_str}"
                         )
                     return None
             else:
