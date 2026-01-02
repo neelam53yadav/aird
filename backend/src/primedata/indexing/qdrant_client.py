@@ -304,8 +304,19 @@ class QdrantClient:
                 vector_size = collection_info.config.params.vectors.size
                 distance = collection_info.config.params.vectors.distance
             except AttributeError as attr_error:
-                logger.warning(f"Attribute access failed: {attr_error}. Trying fallback method.")
-                return self._get_collection_info_fallback(collection_name)
+                # In qdrant-client 1.16.2, some attributes might not exist
+                # Try to use points_count as fallback for vectors_count (each point has one vector)
+                logger.warning(f"Attribute access failed: {attr_error}. Trying fallback.")
+                try:
+                    vectors_count = points_count  # Safe fallback: each point has one vector
+                    indexed_vectors_count = points_count  # Assume all are indexed if we can't determine
+                    segments_count = getattr(collection_info, 'segments_count', 0)
+                    vector_size = collection_info.config.params.vectors.size
+                    distance = collection_info.config.params.vectors.distance
+                except Exception:
+                    # If fallback also fails, use the HTTP API fallback method
+                    logger.warning("Fallback attribute access failed. Using HTTP API fallback.")
+                    return self._get_collection_info_fallback(collection_name)
 
             result = {
                 "name": collection_name,
