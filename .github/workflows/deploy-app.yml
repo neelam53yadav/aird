@@ -495,7 +495,24 @@ jobs:
             "test -f /opt/primedata/gcp-credentials.json && echo 'exists' || echo 'missing'")
           
           if [ "$CREDS_EXIST" = "missing" ]; then
-            echo "GCP credentials file not found. Creating it..."
+            echo "GCP credentials file not found on VM. Generating service account key..."
+            
+            # Check if we have a credentials file from the auth action
+            if [ -f /tmp/gcp-credentials.json ]; then
+              echo "Using credentials file from auth action..."
+              CREDS_FILE="/tmp/gcp-credentials.json"
+            else
+              echo "Generating service account key using gcloud..."
+              # Generate a service account key for the service account used in the workflow
+              gcloud iam service-accounts keys create /tmp/gcp-credentials.json \
+                --iam-account=github-actions@project-f3c8a334-a3f2-4f66-a06.iam.gserviceaccount.com \
+                --project=project-f3c8a334-a3f2-4f66-a06 || {
+                echo "⚠️  Warning: Failed to generate service account key. This requires the service account to have key creation permissions."
+                echo "   You may need to manually upload a service account JSON key to /opt/primedata/gcp-credentials.json on the VM."
+                exit 0  # Don't fail the workflow, just warn
+              }
+              CREDS_FILE="/tmp/gcp-credentials.json"
+            fi
             
             # Ensure /opt/primedata exists
             ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
@@ -505,7 +522,7 @@ jobs:
             
             # Copy the credentials file from GitHub Actions runner to VM
             scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
-              /tmp/gcp-credentials.json \
+              "$CREDS_FILE" \
               ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }}:/opt/primedata/gcp-credentials.json
             
             # Set proper permissions (readable by user, not by others)
@@ -513,6 +530,15 @@ jobs:
               "chmod 600 /opt/primedata/gcp-credentials.json"
             
             echo "✅ GCP credentials file created at /opt/primedata/gcp-credentials.json"
+            
+            # Clean up the temporary key file if we generated it (not the one from auth action)
+            if [ "$CREDS_FILE" = "/tmp/gcp-credentials.json" ] && [ -f /tmp/gcp-credentials.json ]; then
+              # Only remove if it's a generated key (check if it has private_key field)
+              if grep -q '"private_key"' /tmp/gcp-credentials.json 2>/dev/null; then
+                echo "Cleaning up generated service account key..."
+                rm -f /tmp/gcp-credentials.json 2>/dev/null || true
+              fi
+            fi
           else
             echo "✅ GCP credentials file already exists at /opt/primedata/gcp-credentials.json (skipping)"
           fi
