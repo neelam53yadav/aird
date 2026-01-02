@@ -525,19 +525,24 @@ jobs:
               ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
                 "mkdir -p /opt/primedata"
             
-            # Copy the credentials file from GitHub Actions runner to VM
-            scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
-              "$CREDS_FILE" \
-              ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }}:/opt/primedata/gcp-credentials.json
-            
-            # Set proper permissions (readable by user, not by others)
-            ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
-              "chmod 600 /opt/primedata/gcp-credentials.json"
-            
-            echo "✅ GCP credentials file created at /opt/primedata/gcp-credentials.json"
+            # Copy the credentials file from GitHub Actions runner to VM (only if we have one)
+            if [ -n "$CREDS_FILE" ] && [ -f "$CREDS_FILE" ]; then
+              scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+                "$CREDS_FILE" \
+                ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }}:/opt/primedata/gcp-credentials.json
+              
+              # Set proper permissions (readable by user, not by others)
+              ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+                "chmod 600 /opt/primedata/gcp-credentials.json"
+              
+              echo "✅ GCP credentials file created at /opt/primedata/gcp-credentials.json"
+            else
+              echo "ℹ️  Skipping credentials file copy (no key file available)"
+              echo "   The VM will use Workload Identity or existing credentials if available."
+            fi
             
             # Clean up the temporary key file if we generated it (not the one from auth action)
-            if [ "$CREDS_FILE" = "/tmp/gcp-credentials.json" ] && [ -f /tmp/gcp-credentials.json ]; then
+            if [ -n "$CREDS_FILE" ] && [ "$CREDS_FILE" = "/tmp/gcp-credentials.json" ] && [ -f /tmp/gcp-credentials.json ]; then
               # Only remove if it's a generated key (check if it has private_key field)
               if grep -q '"private_key"' /tmp/gcp-credentials.json 2>/dev/null; then
                 echo "Cleaning up generated service account key..."
