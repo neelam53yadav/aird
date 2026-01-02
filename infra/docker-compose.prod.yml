@@ -1,6 +1,6 @@
 services:
   qdrant:
-    image: qdrant/qdrant:1.16.2
+    image: qdrant/qdrant:v1.16.2
     container_name: primedata-qdrant
     ulimits:
       nofile:
