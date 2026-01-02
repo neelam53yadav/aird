@@ -265,6 +265,15 @@ class MinIOClient:
         Returns:
             Presigned URL or None if failed
         """
+        # Validate inputs - skip special bucket names that don't have files
+        if not bucket or bucket.strip() == "" or bucket.lower() in ("none", "qdrant"):
+            logger.debug(f"Skipping presigned URL for special bucket: '{bucket}' (no file in storage)")
+            return None
+        
+        if not key or key.strip() == "":
+            logger.error(f"Invalid key: '{key}'. Cannot generate presigned URL.")
+            return None
+
         try:
             self._ensure_buckets()
 
@@ -275,11 +284,11 @@ class MinIOClient:
                 gcs_bucket = self.gcs_client.bucket(bucket)
                 blob = gcs_bucket.blob(key)
                 
-                # Check if blob exists
-                if not blob.exists():
-                    logger.warning(f"Blob {bucket}/{key} does not exist")
-                    return None
-
+                # Skip existence check - artifacts are only registered after successful upload,
+                # so the blob should exist. The exists() check requires billing and can fail
+                # even when the blob exists. We'll try to generate the signed URL directly.
+                # If the blob doesn't exist, the signed URL generation will fail gracefully.
+                
                 try:
                     # GCS signed URL generation
                     # This requires service account credentials with a private key
@@ -319,7 +328,14 @@ class MinIOClient:
                         raise
                 except Exception as e:
                     # Catch any other exceptions during signed URL generation
-                    logger.error(f"Failed to generate signed URL for {bucket}/{key}: {e}", exc_info=True)
+                    error_str = str(e)
+                    if "billing account" in error_str.lower() or "disabled" in error_str.lower():
+                        logger.error(
+                            f"GCS billing account issue prevents signed URL generation for {bucket}/{key}: {e}. "
+                            f"Please enable billing for your GCP project to use presigned URLs."
+                        )
+                    else:
+                        logger.error(f"Failed to generate signed URL for {bucket}/{key}: {e}", exc_info=True)
                     return None
             else:
                 # Generate presigned URL for MinIO
