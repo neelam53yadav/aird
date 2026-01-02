@@ -29,6 +29,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch full history to avoid missing commit issues
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -295,6 +297,24 @@ jobs:
             echo "Push event detected"
             echo "  Base SHA: ${BASE_SHA}"
             echo "  Head SHA: ${HEAD_SHA}"
+            
+            # Check if BASE_SHA exists (might not exist after force push)
+            # Use ^{commit} suffix to ensure we're checking a commit object
+            if ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+              echo "⚠️  Base commit ${BASE_SHA} not found (likely force push). Rebuilding all services to be safe."
+              echo "rebuild_backend=true" >> $GITHUB_OUTPUT
+              echo "rebuild_frontend=true" >> $GITHUB_OUTPUT
+              echo "rebuild_airflow=true" >> $GITHUB_OUTPUT
+              echo "nginx_changed=true" >> $GITHUB_OUTPUT
+              echo "skip_build=false" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+            
+            # Also verify HEAD_SHA exists
+            if ! git cat-file -e "${HEAD_SHA}^{commit}" 2>/dev/null; then
+              echo "❌ Error: Head commit ${HEAD_SHA} not found. This should not happen."
+              exit 1
+            fi
           else
             # For workflow_dispatch, compare with the branch's previous commit
             BASE_SHA="HEAD~1"
@@ -303,21 +323,20 @@ jobs:
             echo "  Comparing: ${BASE_SHA}..${HEAD_SHA}"
           fi
           
-          # Fetch more history to ensure we have the commits
-          echo "Fetching git history..."
-          git fetch --unshallow --no-tags 2>/dev/null || git fetch --depth=50 origin ${{ github.ref_name }} 2>/dev/null || true
-          
           # Try multiple methods to get changed files
           CHANGED_FILES=""
           
-          # Method 1: git diff with commit range
+          # Method 1: git diff with commit range (with proper error handling)
           if [ -n "${BASE_SHA}" ] && [ -n "${HEAD_SHA}" ]; then
             echo "Method 1: Trying git diff ${BASE_SHA}..${HEAD_SHA}..."
-            CHANGED_FILES=$(git diff --name-only ${BASE_SHA}..${HEAD_SHA} 2>&1)
-            if [ $? -eq 0 ] && [ -n "$CHANGED_FILES" ]; then
+            set +e  # Disable exit on error for this command
+            CHANGED_FILES=$(git diff --name-only "${BASE_SHA}..${HEAD_SHA}" 2>&1)
+            rc=$?
+            set -e  # Re-enable exit on error
+            if [ $rc -eq 0 ] && [ -n "$CHANGED_FILES" ]; then
               echo "✅ Method 1 succeeded"
             else
-              echo "⚠️  Method 1 failed or no changes"
+              echo "⚠️  Method 1 failed or no changes (exit code: $rc)"
               CHANGED_FILES=""
             fi
           fi
@@ -325,11 +344,14 @@ jobs:
           # Method 2: git diff-tree (more reliable for commits)
           if [ -z "$CHANGED_FILES" ] && [ -n "${BASE_SHA}" ] && [ -n "${HEAD_SHA}" ]; then
             echo "Method 2: Trying git diff-tree..."
-            CHANGED_FILES=$(git diff-tree --no-commit-id --name-only -r ${BASE_SHA} ${HEAD_SHA} 2>&1)
-            if [ $? -eq 0 ] && [ -n "$CHANGED_FILES" ]; then
+            set +e
+            CHANGED_FILES=$(git diff-tree --no-commit-id --name-only -r "${BASE_SHA}" "${HEAD_SHA}" 2>&1)
+            rc=$?
+            set -e
+            if [ $rc -eq 0 ] && [ -n "$CHANGED_FILES" ]; then
               echo "✅ Method 2 succeeded"
             else
-              echo "⚠️  Method 2 failed or no changes"
+              echo "⚠️  Method 2 failed or no changes (exit code: $rc)"
               CHANGED_FILES=""
             fi
           fi
@@ -337,37 +359,42 @@ jobs:
           # Method 3: git log with --name-only (fallback)
           if [ -z "$CHANGED_FILES" ] && [ -n "${BASE_SHA}" ] && [ -n "${HEAD_SHA}" ]; then
             echo "Method 3: Trying git log --name-only..."
-            CHANGED_FILES=$(git log --name-only --pretty=format: ${BASE_SHA}..${HEAD_SHA} 2>&1 | grep -v "^$" | sort -u)
-            if [ -n "$CHANGED_FILES" ]; then
+            set +e
+            CHANGED_FILES=$(git log --name-only --pretty=format: "${BASE_SHA}..${HEAD_SHA}" 2>&1 | grep -v "^$" | sort -u)
+            rc=$?
+            set -e
+            if [ $rc -eq 0 ] && [ -n "$CHANGED_FILES" ]; then
               echo "✅ Method 3 succeeded"
             else
-              echo "⚠️  Method 3 failed or no changes"
+              echo "⚠️  Method 3 failed or no changes (exit code: $rc)"
               CHANGED_FILES=""
             fi
           fi
           
-          # Method 4: Last resort - check if commits are different
+          # Method 4: Check files changed in current commit only (last resort)
           if [ -z "$CHANGED_FILES" ]; then
-            echo "Method 4: Checking if commits are different..."
-            if [ "${BASE_SHA}" != "${HEAD_SHA}" ]; then
-              echo "⚠️  Commits are different but couldn't detect files. Will rebuild all services to be safe."
-              echo "rebuild_backend=true" >> $GITHUB_OUTPUT
-              echo "rebuild_frontend=true" >> $GITHUB_OUTPUT
-              echo "rebuild_airflow=true" >> $GITHUB_OUTPUT
-              echo "skip_build=false" >> $GITHUB_OUTPUT
-              exit 0
+            echo "Method 4: Checking files changed in current commit only..."
+            set +e
+            CHANGED_FILES=$(git diff-tree --no-commit-id --name-only -r "${HEAD_SHA}" 2>&1)
+            rc=$?
+            set -e
+            if [ $rc -eq 0 ] && [ -n "$CHANGED_FILES" ]; then
+              echo "✅ Method 4 succeeded (using current commit only)"
             else
-              echo "✅ Commits are the same - no changes detected"
+              echo "⚠️  Method 4 failed or no changes (exit code: $rc)"
+              CHANGED_FILES=""
             fi
           fi
           
+          # If all methods failed, rebuild all services to be safe
           if [ -z "$CHANGED_FILES" ]; then
             echo ""
-            echo "No changed files detected - skipping build"
-            echo "rebuild_backend=false" >> $GITHUB_OUTPUT
-            echo "rebuild_frontend=false" >> $GITHUB_OUTPUT
-            echo "rebuild_airflow=false" >> $GITHUB_OUTPUT
-            echo "skip_build=true" >> $GITHUB_OUTPUT
+            echo "⚠️  Could not detect changed files. Rebuilding all services to be safe."
+            echo "rebuild_backend=true" >> $GITHUB_OUTPUT
+            echo "rebuild_frontend=true" >> $GITHUB_OUTPUT
+            echo "rebuild_airflow=true" >> $GITHUB_OUTPUT
+            echo "nginx_changed=true" >> $GITHUB_OUTPUT
+            echo "skip_build=false" >> $GITHUB_OUTPUT
             exit 0
           fi
           
@@ -410,6 +437,13 @@ jobs:
             echo "✅ Docker Compose config changed - will rebuild all services"
           fi
           
+          # Check for nginx config changes (affects all services - need to reload nginx)
+          NGINX_CHANGED=false
+          if echo "$CHANGED_FILES" | grep -qE "^infra/nginx"; then
+            NGINX_CHANGED=true
+            echo "✅ Nginx config changed - will reload nginx"
+          fi
+          
           # Check for workflow file changes (affects build process - force frontend rebuild)
           WORKFLOW_CHANGED=false
           if echo "$CHANGED_FILES" | grep -qE "^\.github/workflows/deploy-app\.yml"; then
@@ -438,6 +472,7 @@ jobs:
           echo "rebuild_backend=$REBUILD_BACKEND" >> $GITHUB_OUTPUT
           echo "rebuild_frontend=$REBUILD_FRONTEND" >> $GITHUB_OUTPUT
           echo "rebuild_airflow=$REBUILD_AIRFLOW" >> $GITHUB_OUTPUT
+          echo "nginx_changed=$NGINX_CHANGED" >> $GITHUB_OUTPUT
           echo "skip_build=false" >> $GITHUB_OUTPUT
           
           echo ""
@@ -447,6 +482,7 @@ jobs:
           echo "  Backend:   $REBUILD_BACKEND"
           echo "  Frontend: $REBUILD_FRONTEND"
           echo "  Airflow:  $REBUILD_AIRFLOW"
+          echo "  Nginx:    $NGINX_CHANGED (config reload only)"
           echo ""
 
       - name: Prepare VM directory
