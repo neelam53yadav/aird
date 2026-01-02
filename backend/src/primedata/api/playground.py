@@ -175,14 +175,22 @@ async def query_playground(
             )
         
         # Get the actual dimension from the collection (source of truth)
-        stored_dimension = collection_info.get("config", {}).get("params", {}).get("vectors", {}).get("size")
+        # get_collection_info returns: {"config": {"vector_size": 1024, "distance": "Cosine"}}
+        stored_dimension = collection_info.get("config", {}).get("vector_size")
         if not stored_dimension:
+            # Fallback: try alternative paths (for backward compatibility)
+            stored_dimension = collection_info.get("config", {}).get("params", {}).get("vectors", {}).get("size")
+        
+        if not stored_dimension:
+            # Last resort: try top-level vector_size (shouldn't happen but be safe)
             stored_dimension = collection_info.get("vector_size")
         
         if not stored_dimension:
+            # Log the actual structure for debugging
+            logger.error(f"Collection info structure: {collection_info}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Could not determine vector dimension for collection {collection_name}"
+                detail=f"Could not determine vector dimension for collection {collection_name}. Collection info keys: {list(collection_info.keys()) if collection_info else 'None'}"
             )
         
         logger.info(f"Collection {collection_name} uses dimension {stored_dimension}")
@@ -298,11 +306,11 @@ async def query_playground(
         embedding_generator = EmbeddingGenerator(
             model_name=model_name, dimension=dimension, workspace_id=product.workspace_id, db=db
         )
-        
+
         # Check which model is actually being used
         model_info = embedding_generator.get_model_info()
         logger.info(f"Query embedding model info: {model_info}")
-        
+
         if model_info.get("fallback_mode"):
             logger.warning(f"⚠️ CRITICAL: Query embedding is using hash-based fallback! Search results will be poor.")
             logger.warning(
@@ -310,7 +318,7 @@ async def query_playground(
             )
         else:
             logger.info(f"✅ Query embedding using {model_info.get('model_type')} model (not fallback)")
-        
+
         query_embedding = embedding_generator.embed(query_data.query)
         query_dimension = len(query_embedding)
         logger.info(f"Generated query embedding with dimension {query_dimension}")
@@ -399,14 +407,14 @@ async def query_playground(
         # Search in Qdrant
         logger.info(f"Searching collection {collection_name} with query: '{query_data.query[:50]}...'")
         try:
-            search_results = qdrant_client.search_points(
-                collection_name=collection_name,
-                query_vector=query_embedding.tolist(),
-                limit=query_data.top_k,
-                score_threshold=0.0,  # Return all results, let user see scores
-                filter_conditions=filter_conditions,  # M5: ACL filter
-            )
-            logger.info(f"Found {len(search_results)} search results")
+        search_results = qdrant_client.search_points(
+            collection_name=collection_name,
+            query_vector=query_embedding.tolist(),
+            limit=query_data.top_k,
+            score_threshold=0.0,  # Return all results, let user see scores
+            filter_conditions=filter_conditions,  # M5: ACL filter
+        )
+        logger.info(f"Found {len(search_results)} search results")
         except ConnectionError as e:
             logger.error(f"Qdrant connection error during search: {e}")
             raise HTTPException(
