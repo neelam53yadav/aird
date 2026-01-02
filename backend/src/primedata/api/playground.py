@@ -391,6 +391,25 @@ async def get_playground_status(
             product_name=product.name,
         )
 
+        # If find_collection_name didn't find it, try to get collection info directly
+        # This handles cases where list_collections() might not be up-to-date
+        if not collection_name:
+            # Try both naming formats directly
+            if product.name:
+                sanitized_name = qdrant_client._sanitize_collection_name(product.name)
+                collection_name_candidate = f"ws_{product.workspace_id}__{sanitized_name}__v_{product.current_version}"
+                # Try to get collection info directly - if it exists, this will succeed
+                collection_info = qdrant_client.get_collection_info(collection_name_candidate)
+                if collection_info and collection_info.get("points_count", 0) > 0:
+                    collection_name = collection_name_candidate
+            
+            # If still not found, try product_id format
+            if not collection_name:
+                collection_name_candidate = f"ws_{product.workspace_id}__prod_{product.id}__v_{product.current_version}"
+                collection_info = qdrant_client.get_collection_info(collection_name_candidate)
+                if collection_info and collection_info.get("points_count", 0) > 0:
+                    collection_name = collection_name_candidate
+
         if not collection_name:
             return {
                 "ready": False,
@@ -412,7 +431,20 @@ async def get_playground_status(
                 "collection_name": collection_name,
                 "points_count": 0,
                 "vectors_count": 0,
-                "error": "Could not retrieve collection information. Check Qdrant server and client version compatibility.",
+                "reason": "Could not retrieve collection information. Check Qdrant server and client version compatibility.",
+            }
+
+        # Check if collection has any points
+        points_count = collection_info.get("points_count", 0)
+        if points_count == 0:
+            return {
+                "ready": False,
+                "reason": "Collection exists but has no indexed data. Please run a pipeline first.",
+                "current_version": product.current_version,
+                "promoted_version": product.promoted_version,
+                "collection_name": collection_name,
+                "points_count": 0,
+                "vectors_count": 0,
             }
 
         return {
@@ -420,7 +452,7 @@ async def get_playground_status(
             "current_version": product.current_version,
             "promoted_version": product.promoted_version,
             "collection_name": collection_name,
-            "points_count": collection_info.get("points_count", 0),
+            "points_count": points_count,
             "vectors_count": collection_info.get("vectors_count", 0),
         }
 

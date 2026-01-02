@@ -276,30 +276,101 @@ class QdrantClient:
 
         try:
             collection_info = self.client.get_collection(collection_name)
+            
+            # Debug logging to understand the actual structure
+            logger.debug(f"Collection info type: {type(collection_info)}")
+            logger.debug(f"Collection info dir: {[attr for attr in dir(collection_info) if not attr.startswith('_')]}")
 
-            return {
+            # Try to access points_count - handle both attribute and dict access
+            # Qdrant client 1.16.2 may have changed the API structure
+            try:
+                points_count = collection_info.points_count
+            except AttributeError:
+                # Try as dict
+                if hasattr(collection_info, 'get'):
+                    points_count = collection_info.get('points_count', 0)
+                elif hasattr(collection_info, '__dict__'):
+                    points_count = collection_info.__dict__.get('points_count', 0)
+                else:
+                    logger.warning(f"Could not access points_count from {type(collection_info)}")
+                    # Try fallback
+                    return self._get_collection_info_fallback(collection_name)
+
+            # Similar for other fields
+            try:
+                vectors_count = collection_info.vectors_count
+                indexed_vectors_count = collection_info.indexed_vectors_count
+                segments_count = collection_info.segments_count
+                vector_size = collection_info.config.params.vectors.size
+                distance = collection_info.config.params.vectors.distance
+            except AttributeError as attr_error:
+                logger.warning(f"Attribute access failed: {attr_error}. Trying fallback method.")
+                return self._get_collection_info_fallback(collection_name)
+
+            result = {
                 "name": collection_name,
-                "vectors_count": collection_info.vectors_count,
-                "indexed_vectors_count": collection_info.indexed_vectors_count,
-                "points_count": collection_info.points_count,
-                "segments_count": collection_info.segments_count,
+                "vectors_count": vectors_count,
+                "indexed_vectors_count": indexed_vectors_count,
+                "points_count": points_count,
+                "segments_count": segments_count,
                 "config": {
-                    "vector_size": collection_info.config.params.vectors.size,
-                    "distance": collection_info.config.params.vectors.distance,
+                    "vector_size": vector_size,
+                    "distance": str(distance) if distance else "Cosine",
                 },
             }
+            
+            logger.debug(f"Collection info result: {result}")
+            return result
 
         except Exception as e:
             error_msg = str(e)
+            logger.error(f"Failed to get collection info for {collection_name}: {error_msg}", exc_info=True)
+            
             # Check if this is a Pydantic validation error (version mismatch)
             if "validation error" in error_msg.lower() or "ParsingModel" in error_msg:
                 logger.error(
-                    f"Failed to get collection info for {collection_name}: {e}\n"
-                    f"This likely indicates a version mismatch between Qdrant server and Python client. "
-                    f"Ensure Qdrant server is upgraded to match the client version (1.16.2)."
+                    f"Qdrant version mismatch detected. Client: 1.16.2, Server version may differ."
                 )
+            
+            # Try fallback method
+            return self._get_collection_info_fallback(collection_name)
+
+    def _get_collection_info_fallback(self, collection_name: str) -> Optional[Dict[str, Any]]:
+        """
+        Fallback method to get collection info using direct HTTP API call.
+        This handles cases where the Python client API has changed between versions.
+        """
+        try:
+            import requests
+            
+            response = requests.get(
+                f"http://{self.host}:{self.port}/collections/{collection_name}",
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                result = data.get("result", {})
+                
+                logger.info(f"Using HTTP API fallback for collection {collection_name}. Points: {result.get('points_count', 0)}")
+                
+                return {
+                    "name": collection_name,
+                    "vectors_count": result.get("vectors_count", 0),
+                    "indexed_vectors_count": result.get("indexed_vectors_count", 0),
+                    "points_count": result.get("points_count", 0),
+                    "segments_count": result.get("segments_count", 0),
+                    "config": {
+                        "vector_size": result.get("config", {}).get("params", {}).get("vectors", {}).get("size", 0),
+                        "distance": str(result.get("config", {}).get("params", {}).get("vectors", {}).get("distance", "Cosine")),
+                    },
+                }
             else:
-                logger.error(f"Failed to get collection info for {collection_name}: {e}")
+                logger.error(f"HTTP API fallback failed for {collection_name}: {response.status_code} - {response.text}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Fallback method failed for {collection_name}: {e}")
             return None
 
     def delete_collection(self, collection_name: str) -> bool:
