@@ -163,13 +163,28 @@ class ApiClient {
   ): Promise<ApiResponse<T>> {
     try {
       // Ensure path starts with /api/v1 or includes the full path
-      // Normalize trailing slash for root endpoints to avoid 307 redirects
+      // Normalize trailing slash for list endpoints to avoid 307 redirects
+      // FastAPI routes defined with @router.get("/") require trailing slashes
       let normalizedPath = path
-      if (path.startsWith('/api/v1/') && !path.includes('?') && !path.includes('#')) {
-        const pathParts = path.split('/').filter(p => p)
-        // If it's a root endpoint (e.g., /api/v1/products), ensure trailing slash
-        if (pathParts.length === 3 && !path.endsWith('/')) {
-          normalizedPath = path + '/'
+      if (path.startsWith('/api/v1/')) {
+        // Split path and query string
+        const [pathPart, queryString] = path.split('?')
+        const hashPart = queryString?.includes('#') ? queryString.split('#')[1] : null
+        const queryPart = queryString?.split('#')[0]
+        
+        // Check if this is a list endpoint (no ID in path)
+        const pathParts = pathPart.split('/').filter(p => p)
+        // List endpoints have exactly 3 parts: api, v1, resource_name
+        // Detail endpoints have 4+ parts: api, v1, resource_name, id
+        const isListEndpoint = pathParts.length === 3
+        
+        // Add trailing slash for list endpoints
+        if (isListEndpoint && !pathPart.endsWith('/')) {
+          normalizedPath = pathPart + '/'
+          if (queryPart) normalizedPath += '?' + queryPart
+          if (hashPart) normalizedPath += '#' + hashPart
+        } else {
+          normalizedPath = path
         }
       }
       
@@ -411,8 +426,8 @@ class ApiClient {
   // Data Sources API
   async getDataSources(productId?: string): Promise<ApiResponse> {
     const path = productId 
-      ? `/api/v1/datasources?product_id=${productId}`
-      : '/api/v1/datasources'
+      ? `/api/v1/datasources/?product_id=${productId}`
+      : '/api/v1/datasources/'
     return this.get(path)
   }
 
@@ -567,7 +582,7 @@ class ApiClient {
 
   // Workspaces API
   async getWorkspaces(): Promise<ApiResponse> {
-    return this.get('/api/v1/workspaces')
+    return this.get('/api/v1/workspaces/')
   }
 
   async createWorkspace(): Promise<ApiResponse> {
@@ -621,8 +636,8 @@ class ApiClient {
   // Playbooks API
   async listPlaybooks(workspaceId?: string): Promise<ApiResponse> {
     const url = workspaceId 
-      ? `/api/v1/playbooks?workspace_id=${workspaceId}`
-      : '/api/v1/playbooks'
+      ? `/api/v1/playbooks/?workspace_id=${workspaceId}`
+      : '/api/v1/playbooks/'
     return this.get(url)
   }
 
@@ -738,7 +753,7 @@ class ApiClient {
     }
     
     const queryString = queryParams.toString()
-    const url = `/api/v1/embedding-models${queryString ? `?${queryString}` : ''}`
+    const url = `/api/v1/embedding-models/${queryString ? `?${queryString}` : ''}`
     return this.get(url)
   }
 
