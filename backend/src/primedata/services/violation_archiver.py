@@ -170,3 +170,4 @@ def load_archived_violations(product_id: UUID, version: int, minio_client=None) 
         logger.error(f"Error loading archived violations for product {product_id} v{version}: {e}", exc_info=True)
         return []
 
+
