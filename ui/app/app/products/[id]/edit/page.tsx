@@ -106,8 +106,9 @@ export default function EditProductPage() {
         setEmbeddingModelOptions(options)
       } catch (error) {
         console.error('Failed to load embedding models:', error)
-        // Fallback to sync version with fallback models
+        // Try sync version (uses cache if available, otherwise empty array)
         setEmbeddingModelOptions(getEmbeddingModelOptionsSync())
+        // Note: If this is empty, the UI should show an appropriate error message
       }
     }
     

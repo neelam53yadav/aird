@@ -3,7 +3,7 @@
  * 
  * This module provides utilities for working with embedding models,
  * including getting available options, dimensions, and API key requirements.
- * Models are fetched from the backend API to ensure consistency.
+ * Models are fetched from the backend API - backend is the single source of truth.
  */
 
 import { apiClient } from './api-client'
@@ -23,49 +23,6 @@ export interface EmbeddingModel {
   metadata?: Record<string, any>
 }
 
-/**
- * Fallback embedding model configurations (used if API fails).
- * These match the original hardcoded models for backward compatibility.
- */
-const FALLBACK_EMBEDDING_MODELS: Record<string, { name: string; dimension: number; requiresApiKey: boolean; description: string }> = {
-  minilm: {
-    name: 'MiniLM',
-    dimension: 384,
-    requiresApiKey: false,
-    description: 'Lightweight sentence transformer model optimized for speed'
-  },
-  'minilm-l12': {
-    name: 'MiniLM-L12',
-    dimension: 384,
-    requiresApiKey: false,
-    description: 'Higher quality MiniLM model with 12 layers'
-  },
-  mpnet: {
-    name: 'MPNet',
-    dimension: 768,
-    requiresApiKey: false,
-    description: "Microsoft's MPNet model for high-quality embeddings"
-  },
-  'openai-ada-002': {
-    name: 'OpenAI Ada-002',
-    dimension: 1536,
-    requiresApiKey: true,
-    description: "OpenAI's text-embedding-ada-002 model"
-  },
-  'openai-3-small': {
-    name: 'OpenAI Text-3-Small',
-    dimension: 1536,
-    requiresApiKey: true,
-    description: "OpenAI's latest small embedding model"
-  },
-  'openai-3-large': {
-    name: 'OpenAI Text-3-Large',
-    dimension: 3072,
-    requiresApiKey: true,
-    description: "OpenAI's latest large embedding model with higher dimensions"
-  }
-}
-
 // Cache for embedding models fetched from API
 let embeddingModelsCache: EmbeddingModel[] | null = null
 let embeddingModelsCacheTime: number = 0
@@ -73,9 +30,11 @@ const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
 
 /**
  * Fetch embedding models from the API.
+ * Backend is the single source of truth - no fallback models.
  * 
  * @param useCache - Whether to use cached models if available
- * @returns Array of embedding models
+ * @returns Array of embedding models from backend
+ * @throws Error if API call fails
  */
 async function fetchEmbeddingModels(useCache: boolean = true): Promise<EmbeddingModel[]> {
   // Check cache first
@@ -87,15 +46,11 @@ async function fetchEmbeddingModels(useCache: boolean = true): Promise<Embedding
     const response = await apiClient.getEmbeddingModels({ free_only: false })
     
     if (response.error || !response.data) {
-      console.warn('Failed to fetch embedding models from API, using fallback:', response.error)
-      // Return fallback models
-      return Object.entries(FALLBACK_EMBEDDING_MODELS).map(([id, config]) => ({
-        id,
-        name: config.name,
-        description: config.description,
-        dimension: config.dimension,
-        requires_api_key: config.requiresApiKey
-      }))
+      const errorMessage = response.error || 'Failed to fetch embedding models from API'
+      console.error('Failed to fetch embedding models from API:', errorMessage)
+      // Clear cache on error to force fresh fetch next time
+      embeddingModelsCache = null
+      throw new Error(errorMessage)
     }
 
     // Cache the results
@@ -105,14 +60,9 @@ async function fetchEmbeddingModels(useCache: boolean = true): Promise<Embedding
     return embeddingModelsCache || []
   } catch (error) {
     console.error('Error fetching embedding models:', error)
-    // Return fallback models on error
-    return Object.entries(FALLBACK_EMBEDDING_MODELS).map(([id, config]) => ({
-      id,
-      name: config.name,
-      description: config.description,
-      dimension: config.dimension,
-      requires_api_key: config.requiresApiKey
-    }))
+    // Clear cache on error to force fresh fetch next time
+    embeddingModelsCache = null
+    throw error
   }
 }
 
@@ -123,16 +73,22 @@ async function fetchEmbeddingModels(useCache: boolean = true): Promise<Embedding
  * @returns Array of embedding model options with value and label
  */
 export async function getEmbeddingModelOptions(useCache: boolean = true): Promise<EmbeddingModelOption[]> {
-  const models = await fetchEmbeddingModels(useCache)
-  return models.map((model) => ({
-    value: model.id,
-    label: model.name
-  }))
+  try {
+    const models = await fetchEmbeddingModels(useCache)
+    return models.map((model) => ({
+      value: model.id,
+      label: model.name
+    }))
+  } catch (error) {
+    console.error('Failed to get embedding model options:', error)
+    // Return empty array if API fails - UI should handle this gracefully
+    return []
+  }
 }
 
 /**
- * Synchronous version that uses cache or fallback.
- * Use this for immediate access, but prefer async version for fresh data.
+ * Synchronous version that uses cache only.
+ * Returns empty array if cache not available - backend is required.
  */
 export function getEmbeddingModelOptionsSync(): EmbeddingModelOption[] {
   if (embeddingModelsCache) {
@@ -142,11 +98,8 @@ export function getEmbeddingModelOptionsSync(): EmbeddingModelOption[] {
     }))
   }
   
-  // Use fallback if cache not available
-  return Object.entries(FALLBACK_EMBEDDING_MODELS).map(([value, config]) => ({
-    value,
-    label: config.name
-  }))
+  // No fallback - return empty array if cache not available
+  return []
 }
 
 /**
@@ -162,10 +115,6 @@ export async function getEmbeddingDimension(modelName: string): Promise<number |
     if (model) return model.dimension
   }
   
-  // Check fallback
-  const fallbackModel = FALLBACK_EMBEDDING_MODELS[modelName]
-  if (fallbackModel) return fallbackModel.dimension
-  
   // Try to fetch from API
   try {
     const models = await fetchEmbeddingModels(false)
@@ -175,12 +124,12 @@ export async function getEmbeddingDimension(modelName: string): Promise<number |
     console.error('Error fetching embedding dimension:', error)
   }
   
-  // Return undefined if model not found anywhere
+  // Return undefined if model not found
   return undefined
 }
 
 /**
- * Synchronous version that uses cache or fallback.
+ * Synchronous version that uses cache only.
  */
 export function getEmbeddingDimensionSync(modelName: string): number | undefined {
   if (embeddingModelsCache) {
@@ -188,8 +137,8 @@ export function getEmbeddingDimensionSync(modelName: string): number | undefined
     if (model) return model.dimension
   }
   
-  const fallbackModel = FALLBACK_EMBEDDING_MODELS[modelName]
-  return fallbackModel?.dimension
+  // No fallback - return undefined if not in cache
+  return undefined
 }
 
 /**
@@ -205,10 +154,6 @@ export async function requiresApiKey(modelName: string): Promise<boolean> {
     if (model) return model.requires_api_key
   }
   
-  // Check fallback
-  const fallbackModel = FALLBACK_EMBEDDING_MODELS[modelName]
-  if (fallbackModel) return fallbackModel.requiresApiKey
-  
   // Try to fetch from API
   try {
     const models = await fetchEmbeddingModels(false)
@@ -223,7 +168,7 @@ export async function requiresApiKey(modelName: string): Promise<boolean> {
 }
 
 /**
- * Synchronous version that uses cache or fallback.
+ * Synchronous version that uses cache only.
  */
 export function requiresApiKeySync(modelName: string): boolean {
   if (embeddingModelsCache) {
@@ -231,8 +176,8 @@ export function requiresApiKeySync(modelName: string): boolean {
     if (model) return model.requires_api_key
   }
   
-  const fallbackModel = FALLBACK_EMBEDDING_MODELS[modelName]
-  return fallbackModel?.requiresApiKey ?? false
+  // No fallback - return false if not in cache
+  return false
 }
 
 /**
@@ -247,8 +192,8 @@ export function formatEmbeddingModelName(modelName: string): string {
     if (model) return model.name
   }
   
-  const fallbackModel = FALLBACK_EMBEDDING_MODELS[modelName]
-  return fallbackModel?.name || modelName
+  // No fallback - return model ID if not in cache
+  return modelName
 }
 
 /**

@@ -3,11 +3,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Play, RefreshCw, Clock, CheckCircle, XCircle, AlertTriangle, Loader2, X } from 'lucide-react'
+import { ArrowLeft, Play, Clock, CheckCircle, XCircle, AlertTriangle, Loader2, X, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import AppLayout from '@/components/layout/AppLayout'
 import { apiClient, PipelineRun } from '@/lib/api-client'
 import { useToast } from '@/components/ui/toast'
+import PipelineDetailsModal from '@/components/PipelineDetailsModal'
 
 export default function PipelineRunsPage() {
   const params = useParams()
@@ -20,12 +21,12 @@ export default function PipelineRunsPage() {
   const [error, setError] = useState<string | null>(null)
   const [polling, setPolling] = useState(false)
   const [triggering, setTriggering] = useState(false)
-  const [syncing, setSyncing] = useState(false)
   const [pipelineConflict, setPipelineConflict] = useState<any>(null)
   const [currentPage, setCurrentPage] = useState(0)
   const [totalRuns, setTotalRuns] = useState(0)
   const [product, setProduct] = useState<any>(null)
   const [promotingVersion, setPromotingVersion] = useState<number | null>(null)
+  const [selectedRunForDetails, setSelectedRunForDetails] = useState<PipelineRun | null>(null)
   const RUNS_PER_PAGE = 20
 
   const loadProduct = useCallback(async () => {
@@ -94,7 +95,7 @@ export default function PipelineRunsPage() {
       setPolling(true)
       const interval = setInterval(() => {
         loadPipelineRuns(currentPage, false) // Don't show loading spinner during polling
-      }, 5000) // Poll every 5 seconds
+      }, 30000) // Poll every 30 seconds
 
       return () => {
         clearInterval(interval)
@@ -143,33 +144,6 @@ export default function PipelineRunsPage() {
       })
     } finally {
       setTriggering(false)
-    }
-  }
-
-  const handleSync = async () => {
-    setSyncing(true)
-    try {
-      const response = await apiClient.syncPipelineRuns(productId)
-      
-      if (response.error) {
-        addToast({
-          type: 'error',
-          message: `Failed to sync: ${response.error}`,
-        })
-      } else if (response.data) {
-        addToast({
-          type: 'success',
-          message: `Synced ${response.data.updated_count} pipeline runs`,
-        })
-        loadPipelineRuns(currentPage, false)
-      }
-    } catch (err) {
-      addToast({
-        type: 'error',
-        message: err instanceof Error ? err.message : 'Failed to sync',
-      })
-    } finally {
-      setSyncing(false)
     }
   }
 
@@ -300,6 +274,18 @@ export default function PipelineRunsPage() {
     }
   }
 
+  const handleViewDetails = (run: PipelineRun) => {
+    setSelectedRunForDetails(run)
+  }
+
+  const handleCloseDetails = () => {
+    setSelectedRunForDetails(null)
+  }
+
+  const handlePipelineCancelled = () => {
+    loadPipelineRuns(currentPage, false)
+  }
+
   return (
     <AppLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -320,15 +306,6 @@ export default function PipelineRunsPage() {
               </p>
             </div>
             <div className="flex items-center gap-3">
-              <Button
-                variant="outline"
-                onClick={handleSync}
-                disabled={syncing}
-                className="flex items-center gap-2"
-              >
-                <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
-                {syncing ? 'Syncing...' : 'Sync with Airflow'}
-              </Button>
               <Button
                 onClick={() => handleTriggerPipeline(false)}
                 disabled={triggering}
@@ -439,9 +416,6 @@ export default function PipelineRunsPage() {
                       AIRD Stages
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      DAG Run ID
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
                     </th>
                   </tr>
@@ -499,18 +473,16 @@ export default function PipelineRunsPage() {
                           )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-500 font-mono">
-                            {run.dag_run_id ? (
-                              <span className="truncate max-w-xs inline-block" title={run.dag_run_id}>
-                                {run.dag_run_id}
-                              </span>
-                            ) : (
-                              <span className="text-gray-400">N/A</span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleViewDetails(run)}
+                              className="flex items-center gap-1"
+                            >
+                              <Eye className="h-4 w-4" />
+                              View Details
+                            </Button>
                             {(run.status === 'running' || run.status === 'queued') && run.id && (
                               <Button
                                 variant="outline"
@@ -592,6 +564,19 @@ export default function PipelineRunsPage() {
               Auto-refreshing pipeline status...
             </p>
           </div>
+        )}
+
+        {/* Pipeline Details Modal */}
+        {selectedRunForDetails && (
+          <PipelineDetailsModal
+            isOpen={!!selectedRunForDetails}
+            onClose={handleCloseDetails}
+            runId={selectedRunForDetails.id!}
+            runVersion={selectedRunForDetails.version}
+            runStatus={selectedRunForDetails.status || 'unknown'}
+            initialMetrics={selectedRunForDetails.metrics}
+            onPipelineCancelled={handlePipelineCancelled}
+          />
         )}
       </div>
     </AppLayout>
