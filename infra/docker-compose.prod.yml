@@ -131,10 +131,10 @@ services:
       QDRANT_GRPC_PORT: '6334'
       AIRFLOW_HOST: airflow-webserver
       AIRFLOW_PORT: '8080'
-      AIRFLOW_URL: ${AIRFLOW_URL:-http://34.28.26.21:8080}
+      AIRFLOW_URL: ${AIRFLOW_URL:-https://airdops.com/airflow}
       AIRFLOW_USERNAME: ${AIRFLOW_USERNAME:-admin}
       AIRFLOW_PASSWORD: ${AIRFLOW_PASSWORD:-admin}
-      CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost:3000"]}
+      CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost:3000","https://airdops.com","https://www.airdops.com"]}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
       FRONTEND_URL: ${FRONTEND_URL}
@@ -149,8 +149,6 @@ services:
       SMTP_USERNAME: ${SMTP_USERNAME:-primedata.feedback@gmail.com}
       SMTP_PASSWORD: ${SMTP_PASSWORD}
       SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-primedata.feedback@gmail.com}
-    ports:
-      - "8000:8000"
     depends_on:
       qdrant:
         condition: service_started
@@ -173,10 +171,26 @@ services:
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
-    ports:
-      - "3000:3000"
     depends_on:
       - backend
+    restart: unless-stopped
+    networks:
+      - primedata-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: primedata-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infra/nginx/conf.d:/etc/nginx/conf.d:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /var/www/certbot:/var/www/certbot:ro
+    depends_on:
+      - frontend
+      - backend
+      - airflow-webserver
     restart: unless-stopped
     networks:
       - primedata-network

@@ -23,9 +23,9 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+psycopg2://primedata:primedata123@localhost:5433/primedata"
 
     # CORS - can be set via environment variable as JSON array or comma-separated string
-    # Example: CORS_ORIGINS='["http://localhost:3000","http://34.28.26.21:3000"]'
-    # Or: CORS_ORIGINS=http://localhost:3000,http://34.28.26.21:3000
-    CORS_ORIGINS: Union[List[str], str] = ["http://localhost:3000", "http://127.0.0.1:3000", "http://34.28.26.21:3000"]
+    # Example: CORS_ORIGINS='["http://localhost:3000","https://airdops.com"]'
+    # Or: CORS_ORIGINS=http://localhost:3000,https://airdops.com
+    CORS_ORIGINS: Union[List[str], str] = ["http://localhost:3000", "http://127.0.0.1:3000", "https://airdops.com", "https://www.airdops.com"]
 
     # Authentication
     NEXTAUTH_SECRET: str = "REPLACE_WITH_64_CHAR_RANDOM_STRING_FOR_PRODUCTION_USE_ONLY"
@@ -80,7 +80,7 @@ class Settings(BaseSettings):
     SMTP_USERNAME: Optional[str] = None  # SMTP username (usually your email)
     SMTP_PASSWORD: Optional[str] = None  # SMTP password or app-specific password
     SMTP_FROM_EMAIL: str = "noreply@primedata.com"  # From email address
-    FRONTEND_URL: str = "http://localhost:3000"  # Frontend URL for email links
+    FRONTEND_URL: str = "https://airdops.com"  # Frontend URL for email links
 
     class Config:
         env_file = ".env"
