@@ -667,6 +667,52 @@ class PreprocessStage(AirdStage):
             # No stored boundaries, just re-split normally
             pages = split_pages_by_config(cleaned, playbook.get("page_fences", []))
 
+        # Validate that we have pages with content
+        if not pages:
+            error_msg = f"No pages found after optimization and re-splitting for {file_stem}. Original text length: {len(raw_text)}, Cleaned text length: {len(cleaned)}"
+            self.logger.error(error_msg)
+            std_logger.error(error_msg)
+            return [], {
+                "error": "No pages after processing",
+                "sections": 0,
+                "chunks": 0,
+                "sections_detected": 0,
+                "mid_sentence_ends": 0,
+                "chunking_config_used": None,
+            }
+        
+        # Check if all pages are empty
+        pages_with_content = [p for p in pages if p.get("text", "").strip()]
+        if not pages_with_content:
+            error_msg = (
+                f"All pages are empty after processing for {file_stem}. "
+                f"Original text length: {len(raw_text)}, Cleaned text length: {len(cleaned)}. "
+                f"Total pages: {len(pages)}"
+            )
+            self.logger.error(error_msg)
+            std_logger.error(error_msg)
+            return [], {
+                "error": "All pages empty after processing",
+                "sections": 0,
+                "chunks": 0,
+                "sections_detected": 0,
+                "mid_sentence_ends": 0,
+                "chunking_config_used": None,
+            }
+        
+        # Use pages with content
+        if len(pages_with_content) < len(pages):
+            self.logger.warning(
+                f"After processing: {len(pages_with_content)} pages with content (out of {len(pages)} total). "
+                f"Some pages were empty and will be skipped."
+            )
+            std_logger.warning(
+                f"After processing: {len(pages_with_content)} pages with content (out of {len(pages)} total)"
+            )
+        pages = pages_with_content
+        self.logger.info(f"Processing {len(pages)} pages with content for {file_stem}")
+        std_logger.info(f"Processing {len(pages)} pages with content for {file_stem}")
+
         # Check for enhanced metadata extraction flag from chunking_config
         preprocessing_flags = {}
         if chunking_config:
@@ -903,6 +949,12 @@ class PreprocessStage(AirdStage):
             page_text = page_data["text"]
             page_num = page_data["page"]
 
+            # Validate page has content
+            if not page_text.strip():
+                self.logger.warning(f"Skipping empty page {page_num} for {file_stem}")
+                std_logger.warning(f"Skipping empty page {page_num} for {file_stem}")
+                continue
+
             # Detect sections
             sections = detect_sections_configured(
                 page_text,
@@ -910,9 +962,29 @@ class PreprocessStage(AirdStage):
                 playbook.get("section_aliases", {}),
             )
             sections_detected += len(sections)
+            
+            # Log if no sections detected
+            if not sections:
+                self.logger.warning(
+                    f"No sections detected on page {page_num} for {file_stem}. "
+                    f"Page text length: {len(page_text)}, Preview: {page_text[:100]}..."
+                )
+                std_logger.warning(
+                    f"No sections detected on page {page_num} for {file_stem}"
+                )
+                continue
 
             # Process each section
             for title_raw, canon_section, body_text in sections:
+                # Validate section has content
+                if not body_text.strip():
+                    self.logger.warning(
+                        f"Skipping empty section '{canon_section}' on page {page_num} for {file_stem}"
+                    )
+                    std_logger.warning(
+                        f"Skipping empty section '{canon_section}' on page {page_num} for {file_stem}"
+                    )
+                    continue
                 # Chunk the section based on strategy
                 if strategy == "paragraph":
                     # Use paragraph overlap (approximately 1 paragraph for overlap)
@@ -926,6 +998,28 @@ class PreprocessStage(AirdStage):
                 else:
                     # Default to sentence chunking for unknown strategies
                     chunks = sentence_chunk(body_text, max_tokens, overlap_sents, hard_overlap)
+
+                # Log if chunks are empty
+                if not chunks:
+                    self.logger.warning(
+                        f"No chunks created for section '{canon_section}' on page {page_num} for {file_stem}. "
+                        f"Body text length: {len(body_text)}, Strategy: {strategy}, Max tokens: {max_tokens}, "
+                        f"Overlap sentences: {overlap_sents}, Hard overlap: {hard_overlap}"
+                    )
+                    std_logger.warning(
+                        f"No chunks created for section '{canon_section}' on page {page_num} for {file_stem}"
+                    )
+                    continue
+                
+                # Log first few chunks for debugging
+                if chunks_processed == 0:
+                    self.logger.info(
+                        f"First chunk created: section='{canon_section}', page={page_num}, "
+                        f"chunk_length={len(chunks[0])}, total_chunks_in_section={len(chunks)}"
+                    )
+                    std_logger.info(
+                        f"First chunk created: section='{canon_section}', page={page_num}"
+                    )
 
                 # Build records for each chunk
                 for idx, chunk_text in enumerate(chunks):
