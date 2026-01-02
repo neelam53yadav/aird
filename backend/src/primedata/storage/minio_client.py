@@ -274,42 +274,53 @@ class MinIOClient:
 
                 gcs_bucket = self.gcs_client.bucket(bucket)
                 blob = gcs_bucket.blob(key)
+                
+                # Check if blob exists
+                if not blob.exists():
+                    logger.warning(f"Blob {bucket}/{key} does not exist")
+                    return None
 
                 try:
-                    # GCS signed URL parameters
+                    # GCS signed URL generation
+                    # This requires service account credentials with a private key
                     url = blob.generate_signed_url(
                         expiration=datetime.utcnow() + timedelta(seconds=expiry),
                         method="GET",
                         response_disposition="inline" if inline else "attachment",
                     )
-                    return url
+                    
+                    # Verify the URL is a proper signed URL (contains signature parameters)
+                    if url and ('X-Goog-Signature' in url or 'Signature' in url or 'Expires' in url):
+                        logger.debug(f"Successfully generated signed URL for {bucket}/{key}")
+                        return url
+                    else:
+                        logger.warning(f"Generated GCS URL doesn't appear to be signed: {url[:100]}...")
+                        return None
+                        
                 except AttributeError as e:
-                    if "private key" in str(e).lower() or "sign credentials" in str(e).lower():
-                        # Compute Engine credentials don't have a private key for signing
-                        # Only log warning once per unique file to reduce noise
+                    error_str = str(e).lower()
+                    if "private key" in error_str or "sign credentials" in error_str or "signing" in error_str:
+                        # This happens when using Compute Engine default credentials (metadata server)
+                        # which don't have a private key for signing
                         warning_key = f"{bucket}/{key}"
                         if warning_key not in MinIOClient._gcs_warning_logged:
-                            logger.warning(
+                            logger.error(
                                 f"Cannot generate signed URL for {bucket}/{key}: {e}\n"
-                                f"Using Compute Engine credentials which don't support URL signing. "
-                                f"Consider using a service account JSON key file (GOOGLE_APPLICATION_CREDENTIALS) "
-                                f"or use IAM-based access control instead of presigned URLs."
+                                f"This usually means GOOGLE_APPLICATION_CREDENTIALS is not set to a service account JSON file, "
+                                f"or the service account doesn't have signing permissions. "
+                                f"Compute Engine default credentials don't support URL signing. "
+                                f"Please set GOOGLE_APPLICATION_CREDENTIALS to a service account JSON key file."
                             )
                             MinIOClient._gcs_warning_logged.add(warning_key)
-                        else:
-                            logger.debug(f"Skipping duplicate GCS presigned URL warning for {bucket}/{key}")
-                        # Optionally, try to return a public URL if the blob is public
-                        try:
-                            public_url = blob.public_url
-                            if public_url:
-                                logger.info(f"Using public URL for {bucket}/{key}")
-                                return public_url
-                        except Exception:
-                            pass
                         return None
                     else:
                         # Re-raise if it's a different AttributeError
+                        logger.error(f"Unexpected AttributeError generating signed URL: {e}")
                         raise
+                except Exception as e:
+                    # Catch any other exceptions during signed URL generation
+                    logger.error(f"Failed to generate signed URL for {bucket}/{key}: {e}", exc_info=True)
+                    return None
             else:
                 # Generate presigned URL for MinIO
                 from datetime import timedelta

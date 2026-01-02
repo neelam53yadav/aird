@@ -1465,9 +1465,6 @@ export default function ProductDetailPage() {
                             Type
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Stage
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Size
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -1480,7 +1477,8 @@ export default function ProductDetailPage() {
                           const formatFileSize = (bytes: number) => {
                             if (bytes < 1024) return `${bytes} B`
                             if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-                            return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+                            if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+                            return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
                           }
 
                           const getArtifactIcon = (type: string) => {
@@ -1516,11 +1514,6 @@ export default function ProductDetailPage() {
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <span className="text-sm text-gray-600">
-                                  {artifact.stage_name?.replace(/_/g, ' ') || 'N/A'}
-                                </span>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <span className="text-sm text-gray-600">
                                   {artifact.file_size ? formatFileSize(artifact.file_size) : 'N/A'}
                                 </span>
                               </td>
@@ -1530,10 +1523,10 @@ export default function ProductDetailPage() {
                                     variant="outline"
                                     size="sm"
                                     onClick={() => handleViewArtifact(artifact)}
-                                    className="flex items-center gap-1"
+                                    className="p-2"
+                                    title="View artifact"
                                   >
                                     <Eye className="h-4 w-4" />
-                                    View
                                   </Button>
                                   {artifact.download_url && (
                                     <a
@@ -1541,10 +1534,10 @@ export default function ProductDetailPage() {
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       download
-                                      className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                                      className="inline-flex items-center justify-center p-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                                      title="Download artifact"
                                     >
-                                      <Download className="h-4 w-4 mr-1" />
-                                      Download
+                                      <Download className="h-4 w-4" />
                                     </a>
                                   )}
                                 </div>
@@ -2149,36 +2142,13 @@ export default function ProductDetailPage() {
               </div>
 
               {/* Footer */}
-              <div className="bg-gray-50 px-6 py-3 flex justify-between items-center">
-                <div className="text-sm text-gray-600">
-                  {viewingArtifact.description && (
-                    <p className="italic">{viewingArtifact.description}</p>
-                  )}
-                </div>
-                <div className="flex justify-end space-x-3">
-                  {viewingArtifact.download_url ? (
-                    <a
-                      href={viewingArtifact.download_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      download
-                      className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-blue-700 rounded-md hover:bg-blue-700 inline-flex items-center transition-colors"
-                    >
-                      <Download className="h-4 w-4 mr-2" />
-                      Download (Presigned URL)
-                    </a>
-                  ) : (
-                    <span className="px-4 py-2 text-sm text-gray-500 italic">
-                      Download URL not available
-                    </span>
-                  )}
-                  <button
-                    onClick={() => setViewingArtifact(null)}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-                  >
-                    Close
-                  </button>
-                </div>
+              <div className="bg-gray-50 px-6 py-3 flex justify-end">
+                <button
+                  onClick={() => setViewingArtifact(null)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                >
+                  Close
+                </button>
               </div>
             </div>
           </div>

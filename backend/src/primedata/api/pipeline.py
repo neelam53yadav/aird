@@ -958,6 +958,10 @@ async def get_pipeline_artifacts(
         .all()
     )
 
+    # Initialize Qdrant client for vector artifacts
+    from primedata.indexing.qdrant_client import QdrantClient
+    qdrant_client = QdrantClient()
+    
     # Artifact display names mapping
     artifact_display_names = {
         "fingerprint": "AI Readiness Fingerprint",
@@ -980,16 +984,56 @@ async def get_pipeline_artifacts(
 
     result = []
     for artifact in artifacts:
-        # Generate presigned URL for download
+        # Generate presigned URL for download (only for non-vector artifacts)
         download_url = None
-        try:
-            download_url = minio_client.presign(
-                artifact.storage_bucket,
-                artifact.storage_key,
-                expiry=3600,  # 1 hour expiry
-            )
-        except Exception as e:
-            logger.warning(f"Failed to generate presigned URL for artifact {artifact.id}: {e}")
+        file_size = artifact.file_size
+        
+        # For vector artifacts, get size from Qdrant collection
+        if artifact.artifact_type.value.lower() == 'vector':
+            try:
+                # Find collection name for this product/version
+                collection_name = qdrant_client.find_collection_name(
+                    workspace_id=str(product.workspace_id),
+                    product_id=str(product.id),
+                    version=version,
+                    product_name=product.name,
+                )
+                
+                if collection_name and qdrant_client.is_connected():
+                    collection_info = qdrant_client.get_collection_info(collection_name)
+                    if collection_info:
+                        points_count = collection_info.get("points_count", 0)
+                        vector_size = collection_info.get("config", {}).get("vector_size", 0)
+                        # Estimate size: points_count * (vector_size * 4 bytes per float32 + payload overhead)
+                        # Rough estimate: vector_size * 4 bytes per point + 1KB payload overhead per point
+                        estimated_bytes = points_count * (vector_size * 4 + 1024)
+                        file_size = estimated_bytes
+                        logger.debug(f"Calculated vector artifact size: {estimated_bytes} bytes ({points_count} points, {vector_size} dims)")
+            except Exception as e:
+                logger.warning(f"Failed to get Qdrant collection size for vector artifact: {e}")
+                # Keep original file_size if available
+        else:
+            # For non-vector artifacts, generate presigned URL
+            try:
+                download_url = minio_client.presign(
+                    artifact.storage_bucket,
+                    artifact.storage_key,
+                    expiry=3600,  # 1 hour expiry
+                )
+                # Validate the presigned URL
+                if download_url:
+                    # Check if it's a valid signed URL (contains signature parameters)
+                    if 'X-Goog-Signature' in download_url or 'Signature' in download_url or 'Expires' in download_url:
+                        logger.debug(f"Generated valid presigned URL for artifact {artifact.id}")
+                    else:
+                        # If it's a direct GCS URL without signature, it won't work for private blobs
+                        logger.warning(f"Presigned URL for artifact {artifact.id} doesn't contain signature parameters")
+                        download_url = None
+                else:
+                    logger.warning(f"Failed to generate presigned URL for artifact {artifact.id}")
+            except Exception as e:
+                logger.warning(f"Failed to generate presigned URL for artifact {artifact.id}: {e}")
+                download_url = None
 
         # Get display name
         display_name = artifact_display_names.get(artifact.artifact_name, artifact.artifact_name.replace("_", " ").title())
@@ -1003,9 +1047,9 @@ async def get_pipeline_artifacts(
                 stage_name=artifact.stage_name,
                 artifact_name=artifact.artifact_name,
                 artifact_type=artifact.artifact_type.value,
-                file_size=artifact.file_size,
+                file_size=file_size,  # Use calculated size for vectors
                 created_at=artifact.created_at.isoformat() if artifact.created_at else "",
-                download_url=download_url,
+                download_url=download_url,  # Only set if presigned URL was successfully generated
                 display_name=display_name,
                 description=description,
             )
