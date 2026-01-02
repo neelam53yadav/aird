@@ -15,14 +15,14 @@ export function Footer() {
             <Link 
               href="/" 
               className="block mb-4"
-              aria-label="Go to PrimeData homepage"
+              aria-label="Go to AIRDOps homepage"
             >
               <h3 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent hover:from-blue-300 hover:to-indigo-300 transition-all duration-200 cursor-pointer">
-                PrimeData
+                AIRDOps
               </h3>
             </Link>
             <p className="text-gray-300 text-sm leading-relaxed mb-4">
-              Enterprise AI Data Platform. Transform your data into production-ready AI assets with enterprise-grade processing and validation.
+              Making Data AI-Ready. Transform your data into production-ready AI assets with enterprise-grade processing and validation.
             </p>
             <div className="flex space-x-4 mt-6">
               <a
@@ -146,7 +146,7 @@ export function Footer() {
         <div className="border-t border-gray-700 pt-8 mt-8">
           <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
             <div className="text-gray-400 text-sm">
-              © {currentYear} PrimeData. All rights reserved.
+              © {currentYear} AIRDOps. All rights reserved.
             </div>
             <div className="flex flex-wrap justify-center md:justify-end gap-6 text-sm text-gray-400">
               <Link href="/terms" className="hover:text-white transition-colors">

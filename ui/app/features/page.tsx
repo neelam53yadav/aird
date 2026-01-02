@@ -146,7 +146,7 @@ const FEATURES: readonly Feature[] = [
   }
 ] as const
 
-const BETA_BANNER_TEXT = "PrimeData Beta Release - We're actively improving based on your feedback"
+const BETA_BANNER_TEXT = "AIRDOps Beta Release - We're actively improving based on your feedback"
 
 // Component: Beta Banner (reusable)
 function BetaBanner() {
@@ -228,7 +228,7 @@ function CTASection() {
 /**
  * Features Page Component
  * 
- * Displays comprehensive feature list for PrimeData platform.
+ * Displays comprehensive feature list for AIRDOps platform.
  * Follows enterprise best practices with proper TypeScript types,
  * accessibility, and performance optimizations.
  */

@@ -118,7 +118,7 @@ const FAQ: readonly FAQItem[] = [
   }
 ] as const
 
-const BETA_BANNER_TEXT = "PrimeData Beta Release - We're actively improving based on your feedback"
+const BETA_BANNER_TEXT = "AIRDOps Beta Release - We're actively improving based on your feedback"
 
 // Component: Beta Banner
 function BetaBanner() {
@@ -216,7 +216,7 @@ function FAQSection() {
 /**
  * Pricing Page Component
  * 
- * Displays pricing plans and FAQ for PrimeData platform.
+ * Displays pricing plans and FAQ for AIRDOps platform.
  * Follows enterprise best practices with proper TypeScript types,
  * accessibility, and performance optimizations.
  */

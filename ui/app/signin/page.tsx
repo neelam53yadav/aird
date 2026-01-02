@@ -13,7 +13,7 @@ export default function SignInPage() {
           <div className="flex items-center justify-center space-x-2" aria-live="polite">
             <Sparkles className="h-4 w-4" aria-hidden="true" />
             <span className="text-sm font-medium">
-              PrimeData Beta Release - We're actively improving based on your feedback
+              AIRDOps Beta Release - We're actively improving based on your feedback
             </span>
           </div>
         </div>
@@ -24,12 +24,13 @@ export default function SignInPage() {
         <div className="w-full max-w-md">
           {/* Logo/Brand Section */}
           <div className="text-center mb-8">
-            <Link href="/" className="inline-block mb-6" aria-label="Go to PrimeData homepage">
+            <Link href="/" className="inline-block mb-6" aria-label="Go to AIRDOps homepage">
               <h1 className="text-5xl md:text-6xl font-bold mb-2">
                 <span className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                  PrimeData
+                  AIRDOps
                 </span>
               </h1>
+              <p className="text-sm text-gray-500 mt-1">Making Data AI-Ready</p>
             </Link>
           </div>
 

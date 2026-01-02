@@ -121,7 +121,7 @@ export default function HomePage() {
           <div className="flex items-center justify-center space-x-2">
             <Sparkles className="h-4 w-4" />
             <span className="text-sm font-medium">
-              PrimeData Beta Release - We're actively improving based on your feedback
+              AIRDOps Beta Release - We're actively improving based on your feedback
             </span>
           </div>
         </div>
@@ -137,10 +137,10 @@ export default function HomePage() {
           
           <h1 className="text-6xl md:text-7xl font-bold mb-4 leading-tight">
             <span className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent">
-              PrimeData
+              AIRDOps
             </span>
             <span className="block text-xl md:text-2xl text-gray-500 font-normal mt-5 tracking-normal">
-              AI-ready data from any source
+              Making Data AI-Ready
             </span>
           </h1>
           

@@ -1,5 +1,5 @@
 /**
- * API Client for PrimeData Backend
+ * API Client for AIRDOps Backend
  * 
  * This module provides a centralized API client for making requests to the backend API.
  * All requests automatically include authentication cookies and handle errors consistently.

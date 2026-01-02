@@ -8,7 +8,7 @@ import {
 } from 'lucide-react'
 
 // Constants
-const BETA_BANNER_TEXT = "PrimeData Beta Release - We're actively improving based on your feedback"
+const BETA_BANNER_TEXT = "AIRDOps Beta Release - We're actively improving based on your feedback"
 const LAST_UPDATED = new Date().toLocaleDateString('en-US', { 
   year: 'numeric', 
   month: 'long', 
@@ -52,7 +52,7 @@ function PrivacySection({ id, title, subtitle, children }: PrivacySectionProps) 
 /**
  * Privacy Policy Page Component
  * 
- * Displays privacy policy for PrimeData platform.
+ * Displays privacy policy for AIRDOps platform.
  * Follows enterprise best practices with proper accessibility,
  * semantic HTML, and GDPR compliance considerations.
  */
@@ -81,7 +81,7 @@ export default function PrivacyPage() {
           <div className="prose prose-lg max-w-none space-y-8 text-gray-700">
             <section>
               <p className="text-lg">
-                At PrimeData, we take your privacy seriously. This Privacy Policy explains how we collect, use, disclose, 
+                At AIRDOps, we take your privacy seriously. This Privacy Policy explains how we collect, use, disclose, 
                 and safeguard your information when you use our Service.
               </p>
             </section>
@@ -116,7 +116,7 @@ export default function PrivacyPage() {
               <div className="mt-6">
                 <h3 className="text-xl font-semibold text-gray-900 mb-3">1.3 Data You Process</h3>
                 <p>
-                  We process data that you upload to PrimeData for the purpose of providing our services. You retain all ownership 
+                  We process data that you upload to AIRDOps for the purpose of providing our services. You retain all ownership 
                   and rights to your data. We do not use your processed data for any purpose other than providing the Service.
                 </p>
               </div>
