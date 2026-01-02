@@ -272,13 +272,35 @@ class MinIOClient:
                 gcs_bucket = self.gcs_client.bucket(bucket)
                 blob = gcs_bucket.blob(key)
 
-                # GCS signed URL parameters
-                url = blob.generate_signed_url(
-                    expiration=datetime.utcnow() + timedelta(seconds=expiry),
-                    method="GET",
-                    response_disposition="inline" if inline else "attachment",
-                )
-                return url
+                try:
+                    # GCS signed URL parameters
+                    url = blob.generate_signed_url(
+                        expiration=datetime.utcnow() + timedelta(seconds=expiry),
+                        method="GET",
+                        response_disposition="inline" if inline else "attachment",
+                    )
+                    return url
+                except AttributeError as e:
+                    if "private key" in str(e).lower() or "sign credentials" in str(e).lower():
+                        # Compute Engine credentials don't have a private key for signing
+                        logger.warning(
+                            f"Cannot generate signed URL for {bucket}/{key}: {e}\n"
+                            f"Using Compute Engine credentials which don't support URL signing. "
+                            f"Consider using a service account JSON key file (GOOGLE_APPLICATION_CREDENTIALS) "
+                            f"or use IAM-based access control instead of presigned URLs."
+                        )
+                        # Optionally, try to return a public URL if the blob is public
+                        try:
+                            public_url = blob.public_url
+                            if public_url:
+                                logger.info(f"Using public URL for {bucket}/{key}")
+                                return public_url
+                        except Exception:
+                            pass
+                        return None
+                    else:
+                        # Re-raise if it's a different AttributeError
+                        raise
             else:
                 # Generate presigned URL for MinIO
                 from datetime import timedelta
