@@ -896,6 +896,79 @@ jobs:
             ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
             "bash /tmp/deploy_script.sh"
 
+      - name: Generate SSL certificate for Qdrant subdomain
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Checking SSL certificate for qdrant.airdops.com..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          
+          # Determine Docker command
+          DOCKER_CMD="docker"
+          if ! ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} "docker ps" > /dev/null 2>&1; then
+            DOCKER_CMD="sudo docker"
+          fi
+          
+          # Check if certificate already exists
+          CERT_EXISTS=$(ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+            "test -f /etc/letsencrypt/live/qdrant.airdops.com/fullchain.pem && echo 'exists' || echo 'missing'")
+          
+          if [ "$CERT_EXISTS" = "exists" ]; then
+            echo "✅ SSL certificate for qdrant.airdops.com already exists (skipping generation)"
+          else
+            echo "⚠️  SSL certificate not found. Attempting to generate..."
+            echo "   Note: This requires DNS to be configured and nginx to be running with HTTP server block"
+            echo ""
+            
+            # Try to generate certificate (this will fail if DNS is not configured, but that's ok)
+            # Certbot will not overwrite existing certificates
+            ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+              "sudo certbot certonly --webroot -w /var/www/certbot -d qdrant.airdops.com --non-interactive --agree-tos --email admin@airdops.com || echo 'Certificate generation failed (DNS may not be configured yet)'" || true
+            
+            # Check again
+            CERT_EXISTS=$(ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+              "test -f /etc/letsencrypt/live/qdrant.airdops.com/fullchain.pem && echo 'exists' || echo 'missing'")
+            
+            if [ "$CERT_EXISTS" = "exists" ]; then
+              echo "✅ SSL certificate generated successfully"
+            else
+              echo "⚠️  SSL certificate generation skipped or failed"
+              echo "   You may need to generate it manually or configure DNS first"
+              echo "   Run manually: sudo certbot certonly --webroot -w /var/www/certbot -d qdrant.airdops.com"
+            fi
+          fi
+
+      - name: Reload Nginx configuration
+        if: steps.detect-changes.outputs.nginx_changed == 'true'
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Reloading Nginx configuration..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          
+          # Determine Docker command
+          DOCKER_CMD="docker"
+          if ! ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} "docker ps" > /dev/null 2>&1; then
+            DOCKER_CMD="sudo docker"
+          fi
+          
+          # Test nginx configuration
+          echo "Testing nginx configuration..."
+          if ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+            "${DOCKER_CMD} exec primedata-nginx nginx -t"; then
+            echo "✅ Nginx configuration is valid"
+            
+            # Reload nginx
+            echo "Reloading nginx..."
+            ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+              "${DOCKER_CMD} exec primedata-nginx nginx -s reload"
+            echo "✅ Nginx reloaded successfully"
+          else
+            echo "❌ Nginx configuration test failed"
+            echo "Configuration errors will be shown above"
+            exit 1
+          fi
+
       - name: Health Check
         run: |
           sleep 5
