@@ -45,7 +45,7 @@ jobs:
           access_token_scopes: https://www.googleapis.com/auth/cloud-platform
           id_token_include_email: false
 
-      - name: Find and display GCP credentials file
+      - name: Find GCP credentials file
         id: find-creds
         run: |
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -71,14 +71,6 @@ jobs:
           if [ -n "$CREDS_FILE" ] && [ -f "$CREDS_FILE" ]; then
             echo "✅ Found credentials file: $CREDS_FILE"
             echo "creds_file=$CREDS_FILE" >> $GITHUB_OUTPUT
-            
-            # Print first few lines (without sensitive data) for verification
-            echo ""
-            echo "Credentials file preview (first 5 lines, redacted):"
-            head -5 "$CREDS_FILE" | sed 's/"private_key":.*/"private_key": "[REDACTED]"/g' | sed 's/"private_key_id":.*/"private_key_id": "[REDACTED]"/g'
-            echo ""
-            echo "File size: $(wc -c < "$CREDS_FILE") bytes"
-            echo "File location: $(realpath "$CREDS_FILE")"
           else
             echo "⚠️  Warning: Could not find credentials file"
             echo "   GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-not set}"
@@ -602,15 +594,6 @@ jobs:
             
             if [ -n "$CREDS_FILE" ] && [ -f "$CREDS_FILE" ]; then
               echo "✅ Found credentials file: $CREDS_FILE"
-              echo ""
-              echo "Printing credentials file contents (for debugging):"
-              echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-              # Print file contents but redact sensitive fields
-              cat "$CREDS_FILE" | jq -c 'del(.private_key, .private_key_id)' 2>/dev/null || \
-              cat "$CREDS_FILE" | sed 's/"private_key":.*/"private_key": "[REDACTED]"/g' | sed 's/"private_key_id":.*/"private_key_id": "[REDACTED]"/g'
-              echo ""
-              echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-              echo ""
               
               # Ensure /opt/primedata exists
               ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
@@ -638,16 +621,6 @@ jobs:
                 --project=project-f3c8a334-a3f2-4f66-a06 2>&1; then
                 CREDS_FILE="/tmp/gcp-credentials.json"
                 echo "✅ Service account key created successfully"
-                
-                # Print contents (redacted)
-                echo ""
-                echo "Printing credentials file contents (for debugging):"
-                echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-                cat "$CREDS_FILE" | jq -c 'del(.private_key, .private_key_id)' 2>/dev/null || \
-                cat "$CREDS_FILE" | sed 's/"private_key":.*/"private_key": "[REDACTED]"/g' | sed 's/"private_key_id":.*/"private_key_id": "[REDACTED]"/g'
-                echo ""
-                echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-                echo ""
                 
                 # Ensure /opt/primedata exists
                 ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
