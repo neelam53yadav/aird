@@ -51,14 +51,25 @@ class MinIOClient:
             # Check if GOOGLE_APPLICATION_CREDENTIALS points to a file that exists
             # If not, unset it so the client uses the VM's service account via metadata server
             creds_file = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
-            if creds_file and not os.path.exists(creds_file):
-                logger.warning(
-                    f"GOOGLE_APPLICATION_CREDENTIALS points to non-existent file: {creds_file}. "
-                    "Unsetting to use VM service account via metadata server."
-                )
-                # Temporarily unset the environment variable
-                if "GOOGLE_APPLICATION_CREDENTIALS" in os.environ:
-                    del os.environ["GOOGLE_APPLICATION_CREDENTIALS"]
+            # Handle empty string case (empty string is falsy but still set in env)
+            # Also handle non-existent file paths
+            if creds_file:
+                # Empty string or whitespace-only string
+                if not creds_file.strip():
+                    logger.warning(
+                        "GOOGLE_APPLICATION_CREDENTIALS is set to empty string. "
+                        "Unsetting to use VM service account via metadata server."
+                    )
+                    if "GOOGLE_APPLICATION_CREDENTIALS" in os.environ:
+                        del os.environ["GOOGLE_APPLICATION_CREDENTIALS"]
+                # Non-empty but file doesn't exist
+                elif not os.path.exists(creds_file):
+                    logger.warning(
+                        f"GOOGLE_APPLICATION_CREDENTIALS points to non-existent file: {creds_file}. "
+                        "Unsetting to use VM service account via metadata server."
+                    )
+                    if "GOOGLE_APPLICATION_CREDENTIALS" in os.environ:
+                        del os.environ["GOOGLE_APPLICATION_CREDENTIALS"]
 
             try:
                 # Get project ID from environment or let GCS client detect it
