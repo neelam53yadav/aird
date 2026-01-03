@@ -144,7 +144,6 @@ services:
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
       FRONTEND_URL: ${FRONTEND_URL}
       DISABLE_AUTH: ${DISABLE_AUTH:-false}
-      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-}
       # SMTP Configuration
       SMTP_ENABLED: ${SMTP_ENABLED:-false}
       SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
@@ -154,8 +153,6 @@ services:
       SMTP_USERNAME: ${SMTP_USERNAME:-primedata.feedback@gmail.com}
       SMTP_PASSWORD: ${SMTP_PASSWORD}
       SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-primedata.feedback@gmail.com}
-    volumes:
-      - /opt/primedata/gcp-credentials.json:/opt/primedata/gcp-credentials.json:ro
     depends_on:
       qdrant:
         condition: service_started
