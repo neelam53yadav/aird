@@ -152,8 +152,21 @@ def _coherence_embedding_similarity(
             avg_similarity = 1.0
         else:
             avg_similarity = float(np.mean(similarities))
-            # Normalize to 0-100 scale
-            coherence_score = min(100.0, max(0.0, avg_similarity * 100))
+            # For regulatory/formal content, similarity scores tend to be lower
+            # Apply a scaling factor to normalize better
+            # If threshold is low (0.5), content is expected to have lower coherence
+            if threshold < 0.6:
+                # Regulatory content: scale more leniently
+                # Map 0.3-0.6 similarity range to 50-100 score range
+                if avg_similarity < 0.3:
+                    coherence_score = (avg_similarity / 0.3) * 50.0
+                elif avg_similarity <= 0.6:
+                    coherence_score = 50.0 + ((avg_similarity - 0.3) / 0.3) * 50.0
+                else:
+                    coherence_score = min(100.0, avg_similarity * 100)
+            else:
+                # Standard content: use direct scaling
+                coherence_score = min(100.0, max(0.0, avg_similarity * 100))
         
         return {
             "coherence_score": round(coherence_score, 2),
