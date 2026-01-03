@@ -1,7 +1,7 @@
 "use client"
 
 import { AuthButtons } from "@/components/AuthButtons"
-import { Sparkles } from "lucide-react"
+import { Sparkles, ArrowLeft } from "lucide-react"
 import Link from "next/link"
 
 export default function SignInPage() {
@@ -31,6 +31,17 @@ export default function SignInPage() {
                 </span>
               </h1>
               <p className="text-sm text-gray-500 mt-1">Making Data AI-Ready</p>
+            </Link>
+          </div>
+
+          {/* Back to Home Button */}
+          <div className="mb-4">
+            <Link
+              href="/"
+              className="inline-flex items-center text-sm text-gray-600 hover:text-gray-900 transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Home
             </Link>
           </div>
 

@@ -95,7 +95,7 @@ export default function PipelineRunsPage() {
       setPolling(true)
       const interval = setInterval(() => {
         loadPipelineRuns(currentPage, false) // Don't show loading spinner during polling
-      }, 30000) // Poll every 30 seconds
+      }, 90000) // Poll every 90 seconds
 
       return () => {
         clearInterval(interval)

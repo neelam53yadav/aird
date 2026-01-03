@@ -335,6 +335,15 @@ export default function AppLayout({ children }: AppLayoutProps) {
         <main className="flex-1 overflow-auto">
           {children}
         </main>
+
+        {/* Footer */}
+        <footer className="bg-white border-t border-gray-200 py-4">
+          <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="text-center text-sm text-gray-500">
+              © {new Date().getFullYear()} AIRDOps. All rights reserved.
+            </div>
+          </div>
+        </footer>
       </div>
       </div>
     </div>
