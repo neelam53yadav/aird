@@ -87,12 +87,23 @@ class MinIOClient:
                 else:
                     logger.info("Initialized GCS client using Application Default Credentials")
             except DefaultCredentialsError as e:
-                raise ValueError(
-                    "GCS credentials not found. Ensure Application Default Credentials are configured. "
-                    "When running on GCP, the VM service account will be used automatically via metadata server. "
-                    f"Error: {str(e)}"
+                # If GCS credentials aren't available, fall back to MinIO
+                logger.warning(
+                    f"GCS credentials not found ({str(e)}). "
+                    "Falling back to MinIO. If you need GCS, ensure Application Default Credentials are configured."
                 )
-            self.client = None  # MinIO client not used for GCS
+                # Fall back to MinIO mode
+                self.use_gcs = False
+                self.gcs_client = None
+                self.project_id = None
+                
+                # Initialize MinIO client instead
+                self.host = os.getenv("MINIO_HOST", "localhost:9000")
+                self.access_key = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
+                self.secret_key = os.getenv("MINIO_SECRET_KEY", "minioadmin123")
+                self.secure = os.getenv("MINIO_SECURE", "false").lower() == "true"
+                self.client = Minio(self.host, access_key=self.access_key, secret_key=self.secret_key, secure=self.secure)
+                logger.info(f"Initialized MinIO client for local MinIO at {self.host} (fallback from GCS)")
         else:
             # Initialize MinIO client for local development
             self.host = os.getenv("MINIO_HOST", "localhost:9000")
