@@ -541,10 +541,15 @@ export default function EditProductPage() {
       }
       
       if (formData.chunking_mode === 'auto') {
+        // Preserve detected content_type from resolved_settings if available
+        const currentConfig = (product as any)?.chunking_config || {}
+        const detectedContentType = currentConfig.resolved_settings?.content_type
+        const contentTypeToSave = detectedContentType || formData.content_type
+        
         chunkingConfig.auto_settings = {
-            content_type: formData.content_type,
-            model_optimized: formData.model_optimized,
-            confidence_threshold: formData.confidence_threshold
+          content_type: contentTypeToSave,  // Use detected type if available
+          model_optimized: formData.model_optimized,
+          confidence_threshold: formData.confidence_threshold
         }
         // Don't send manual_settings when in auto mode
       } else {
@@ -877,6 +882,17 @@ export default function EditProductPage() {
                       </pre>
                     </div>
                   )}
+                  {(product as any).chunking_config?.resolved_settings && (
+                    <div className="mt-2">
+                      <strong>Resolved Settings (Detected from Content Analysis):</strong>
+                      <pre className="mt-1 p-2 bg-green-50 border border-green-200 rounded text-xs overflow-auto">
+                        {JSON.stringify((product as any).chunking_config.resolved_settings, null, 2)}
+                      </pre>
+                      <p className="mt-1 text-xs text-green-700">
+                        These settings were automatically detected from your content. The UI should display these values.
+                      </p>
+                    </div>
+                  )}
                   {(product as any).embedding_config && (
                     <div className="mt-2">
                       <strong>Embedding Config:</strong>
@@ -1099,6 +1115,26 @@ export default function EditProductPage() {
               {formData.chunking_mode === 'auto' && (
                 <div className="mb-6 p-4 bg-blue-50 rounded-lg">
                   <h4 className="text-sm font-medium text-blue-900 mb-3">Auto Configuration Settings</h4>
+                  {(product as any)?.chunking_config?.resolved_settings && (
+                    <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-md">
+                      <div className="flex items-start">
+                        <Sparkles className="h-4 w-4 text-green-600 mt-0.5 mr-2 flex-shrink-0" />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-green-900">
+                            Content Type Detected: <strong>{(product as any).chunking_config.resolved_settings.content_type}</strong>
+                            {(product as any).chunking_config.resolved_settings.detection_confidence && (
+                              <span className="ml-2 text-xs text-green-700">
+                                ({(Math.round((product as any).chunking_config.resolved_settings.detection_confidence * 100))}% confidence)
+                              </span>
+                            )}
+                          </p>
+                          <p className="text-xs text-green-700 mt-1">
+                            The values below are from automatic content analysis. You can override them if needed.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="content_type" className="block text-sm font-medium text-gray-700 mb-2">
@@ -1112,6 +1148,8 @@ export default function EditProductPage() {
                       >
                         <option value="general">General</option>
                         <option value="legal">Legal Documents</option>
+                        <option value="regulatory">Regulatory/Compliance</option>
+                        <option value="finance_banking">Finance/Banking</option>
                         <option value="code">Code</option>
                         <option value="documentation">Documentation</option>
                         <option value="conversation">Conversations</option>
