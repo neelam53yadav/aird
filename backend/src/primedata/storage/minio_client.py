@@ -612,36 +612,5 @@ class MinIOClient:
             return False
 
 
-# Lazy initialization pattern for global instance
-_minio_client_instance = None
-
-def get_minio_client():
-    """Get or create the global MinIO client instance (lazy initialization).
-    
-    This prevents initialization errors during DAG import in Airflow when
-    credentials are not yet available. The client is only created when
-    first accessed.
-    """
-    global _minio_client_instance
-    if _minio_client_instance is None:
-        _minio_client_instance = MinIOClient()
-    return _minio_client_instance
-
-# For backward compatibility, create a lazy proxy object
-class _LazyMinIOClient:
-    """Lazy proxy for MinIO client that only initializes when first accessed.
-    
-    This allows existing code that imports `minio_client` directly to continue
-    working without changes, while preventing initialization at import time.
-    """
-    
-    def __getattr__(self, name):
-        """Delegate attribute access to the actual MinIO client instance."""
-        return getattr(get_minio_client(), name)
-    
-    def __call__(self, *args, **kwargs):
-        """Allow the proxy to be called if MinIOClient is callable."""
-        return get_minio_client()(*args, **kwargs)
-
-# Global instance (lazy - only initializes when first accessed)
-minio_client = _LazyMinIOClient()
+# Global instance
+minio_client = MinIOClient()
