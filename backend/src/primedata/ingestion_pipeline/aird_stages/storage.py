@@ -17,7 +17,7 @@ from loguru import logger
 # Use Python logging for Airflow compatibility (Airflow captures standard logging)
 std_logger = std_logging.getLogger(__name__)
 
-from primedata.storage.minio_client import MinIOClient
+from primedata.storage.minio_client import MinIOClient, get_minio_client
 from primedata.storage.paths import (
     chunk_prefix,
     clean_prefix,
@@ -53,7 +53,8 @@ class AirdStorageAdapter:
         self.workspace_id = workspace_id
         self.product_id = product_id
         self.version = version
-        self.minio_client = minio_client or MinIOClient()
+        # Use lazy-initialized global instance instead of creating new one
+        self.minio_client = minio_client or get_minio_client()
         self.logger = logger.bind(
             workspace_id=str(workspace_id),
             product_id=str(product_id),
