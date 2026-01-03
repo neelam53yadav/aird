@@ -154,8 +154,6 @@ services:
       SMTP_USERNAME: ${SMTP_USERNAME:-primedata.feedback@gmail.com}
       SMTP_PASSWORD: ${SMTP_PASSWORD}
       SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-primedata.feedback@gmail.com}
-    volumes:
-      - /opt/primedata/gcp-credentials.json:/opt/primedata/gcp-credentials.json:ro
     depends_on:
       qdrant:
         condition: service_started
