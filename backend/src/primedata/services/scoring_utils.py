@@ -9,7 +9,7 @@ import json
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 try:
     import textstat
@@ -249,20 +249,65 @@ def score_metadata_presence(meta: Dict[str, Any]) -> float:
     return min(base_score + quality_bonus, 100.0)
 
 
-def score_audience_intentionality(text: str) -> float:
-    """Score audience intentionality based on audience signals in text."""
+def score_audience_intentionality(text: str, domain_type: Optional[str] = None) -> float:
+    """Score audience intentionality based on audience signals in text.
+    
+    Args:
+        text: Text content to analyze
+        domain_type: Optional domain type (e.g., "regulatory", "finance_banking") for domain-specific scoring
+        
+    Returns:
+        Score from 0-100 indicating how well content targets its audience
+    """
     if not text or len(text.strip()) < 20:
         return 0.0
 
     text_lower = text.lower()
     score = 0.0
+    domain_matched = False
+    
+    # Domain-specific lexicons (priority when domain_type matches)
+    if domain_type:
+        domain_type_lower = domain_type.lower()
+        
+        # Regulatory domain
+        if domain_type_lower in ["regulatory", "reg"]:
+            regulatory_terms = [
+                "supervisor", "auditor", "regulator", "supervision", "regulatory",
+                "compliance officer", "risk manager", "internal audit",
+                "regulatory authority", "supervisory authority", "audit committee",
+                "compliance framework", "regulatory requirement", "supervisory review",
+                "regulatory reporting", "audit trail", "regulatory compliance",
+                "compliance", "supervisory", "audit"
+            ]
+            regulatory_hits = sum(1 for term in regulatory_terms if re.search(r"\b" + re.escape(term) + r"\b", text_lower))
+            if regulatory_hits > 0:
+                score += min(regulatory_hits * 20.0, 60.0)
+                domain_matched = True
+        
+        # Finance/Banking domain
+        elif domain_type_lower in ["finance_banking", "finance", "banking"]:
+            finance_terms = [
+                "bank", "banking", "financial institution", "lender", "borrower",
+                "credit risk", "market risk", "liquidity risk", "operational risk",
+                "capital adequacy", "solvency", "balance sheet", "income statement",
+                "financial statement", "audit", "auditor", "compliance officer",
+                "risk manager", "treasurer", "cfo", "financial analyst", "investor",
+                "shareholder", "stakeholder", "regulatory reporting", "financial"
+            ]
+            finance_hits = sum(1 for term in finance_terms if re.search(r"\b" + re.escape(term) + r"\b", text_lower))
+            if finance_hits > 0:
+                score += min(finance_hits * 18.0, 60.0)
+                domain_matched = True
 
-    # Healthcare audience signals
+    # Generic lexicons (reduced weight when domain matched to prevent saturation)
+    generic_multiplier = 0.5 if domain_matched else 1.0  # Reduce generic boosts when domain matched
+    
+    # Healthcare audience signals (REMOVED "regulatory" from this list)
     healthcare_terms = [
         "hcp",
         "physician",
         "patient",
-        "regulatory",
         "doctor",
         "nurse",
         "clinician",
@@ -272,7 +317,7 @@ def score_audience_intentionality(text: str) -> float:
     ]
     healthcare_hits = sum(1 for term in healthcare_terms if re.search(r"\b" + re.escape(term) + r"\b", text_lower))
     if healthcare_hits > 0:
-        score += min(healthcare_hits * 25.0, 50.0)
+        score += min(healthcare_hits * 25.0 * generic_multiplier, 50.0 * generic_multiplier)
 
     # Business/Executive audience signals
     business_terms = [
@@ -289,7 +334,7 @@ def score_audience_intentionality(text: str) -> float:
     ]
     business_hits = sum(1 for term in business_terms if re.search(r"\b" + re.escape(term) + r"\b", text_lower))
     if business_hits > 0:
-        score += min(business_hits * 15.0, 50.0)
+        score += min(business_hits * 15.0 * generic_multiplier, 50.0 * generic_multiplier)
 
     # Technical/Developer audience signals
     tech_terms = [
@@ -307,7 +352,7 @@ def score_audience_intentionality(text: str) -> float:
     ]
     tech_hits = sum(1 for term in tech_terms if re.search(r"\b" + re.escape(term) + r"\b", text_lower))
     if tech_hits > 0:
-        score += min(tech_hits * 15.0, 50.0)
+        score += min(tech_hits * 15.0 * generic_multiplier, 50.0 * generic_multiplier)
 
     # Operations audience signals
     ops_terms = [
@@ -322,14 +367,24 @@ def score_audience_intentionality(text: str) -> float:
     ]
     ops_hits = sum(1 for term in ops_terms if re.search(r"\b" + re.escape(term) + r"\b", text_lower))
     if ops_hits > 0:
-        score += min(ops_hits * 15.0, 50.0)
+        score += min(ops_hits * 15.0 * generic_multiplier, 50.0 * generic_multiplier)
 
-    # General audience signals (you, your, users, customers)
+    # Legal domain signals
+    legal_terms = [
+        "attorney", "lawyer", "counsel", "legal counsel", "compliance",
+        "legal requirement", "legal framework", "jurisdiction", "litigation",
+        "contract", "agreement", "legal entity", "legal obligation"
+    ]
+    legal_hits = sum(1 for term in legal_terms if re.search(r"\b" + re.escape(term) + r"\b", text_lower))
+    if legal_hits > 0:
+        score += min(legal_hits * 20.0 * generic_multiplier, 50.0 * generic_multiplier)
+
+    # General audience signals (you, your, users, customers) - always apply
     general_signals = bool(re.search(r"\b(?:you|your|users?|customers?|readers?|audience)\b", text_lower))
     if general_signals:
         score += 30.0
 
-    # Direct audience addressing (for, intended for, designed for)
+    # Direct audience addressing (for, intended for, designed for) - always apply
     direct_addressing = bool(re.search(r"\b(?:for|intended\s+for|designed\s+for|targeted\s+to)\s+(?:the\s+)?\w+", text_lower))
     if direct_addressing:
         score += 20.0
@@ -428,6 +483,9 @@ def score_file_data(data: Dict[str, Any], weights: Dict[str, float]) -> Dict[str
     meta_with_text = dict(meta)
     meta_with_text["text"] = text
 
+    # Extract domain_type from record (check both flat and nested locations)
+    domain_type = data.get("domain_type") or data.get("metadata", {}).get("domain_type")
+    
     scores = {
         "Completeness": score_completeness(tokens),
         "Accuracy": score_accuracy(words),
@@ -438,7 +496,7 @@ def score_file_data(data: Dict[str, Any], weights: Dict[str, float]) -> Dict[str
         "GPT_Confidence": score_gpt_confidence(text),
         "Context_Quality": score_context_quality(text),
         "Metadata_Presence": score_metadata_presence(meta),
-        "Audience_Intentionality": score_audience_intentionality(text),
+        "Audience_Intentionality": score_audience_intentionality(text, domain_type=domain_type),
         "Diversity": score_diversity(text),
         "Audience_Accessibility": score_audience_accessibility(meta_with_text),
         "KnowledgeBase_Ready": score_kb_ready(text),

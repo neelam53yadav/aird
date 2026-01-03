@@ -77,9 +77,10 @@ def _build_record(
     chunk_idx: int,
     chunk_of: int,
     product_id: UUID,
+    domain_type: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Build a chunk record with PrimeData metadata structure."""
-    return {
+    record = {
         "chunk_id": f"{stem}_p{page}_s{canon_section}_c{chunk_idx}",
         "document_id": document_id,
         "filename": filename,
@@ -101,6 +102,12 @@ def _build_record(
         "tags": "",
         "doc_date": None,
     }
+    
+    # Add domain_type if provided (for domain-adaptive scoring)
+    if domain_type:
+        record["domain_type"] = domain_type
+    
+    return record
 
 
 class PreprocessStage(AirdStage):
@@ -773,6 +780,12 @@ class PreprocessStage(AirdStage):
                     "chunking_strategy": original_strategy,  # Preserve original UI value (semantic, fixed_size, etc.)
                 }
             )
+            
+            # For manual mode, try to infer domain_type from resolved config if available
+            detected_domain_type = None
+            if chunking_config:
+                resolved = chunking_config.get("resolved_settings", {})
+                detected_domain_type = resolved.get("content_type")
 
             # Use playbook_strategy for actual chunking processing
             strategy = playbook_strategy
@@ -852,7 +865,8 @@ class PreprocessStage(AirdStage):
                 reasoning = "Fallback to default due to analysis error"
                 evidence = None
 
-            # Convert strategy to playbook format
+            # Store domain_type for use when building records
+            detected_domain_type = content_type  # Store for later use
             strategy_lower = strategy.lower()
             if strategy_lower == "fixed_size":
                 playbook_strategy = "char"
@@ -909,6 +923,11 @@ class PreprocessStage(AirdStage):
                     "chunking_strategy": "fixed_size" if strategy == "char" else "semantic",
                 }
             )
+            # For manual/playbook_default mode, try to infer domain_type from resolved config if available
+            detected_domain_type = None
+            if chunking_config:
+                resolved = chunking_config.get("resolved_settings", {})
+                detected_domain_type = resolved.get("content_type")
 
         # 4) Process pages and sections
         records: List[Dict[str, Any]] = []
@@ -1194,6 +1213,7 @@ class PreprocessStage(AirdStage):
                         chunk_idx=idx,
                         chunk_of=len(chunks),
                         product_id=self.product_id,
+                        domain_type=detected_domain_type,  # Pass domain_type for domain-adaptive scoring
                     )
 
                     # Enhanced metadata extraction if flag is set
