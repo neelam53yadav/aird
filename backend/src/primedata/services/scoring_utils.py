@@ -110,8 +110,9 @@ def score_quality(text: str) -> float:
 
     avg_sentence_len = len(words) / len(sentences)
 
+    # For regulatory/formal content, longer sentences are acceptable
     # Ideal sentence length for readability: 15-25 words
-    # Reward good readability, but don't penalize too harshly
+    # But regulatory content often has 25-40 word sentences which are still acceptable
     if avg_sentence_len < 5:
         return 60.0  # Very short sentences might be fragments
     elif avg_sentence_len < 10:
@@ -119,11 +120,13 @@ def score_quality(text: str) -> float:
     elif avg_sentence_len <= 25:
         return 85.0  # Ideal range
     elif avg_sentence_len <= 35:
-        return 75.0  # Still good, slightly long
-    elif avg_sentence_len <= 50:
-        return 65.0  # Long but readable
+        return 80.0  # Still good for formal content (was 75.0)
+    elif avg_sentence_len <= 45:
+        return 70.0  # Acceptable for regulatory content (was 65.0)
+    elif avg_sentence_len <= 60:
+        return 60.0  # Long but readable for formal content (was 55.0)
     else:
-        return 55.0  # Very long sentences, harder to read
+        return 50.0  # Very long sentences, harder to read
 
 
 def score_timeliness(timestamp: str, ref: str = "2023-01-01") -> float:
@@ -393,10 +396,35 @@ def score_audience_intentionality(text: str, domain_type: Optional[str] = None) 
 
 
 def score_diversity(text: str) -> float:
-    """Score diversity."""
-    terms = ["male", "female", "child", "elderly", "comorbid", "pregnant"]
-    hits = sum(1 for t in terms if t in text.lower())
-    return min((hits / len(terms)) * 100, 100.0)
+    """Score diversity using Type-Token Ratio (TTR).
+    
+    TTR measures vocabulary diversity: unique words / total words.
+    Higher TTR = more diverse vocabulary = better score.
+    """
+    if not text or len(text.strip()) < 20:
+        return 0.0
+    
+    # Extract words (lowercase, alphanumeric)
+    words = re.findall(r'\b[a-z0-9]+\b', text.lower())
+    if not words:
+        return 0.0
+    
+    # Calculate Type-Token Ratio
+    unique_words = len(set(words))
+    total_words = len(words)
+    ttr = unique_words / total_words if total_words > 0 else 0.0
+    
+    # Normalize TTR to 0-100 scale
+    # TTR typically ranges from 0.3-0.7 for most text
+    # We'll scale it: 0.3 TTR = 50 score, 0.7 TTR = 100 score
+    if ttr < 0.3:
+        score = (ttr / 0.3) * 50.0
+    elif ttr <= 0.7:
+        score = 50.0 + ((ttr - 0.3) / 0.4) * 50.0
+    else:
+        score = 100.0
+    
+    return min(100.0, max(0.0, score))
 
 
 def score_audience_accessibility(meta: Dict[str, Any]) -> float:

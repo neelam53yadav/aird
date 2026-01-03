@@ -212,6 +212,59 @@ class PreprocessStage(AirdStage):
                 self.logger.info(keys_msg)
                 std_logger.info(keys_msg)
 
+                # OPTIMIZATION: Route playbook BEFORE loading full file (for performance)
+                # Route playbook if not provided
+                file_playbook_id = initial_playbook_id  # Use initial_playbook_id for this file
+                if not file_playbook_id:
+                    # OPTIMIZATION: For playbook routing, only read sample text
+                    # This avoids extracting full PDF when we only need first 1000-2000 chars
+                    sample_for_playbook = None
+                    try:
+                        if filename.lower().endswith('.pdf'):
+                            # For PDFs, extract only first 2 pages for playbook routing
+                            sample_for_playbook = self._get_pdf_sample_for_routing(
+                                storage, file_stem, storage_key, storage_bucket, max_chars=2000
+                            )
+                        else:
+                            # For text files, read only first 2000 chars
+                            sample_for_playbook = self._get_text_sample_for_routing(
+                                storage, file_stem, storage_key, storage_bucket, max_chars=2000
+                            )
+                    except Exception as e:
+                        self.logger.warning(f"Failed to get sample for playbook routing: {e}, will use filename only")
+                        sample_for_playbook = None
+                    
+                    # Use sample if available, otherwise use filename only
+                    if sample_for_playbook:
+                        chosen_id, reason = route_playbook(
+                            sample_text=sample_for_playbook[:1000], 
+                            filename=file_stem
+                        )
+                        file_playbook_id = chosen_id
+                        # Update selection metadata for auto-detection (only on first file)
+                        if playbook_selection_metadata.get("method") is None:
+                            playbook_selection_metadata["method"] = "auto_detected"
+                            playbook_selection_metadata["playbook_id"] = chosen_id
+                            playbook_selection_metadata["reason"] = reason
+                            playbook_selection_metadata["detected_at"] = datetime.utcnow().isoformat() + "Z"
+                        self.logger.info(f"Auto-routed to playbook {file_playbook_id} ({reason}) using sample text")
+                    else:
+                        # Fallback: use filename only for routing
+                        chosen_id, reason = route_playbook(sample_text=None, filename=file_stem)
+                        file_playbook_id = chosen_id
+                        if playbook_selection_metadata.get("method") is None:
+                            playbook_selection_metadata["method"] = "auto_detected"
+                            playbook_selection_metadata["playbook_id"] = chosen_id
+                            playbook_selection_metadata["reason"] = reason
+                            playbook_selection_metadata["detected_at"] = datetime.utcnow().isoformat() + "Z"
+                        self.logger.info(f"Auto-routed to playbook {file_playbook_id} ({reason}) using filename only")
+                else:
+                    # Playbook was provided, mark as manual (only on first file)
+                    if playbook_selection_metadata.get("method") is None:
+                        playbook_selection_metadata["method"] = "manual"
+                        playbook_selection_metadata["playbook_id"] = file_playbook_id
+
+                # NOW load full file for actual processing
                 if storage_key:
                     load_msg = f"[PreprocessStage] Loading raw file {file_stem} from exact MinIO key: {storage_key} (bucket: {storage_bucket or 'primedata-raw'})"
                     self.logger.info(load_msg)
@@ -1352,3 +1405,115 @@ class PreprocessStage(AirdStage):
         }
 
         return records, stats
+
+    def _get_pdf_sample_for_routing(
+        self, 
+        storage, 
+        file_stem: str, 
+        storage_key: Optional[str], 
+        storage_bucket: Optional[str],
+        max_chars: int = 2000
+    ) -> Optional[str]:
+        """
+        Extract sample text from PDF for playbook routing (optimization: only first 2 pages).
+        
+        Args:
+            storage: Storage adapter instance
+            file_stem: File stem
+            storage_key: Optional storage key
+            storage_bucket: Optional storage bucket
+            max_chars: Maximum characters to extract
+            
+        Returns:
+            Sample text or None if extraction fails
+        """
+        try:
+            from io import BytesIO
+            from primedata.storage.minio_client import get_minio_client
+            
+            minio_client = get_minio_client()
+            bucket = storage_bucket or "primedata-raw"
+            key = storage_key or f"{storage._get_raw_prefix()}{file_stem}.pdf"
+            
+            # Get PDF bytes
+            pdf_data = minio_client.get_bytes(bucket, key)
+            if not pdf_data:
+                return None
+            
+            # Extract only first 2 pages
+            try:
+                from pypdf import PdfReader
+                pdf_file = BytesIO(pdf_data)
+                reader = PdfReader(pdf_file)
+                
+                text_parts = []
+                for i, page in enumerate(reader.pages[:2]):  # Only first 2 pages
+                    try:
+                        page_text = page.extract_text()
+                        text_parts.append(page_text)
+                        if len(''.join(text_parts)) > max_chars:
+                            break
+                    except Exception:
+                        continue
+                
+                sample_text = '\n'.join(text_parts)
+                return sample_text[:max_chars] if sample_text else None
+            except ImportError:
+                # Fallback to PyPDF2
+                try:
+                    from PyPDF2 import PdfReader
+                    pdf_file = BytesIO(pdf_data)
+                    reader = PdfReader(pdf_file)
+                    text_parts = []
+                    for page in reader.pages[:2]:  # Only first 2 pages
+                        text_parts.append(page.extract_text())
+                    sample_text = '\n'.join(text_parts)
+                    return sample_text[:max_chars] if sample_text else None
+                except Exception:
+                    return None
+        except Exception as e:
+            self.logger.warning(f"Failed to extract PDF sample for routing: {e}")
+            return None
+
+    def _get_text_sample_for_routing(
+        self,
+        storage,
+        file_stem: str,
+        storage_key: Optional[str],
+        storage_bucket: Optional[str],
+        max_chars: int = 2000
+    ) -> Optional[str]:
+        """
+        Get sample text from text file for playbook routing (optimization: only first N chars).
+        
+        Args:
+            storage: Storage adapter instance
+            file_stem: File stem
+            storage_key: Optional storage key
+            storage_bucket: Optional storage bucket
+            max_chars: Maximum characters to read
+            
+        Returns:
+            Sample text or None if reading fails
+        """
+        try:
+            from primedata.storage.minio_client import get_minio_client
+            
+            minio_client = get_minio_client()
+            bucket = storage_bucket or "primedata-raw"
+            key = storage_key or f"{storage._get_raw_prefix()}{file_stem}.txt"
+            
+            # Get object bytes
+            data = minio_client.get_bytes(bucket, key)
+            if not data:
+                return None
+            
+            # Try to decode as UTF-8 and return first max_chars
+            try:
+                text = data.decode("utf-8", errors="ignore")
+                return text[:max_chars]
+            except Exception:
+                return None
+        except Exception as e:
+            self.logger.warning(f"Failed to read text sample for routing: {e}")
+            return None

@@ -1598,37 +1598,70 @@ async def auto_configure_chunking(
 ):
     """
     Automatically configure chunking settings based on product's data sources.
+    Uses AirdStorageAdapter to properly extract text from PDFs and other formats.
     """
     # Ensure user has access to the product
     product = ensure_product_access(db, request, product_id)
 
     try:
-        # Get sample content from data sources
-        from primedata.storage.minio_client import minio_client
-        from primedata.storage.paths import raw_prefix
+        # Use AirdStorageAdapter to properly extract text from files (handles PDFs)
+        from primedata.ingestion_pipeline.aird_stages.storage import AirdStorageAdapter
+        from primedata.db.models import RawFile
+        from primedata.analysis.content_analyzer import content_analyzer
 
-        # Try to get sample content from the latest version
+        # Get raw files for the product
         version = product.current_version or 1
-        raw_prefix_path = raw_prefix(product.workspace_id, product_id, version)
-
-        # Get a few sample files
-        raw_objects = minio_client.list_objects("primedata-raw", raw_prefix_path)
-        sample_content = ""
-
-        for obj in raw_objects[:3]:  # Sample first 3 files
-            content = minio_client.get_object("primedata-raw", obj["name"])
-            if content:
-                sample_content += content.decode("utf-8", errors="ignore")[:5000]  # First 5000 chars
-                if len(sample_content) > 10000:  # Limit total sample size
-                    break
-
-        if not sample_content:
+        raw_files = db.query(RawFile).filter(
+            RawFile.product_id == product_id,
+            RawFile.version == version,
+            RawFile.status != "DELETED"
+        ).limit(3).all()  # Sample first 3 files
+        
+        if not raw_files:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="No content found to analyze. Please run data ingestion first."
+                status_code=status.HTTP_400_BAD_REQUEST, 
+                detail="No raw files found to analyze. Please run data ingestion first."
             )
-
+        
+        # Use storage adapter to extract text (handles PDFs properly)
+        storage = AirdStorageAdapter(
+            workspace_id=product.workspace_id,
+            product_id=product_id,
+            version=version
+        )
+        
+        sample_content = ""
+        filename_hint = None
+        for raw_file in raw_files:
+            try:
+                # Use get_raw_text which handles PDF extraction
+                file_stem = raw_file.file_stem
+                text = storage.get_raw_text(
+                    file_stem,
+                    minio_key=raw_file.storage_key,
+                    minio_bucket=raw_file.storage_bucket
+                )
+                if text:
+                    sample_content += text[:5000]  # First 5000 chars per file
+                    if not filename_hint:
+                        filename_hint = raw_file.filename
+                    if len(sample_content) > 15000:  # Limit total sample size
+                        break
+            except Exception as e:
+                logger.warning(f"Failed to extract text from {raw_file.filename}: {e}")
+                continue
+        
+        if not sample_content or len(sample_content.strip()) < 100:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, 
+                detail="Insufficient content found to analyze. Please ensure files contain extractable text."
+            )
+        
         # Analyze content and get recommended configuration
-        chunking_config = content_analyzer.analyze_content(sample_content)
+        chunking_config = content_analyzer.analyze_content(
+            content=sample_content,
+            filename=filename_hint
+        )
 
         # Update product configuration
         current_config = product.chunking_config or {}
