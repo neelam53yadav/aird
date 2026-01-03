@@ -32,6 +32,7 @@ from primedata.ingestion_pipeline.aird_stages.utils.text_processing import (
     redact_pii,
     split_pages_by_config,
 )
+from primedata.analysis.content_analyzer import content_analyzer
 
 # Audience patterns (aligned with AIRD) - ordered by specificity
 AUDIENCE_PATTERNS = {
@@ -776,73 +777,80 @@ class PreprocessStage(AirdStage):
             # Use playbook_strategy for actual chunking processing
             strategy = playbook_strategy
         elif chunking_config and chunking_config.get("mode") == "auto":
-            # Use auto_settings if available, otherwise fallback to playbook defaults
-            auto_settings = chunking_config.get("auto_settings", {})
-            content_type = auto_settings.get("content_type", "general")
-
-            # Get optimal configuration based on content type
-            optimal_configs = {
-                "legal": {
-                    "chunk_size": 2000,
-                    "chunk_overlap": 400,
-                    "min_chunk_size": 200,
-                    "max_chunk_size": 3000,
-                    "strategy": "semantic",
-                },
-                "code": {
-                    "chunk_size": 1500,
-                    "chunk_overlap": 300,
-                    "min_chunk_size": 100,
-                    "max_chunk_size": 2500,
-                    "strategy": "recursive",
-                },
-                "documentation": {
-                    "chunk_size": 1200,
-                    "chunk_overlap": 200,
-                    "min_chunk_size": 100,
-                    "max_chunk_size": 2000,
-                    "strategy": "semantic",
-                },
-                "conversation": {
-                    "chunk_size": 800,
-                    "chunk_overlap": 100,
-                    "min_chunk_size": 50,
-                    "max_chunk_size": 1500,
-                    "strategy": "semantic",
-                },
-                "academic": {
-                    "chunk_size": 1800,
-                    "chunk_overlap": 350,
-                    "min_chunk_size": 150,
-                    "max_chunk_size": 2500,
-                    "strategy": "semantic",
-                },
-                "technical": {
-                    "chunk_size": 1400,
-                    "chunk_overlap": 250,
-                    "min_chunk_size": 100,
-                    "max_chunk_size": 2200,
-                    "strategy": "semantic",
-                },
-                "general": {
-                    "chunk_size": 1000,
-                    "chunk_overlap": 200,
-                    "min_chunk_size": 100,
-                    "max_chunk_size": 2000,
-                    "strategy": "fixed_size",
-                },
-            }
-
-            # Get optimal config for content type, fallback to general
-            optimal = optimal_configs.get(content_type, optimal_configs["general"])
-
-            # Use optimal config, but allow manual_settings to override if provided
-            manual_settings = chunking_config.get("manual_settings", {})
-            chunk_size = manual_settings.get("chunk_size") or optimal["chunk_size"]
-            chunk_overlap = manual_settings.get("chunk_overlap") or optimal["chunk_overlap"]
-            min_chunk_size = manual_settings.get("min_chunk_size") or optimal["min_chunk_size"]
-            max_chunk_size = manual_settings.get("max_chunk_size") or optimal["max_chunk_size"]
-            strategy = manual_settings.get("chunking_strategy") or optimal["strategy"]
+            # Auto mode: Analyze content to detect optimal chunking configuration
+            # Sample cleaned text for analysis (use up to 20k chars for good detection)
+            sample_text = cleaned[:20000] if len(cleaned) > 20000 else cleaned
+            
+            # Extract playbook hint (map playbook_id to domain hint)
+            playbook_hint = None
+            playbook_id_lower = playbook_id.lower() if playbook_id else ""
+            if "regulatory" in playbook_id_lower or playbook_id_lower in ["regulatory", "reg"]:
+                playbook_hint = "regulatory"
+            elif "finance" in playbook_id_lower or "banking" in playbook_id_lower or playbook_id_lower in ["finance", "banking"]:
+                playbook_hint = "finance_banking"
+            elif "legal" in playbook_id_lower:
+                playbook_hint = "legal"
+            elif "academic" in playbook_id_lower:
+                playbook_hint = "academic"
+            elif "technical" in playbook_id_lower or playbook_id_lower == "tech":
+                playbook_hint = "technical"
+            
+            # Analyze content using ContentAnalyzer
+            try:
+                detected_config = content_analyzer.analyze_content(
+                    content=sample_text,
+                    filename=filename,
+                    hint=playbook_hint
+                )
+                
+                # Use detected configuration
+                chunk_size = detected_config.chunk_size
+                chunk_overlap = detected_config.chunk_overlap
+                min_chunk_size = detected_config.min_chunk_size
+                max_chunk_size = detected_config.max_chunk_size
+                strategy = detected_config.strategy.value  # Convert enum to string
+                content_type = detected_config.content_type.value  # Convert enum to string
+                confidence = detected_config.confidence
+                reasoning = detected_config.reasoning
+                evidence = detected_config.evidence
+                
+                self.logger.info(
+                    f"✅ Content analysis detected: {content_type} (confidence: {confidence:.2f}, strategy: {strategy}, "
+                    f"chunk_size: {chunk_size}, overlap: {chunk_overlap})"
+                )
+                std_logger.info(
+                    f"✅ Content analysis detected: {content_type} (confidence: {confidence:.2f}, strategy: {strategy}, "
+                    f"chunk_size: {chunk_size}, overlap: {chunk_overlap})"
+                )
+                
+                # Allow manual_settings to override if provided
+                manual_settings = chunking_config.get("manual_settings", {})
+                if manual_settings.get("chunk_size"):
+                    chunk_size = manual_settings["chunk_size"]
+                if manual_settings.get("chunk_overlap"):
+                    chunk_overlap = manual_settings["chunk_overlap"]
+                if manual_settings.get("min_chunk_size"):
+                    min_chunk_size = manual_settings["min_chunk_size"]
+                if manual_settings.get("max_chunk_size"):
+                    max_chunk_size = manual_settings["max_chunk_size"]
+                if manual_settings.get("chunking_strategy"):
+                    strategy = manual_settings["chunking_strategy"]
+                    
+            except Exception as e:
+                # Fallback to default if analysis fails
+                self.logger.warning(f"Content analysis failed: {e}. Falling back to default configuration.", exc_info=True)
+                std_logger.warning(f"Content analysis failed: {e}. Falling back to default configuration.")
+                
+                # Fallback to general config
+                chunk_size = 1000
+                chunk_overlap = 200
+                min_chunk_size = 100
+                max_chunk_size = 2000
+                strategy = "fixed_size"
+                content_type = "general"
+                confidence = 0.3
+                reasoning = "Fallback to default due to analysis error"
+                evidence = None
 
             # Convert strategy to playbook format
             strategy_lower = strategy.lower()
@@ -867,8 +875,7 @@ class PreprocessStage(AirdStage):
             # Convert tokens to chars for hard_overlap: 1 token ≈ 4 chars
             hard_overlap = chunk_overlap * 4
 
-            # Store original strategy (before playbook conversion) in resolved config
-            original_strategy = manual_settings.get("chunking_strategy") or optimal["strategy"]
+            # Store resolved config with detection evidence
             resolved_chunking_config.update(
                 {
                     "source": "product_auto",
@@ -876,8 +883,11 @@ class PreprocessStage(AirdStage):
                     "chunk_overlap": chunk_overlap,
                     "min_chunk_size": min_chunk_size,
                     "max_chunk_size": max_chunk_size,
-                    "chunking_strategy": original_strategy,  # Preserve original UI value
-                    "content_type": content_type,  # Store content type for reference
+                    "chunking_strategy": strategy,  # Preserve original UI value
+                    "content_type": content_type,  # Store detected content type
+                    "detection_confidence": confidence,  # Store confidence score
+                    "detection_reasoning": reasoning,  # Store reasoning
+                    "detection_evidence": evidence,  # Store evidence for UI
                 }
             )
 
