@@ -16,12 +16,16 @@ try:
     from google.auth.exceptions import DefaultCredentialsError
     from google.cloud import storage as gcs_storage
     from google.api_core import exceptions as gcs_exceptions
+    import google.auth
+    from google.auth import impersonated_credentials
     
     GCS_AVAILABLE = True
 except ImportError:
     GCS_AVAILABLE = False
     logger.warning("google-cloud-storage not available. GCS support disabled.")
     gcs_exceptions = None  # Fallback if not available
+    google = None
+    impersonated_credentials = None
 
 
 class MinIOClient:
@@ -306,25 +310,17 @@ class MinIOClient:
                         logger.warning(f"Generated GCS URL doesn't appear to be signed: {url[:100]}...")
                         return None
                         
-                except AttributeError as e:
+                except (AttributeError, ValueError) as e:
                     error_str = str(e).lower()
                     if "private key" in error_str or "sign credentials" in error_str or "signing" in error_str:
                         # This happens when using Compute Engine default credentials (metadata server)
                         # which don't have a private key for signing
-                        warning_key = f"{bucket}/{key}"
-                        if warning_key not in MinIOClient._gcs_warning_logged:
-                            logger.error(
-                                f"Cannot generate signed URL for {bucket}/{key}: {e}\n"
-                                f"This usually means GOOGLE_APPLICATION_CREDENTIALS is not set to a service account JSON file, "
-                                f"or the service account doesn't have signing permissions. "
-                                f"Compute Engine default credentials don't support URL signing. "
-                                f"Please set GOOGLE_APPLICATION_CREDENTIALS to a service account JSON key file."
-                            )
-                            MinIOClient._gcs_warning_logged.add(warning_key)
-                        return None
+                        # Fall back to IAM SignBlob using impersonated credentials
+                        logger.debug(f"Metadata server credentials detected, using IAM SignBlob for {bucket}/{key}")
+                        return self._generate_signed_url_via_iam(bucket, key, expiry, inline)
                     else:
-                        # Re-raise if it's a different AttributeError
-                        logger.error(f"Unexpected AttributeError generating signed URL: {e}")
+                        # Re-raise if it's a different error
+                        logger.error(f"Unexpected error generating signed URL: {e}")
                         raise
                 except Exception as e:
                     # Catch any other exceptions during signed URL generation
@@ -376,6 +372,101 @@ class MinIOClient:
             return None
         except Exception as e:
             logger.error(f"Failed to generate presigned URL for {bucket}/{key}: {e}", exc_info=True)
+            return None
+
+    def _generate_signed_url_via_iam(self, bucket: str, key: str, expiry: int, inline: bool) -> Optional[str]:
+        """Generate GCS signed URL using IAM SignBlob via impersonated credentials.
+        
+        Works on GCE without service account JSON keys (org policy can block key creation).
+        Requires runtime SA to have roles/iam.serviceAccountTokenCreator on the signer SA.
+        
+        Args:
+            bucket: Bucket name
+            key: Object key
+            expiry: URL expiry time in seconds
+            inline: If True, add response-content-disposition=inline
+            
+        Returns:
+            Signed URL or None if failed
+        """
+        if not GCS_AVAILABLE or not impersonated_credentials:
+            logger.warning("IAM SignBlob not available (missing dependencies)")
+            return None
+        
+        try:
+            from datetime import timedelta
+            
+            # Get the signer service account email from environment variable
+            signer_sa = os.getenv("GCS_SIGNER_SERVICE_ACCOUNT") or os.getenv("GCS_STORAGE_SERVICE_ACCOUNT")
+            if not signer_sa:
+                logger.warning(
+                    "GCS_SIGNER_SERVICE_ACCOUNT not set. Cannot generate signed URL via IAM SignBlob. "
+                    "Set it to the service account email that should sign URLs."
+                )
+                return None
+
+            logger.debug(f"Using IAM SignBlob with service account: {signer_sa}")
+            
+            # Get source credentials (from metadata server or ADC)
+            source_creds, project = google.auth.default(
+                scopes=["https://www.googleapis.com/auth/cloud-platform"]
+            )
+            
+            # Impersonation lifetime max is typically 3600 seconds
+            lifetime = min(3600, max(300, expiry + 60))
+            
+            # Create impersonated credentials for signing
+            target_creds = impersonated_credentials.Credentials(
+                source_credentials=source_creds,
+                target_principal=signer_sa,
+                target_scopes=["https://www.googleapis.com/auth/devstorage.read_only"],
+                lifetime=lifetime,
+            )
+            
+            # Create storage client with impersonated credentials
+            storage_client = gcs_storage.Client(credentials=target_creds, project=project)
+            blob = storage_client.bucket(bucket).blob(key)
+            
+            # Generate signed URL using v4 signing (works with impersonated credentials)
+            url = blob.generate_signed_url(
+                version="v4",
+                expiration=timedelta(seconds=expiry),
+                method="GET",
+                response_disposition="inline" if inline else "attachment",
+            )
+            
+            # Verify the URL is properly signed
+            if url and ("X-Goog-Signature" in url or "Signature=" in url):
+                logger.debug(f"Successfully generated signed URL via IAM SignBlob for {bucket}/{key}")
+                return url
+            else:
+                logger.warning(f"IAM SignBlob produced URL that doesn't look signed for {bucket}/{key}")
+                return None
+            
+        except Exception as e:
+            error_str = str(e)
+            error_type = type(e).__name__
+            error_lower = error_str.lower()
+            
+            # Check for permission errors
+            if "permission" in error_lower or "forbidden" in error_lower or "403" in error_str:
+                warning_key = f"{bucket}/{key}"
+                if warning_key not in MinIOClient._gcs_warning_logged:
+                    signer_sa = os.getenv("GCS_SIGNER_SERVICE_ACCOUNT", "unknown")
+                    logger.error(
+                        f"Cannot generate signed URL via IAM SignBlob for {bucket}/{key}: {error_type}: {error_str}\n"
+                        f"This usually means the runtime service account doesn't have "
+                        f"'roles/iam.serviceAccountTokenCreator' on {signer_sa}. "
+                        f"Grant it with:\n"
+                        f"  gcloud iam service-accounts add-iam-policy-binding {signer_sa} \\\n"
+                        f"    --member='serviceAccount:<RUNTIME_SA_EMAIL>' \\\n"
+                        f"    --role='roles/iam.serviceAccountTokenCreator'"
+                    )
+                    MinIOClient._gcs_warning_logged.add(warning_key)
+            else:
+                logger.warning(
+                    f"Failed to generate signed URL via IAM SignBlob for {bucket}/{key}: {error_type}: {error_str}"
+                )
             return None
 
     def get_object(self, bucket: str, key: str) -> Optional[bytes]:

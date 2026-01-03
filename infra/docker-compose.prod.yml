@@ -51,6 +51,7 @@ services:
       DISABLE_AUTH: ${DISABLE_AUTH:-false}
       PYTHONPATH: /opt/airflow/primedata/src
       GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-}
+      GCS_SIGNER_SERVICE_ACCOUNT: ${GCS_SIGNER_SERVICE_ACCOUNT:-primedata-storage-sa@project-f3c8a334-a3f2-4f66-a06.iam.gserviceaccount.com}
     ports:
       - "8080:8080"
     volumes:
@@ -102,6 +103,7 @@ services:
       DISABLE_AUTH: ${DISABLE_AUTH:-false}
       PYTHONPATH: /opt/airflow/primedata/src
       GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-}
+      GCS_SIGNER_SERVICE_ACCOUNT: ${GCS_SIGNER_SERVICE_ACCOUNT:-primedata-storage-sa@project-f3c8a334-a3f2-4f66-a06.iam.gserviceaccount.com}
     volumes:
       - airflow_dags:/opt/airflow/dags
       - airflow_logs:/opt/airflow/logs
@@ -145,6 +147,7 @@ services:
       FRONTEND_URL: ${FRONTEND_URL}
       DISABLE_AUTH: ${DISABLE_AUTH:-false}
       GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-}
+      GCS_SIGNER_SERVICE_ACCOUNT: ${GCS_SIGNER_SERVICE_ACCOUNT:-primedata-storage-sa@project-f3c8a334-a3f2-4f66-a06.iam.gserviceaccount.com}
       # SMTP Configuration
       SMTP_ENABLED: ${SMTP_ENABLED:-false}
       SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
