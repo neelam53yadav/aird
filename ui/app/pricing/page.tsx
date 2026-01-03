@@ -10,6 +10,7 @@ import {
   Shield,
   Rocket,
   Building,
+  ArrowLeft,
   type LucideIcon
 } from 'lucide-react'
 
@@ -226,6 +227,22 @@ export default function PricingPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex flex-col">
       <BetaBanner />
+
+      {/* Header */}
+      <header className="bg-white border-b border-gray-200">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            <Link href="/" className="flex items-center space-x-2">
+              <ArrowLeft className="h-5 w-5 text-gray-600 hover:text-gray-900 transition-colors" />
+              <span className="text-sm text-gray-600 hover:text-gray-900 transition-colors">Back to Home</span>
+            </Link>
+            <Link href="/" className="text-2xl font-bold bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent">
+              AIRDOps
+            </Link>
+            <div className="w-24"></div> {/* Spacer for centering */}
+          </div>
+        </div>
+      </header>
 
       {/* Hero Section */}
       <header className="container mx-auto px-4 py-16">

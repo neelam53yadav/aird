@@ -129,7 +129,7 @@ export default function ContactPage() {
               <Mail className="h-8 w-8 text-white" />
             </div>
             <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-3">
-              Contact Us
+              Support
             </h1>
             <p className="text-gray-600 text-lg">
               Have a question or feedback? We'd love to hear from you!
