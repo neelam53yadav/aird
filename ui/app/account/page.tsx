@@ -52,7 +52,7 @@ export default function AccountPage() {
           if (!data) return
           setUser(data)
           // Fetch workspaces
-          return fetch("/api/v1/workspaces", {
+          return fetch("/api/v1/workspaces/", {
             headers: {
               "Authorization": `Bearer ${document.cookie
                 .split("; ")

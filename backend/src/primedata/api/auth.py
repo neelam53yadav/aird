@@ -763,7 +763,7 @@ async def get_current_user_info(user: Dict[str, Any] = Depends(get_current_user)
     )
 
 
-@router.get("/api/v1/workspaces", response_model=List[WorkspaceResponse])
+@router.get("/api/v1/workspaces/", response_model=List[WorkspaceResponse])
 async def get_user_workspaces(user: Dict[str, Any] = Depends(get_current_user), db: Session = Depends(get_db)):
     """
     Get user's workspaces.
@@ -813,7 +813,7 @@ class WorkspaceCreateResponse(BaseModel):
     created_at: str
 
 
-@router.post("/api/v1/workspaces", response_model=WorkspaceCreateResponse)
+@router.post("/api/v1/workspaces/", response_model=WorkspaceCreateResponse)
 async def create_workspace(
     request_body: WorkspaceCreateRequest, user: Dict[str, Any] = Depends(get_current_user), db: Session = Depends(get_db)
 ):
