@@ -145,7 +145,7 @@ export default function ProductDetailPage() {
       // Load product and data sources in parallel
       Promise.all([
         loadProduct(),
-        loadDataSources()
+      loadDataSources()
       ]).catch(err => {
         console.error('Failed to load initial data:', err)
       })
@@ -1149,6 +1149,51 @@ export default function ProductDetailPage() {
                     </div>
                   ) : null
                 })()}
+                {(() => {
+                  const chunkingConfig = (product as any).chunking_config
+                  const embeddingConfig = (product as any).embedding_config
+                  const resolvedSettings = chunkingConfig?.resolved_settings
+                  
+                  if (!resolvedSettings && !embeddingConfig) return null
+                  
+                  return (
+                    <div>
+                      <dt className="text-sm font-medium text-gray-500">Pipeline Configuration</dt>
+                      <dd className="mt-1">
+                        <div className="space-y-2">
+                          {resolvedSettings && (
+                            <div className="flex flex-wrap gap-2">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                                Content: {resolvedSettings.content_type || 'general'}
+                              </span>
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                                Strategy: {resolvedSettings.chunking_strategy || 'fixed_size'}
+                              </span>
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                                Chunk: {resolvedSettings.chunk_size || 'N/A'}
+                              </span>
+                              {resolvedSettings.detection_confidence && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                                  Confidence: {Math.round(resolvedSettings.detection_confidence * 100)}%
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          {embeddingConfig && (
+                            <div className="flex flex-wrap gap-2">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800">
+                                Model: {embeddingConfig.embedder_name || 'minilm'}
+                              </span>
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800">
+                                Dimension: {embeddingConfig.embedding_dimension || 384}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </dd>
+                    </div>
+                  )
+                })()}
                 {product.trust_score !== undefined && (
                   <div>
                     <dt className="text-sm font-medium text-gray-500">AI Trust Score</dt>
@@ -1332,7 +1377,7 @@ export default function ProductDetailPage() {
                           View All ({pipelineRunsTotal})
                         </Link>
                       )}
-                    </div>
+                      </div>
                     {loadingPipelineRuns ? (
                       <TableSkeleton rows={3} cols={5} />
                     ) : pipelineRuns.length === 0 ? (
@@ -1442,7 +1487,7 @@ export default function ProductDetailPage() {
                     </p>
                   </div>
                 </div>
-
+                
                 {loadingData.artifacts ? (
                   <div className="flex items-center justify-center py-12">
                     <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
@@ -1506,17 +1551,17 @@ export default function ProductDetailPage() {
                                     {artifact.display_name || artifact.artifact_name?.replace(/_/g, ' ') || 'Unknown Artifact'}
                                   </span>
                                 </div>
-                              </td>
+                            </td>
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
                                   {artifact.artifact_type?.toUpperCase() || 'UNKNOWN'}
                                 </span>
-                              </td>
+                            </td>
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <span className="text-sm text-gray-600">
                                   {artifact.file_size ? formatFileSize(artifact.file_size) : 'N/A'}
                                 </span>
-                              </td>
+                            </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm">
                                 <div className="flex items-center gap-2">
                                   <Button
@@ -1531,18 +1576,18 @@ export default function ProductDetailPage() {
                                   {artifact.download_url && (
                                     <a
                                       href={artifact.download_url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
+                                target="_blank"
+                                rel="noopener noreferrer"
                                       download
                                       className="inline-flex items-center justify-center p-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
                                       title="Download artifact"
-                                    >
+                              >
                                       <Download className="h-4 w-4" />
-                                    </a>
+                              </a>
                                   )}
                                 </div>
-                              </td>
-                            </tr>
+                            </td>
+                          </tr>
                           )
                         })}
                       </tbody>
@@ -1656,44 +1701,44 @@ export default function ProductDetailPage() {
                         
                         {/* Only show "Run Initial Ingest" for datasource types that need it (not folder/local) */}
                         {datasource.type !== 'folder' && (
-                          <div className="mt-3">
-                            <Button
-                              variant="outline"
-                              size="default"
-                              className="w-full border-green-500 text-green-600 hover:bg-green-50 hover:border-green-600 hover:text-green-700 font-medium shadow-sm transition-all duration-200 hover:shadow-md"
-                              onClick={() => handleIngestDataSource(datasource.id)}
-                              disabled={ingestingDataSource === datasource.id}
-                            >
-                              {ingestingDataSource === datasource.id ? (
-                                <>
-                                  <Loader2 className="mr-2 h-4 w-4 animate-spin text-green-600" />
-                                  <span className="text-green-600">Ingesting Data...</span>
-                                </>
-                              ) : (
-                                <>
-                                  <ArrowDownToLine className="mr-2 h-4 w-4 text-green-600" />
-                                  <span className="text-green-600">Run Initial Ingest</span>
-                                </>
-                              )}
-                            </Button>
-                            
-                            {ingestionResults[datasource.id] && (
-                              <div className="mt-2 flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-md px-3 py-2">
-                                <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
-                                <span className="font-medium">
-                                  Successfully ingested {ingestionResults[datasource.id].files} file{ingestionResults[datasource.id].files !== 1 ? 's' : ''}
-                                </span>
-                                <span className="text-green-600">
-                                  ({(ingestionResults[datasource.id].bytes / 1024 / 1024).toFixed(2)} MB)
-                                </span>
-                                {ingestionResults[datasource.id].errors > 0 && (
-                                  <span className="text-orange-600 font-medium">
-                                    • {ingestionResults[datasource.id].errors} error{ingestionResults[datasource.id].errors !== 1 ? 's' : ''}
-                                  </span>
-                                )}
-                              </div>
+                        <div className="mt-3">
+                          <Button
+                            variant="outline"
+                            size="default"
+                            className="w-full border-green-500 text-green-600 hover:bg-green-50 hover:border-green-600 hover:text-green-700 font-medium shadow-sm transition-all duration-200 hover:shadow-md"
+                            onClick={() => handleIngestDataSource(datasource.id)}
+                            disabled={ingestingDataSource === datasource.id}
+                          >
+                            {ingestingDataSource === datasource.id ? (
+                              <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin text-green-600" />
+                                <span className="text-green-600">Ingesting Data...</span>
+                              </>
+                            ) : (
+                              <>
+                                <ArrowDownToLine className="mr-2 h-4 w-4 text-green-600" />
+                                <span className="text-green-600">Run Initial Ingest</span>
+                              </>
                             )}
-                          </div>
+                          </Button>
+                          
+                          {ingestionResults[datasource.id] && (
+                            <div className="mt-2 flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-md px-3 py-2">
+                              <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
+                              <span className="font-medium">
+                                Successfully ingested {ingestionResults[datasource.id].files} file{ingestionResults[datasource.id].files !== 1 ? 's' : ''}
+                              </span>
+                              <span className="text-green-600">
+                                ({(ingestionResults[datasource.id].bytes / 1024 / 1024).toFixed(2)} MB)
+                              </span>
+                              {ingestionResults[datasource.id].errors > 0 && (
+                                <span className="text-orange-600 font-medium">
+                                  • {ingestionResults[datasource.id].errors} error{ingestionResults[datasource.id].errors !== 1 ? 's' : ''}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
                         )}
                         
                       </div>

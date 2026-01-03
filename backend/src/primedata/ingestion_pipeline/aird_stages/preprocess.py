@@ -144,14 +144,20 @@ class PreprocessStage(AirdStage):
 
         storage = context.get("storage")
         raw_files = context.get("raw_files", [])
+        # Get playbook_id from context or config, but allow None/empty for auto-detection
         initial_playbook_id = context.get("playbook_id") or self.config.get("playbook_id")
+        # Normalize empty string to None to allow auto-detection
+        if initial_playbook_id == "":
+            initial_playbook_id = None
         chunking_config = context.get("chunking_config", {})  # Get product chunking config
 
         # Track playbook selection metadata for verification
+        # Will be updated based on whether playbook is provided or auto-detected
         playbook_selection_metadata = {
-            "method": "manual" if initial_playbook_id else None,  # Will be updated if auto-detected
+            "method": None,  # Will be set to "manual", "auto_detected", or "default"
             "reason": None,
             "detected_at": None,
+            "playbook_id": None,  # Will be set when playbook is determined
         }
 
         if not storage:
@@ -288,17 +294,21 @@ class PreprocessStage(AirdStage):
                 # Route playbook if not provided
                 file_playbook_id = initial_playbook_id  # Use initial playbook_id for this file
                 if not file_playbook_id:
+                    # Auto-detect playbook
                     chosen_id, reason = route_playbook(sample_text=raw_text[:1000], filename=file_stem)
                     file_playbook_id = chosen_id
                     # Update selection metadata for auto-detection (only on first file)
-                    if not playbook_selection_metadata.get("method") or playbook_selection_metadata["method"] is None:
+                    if playbook_selection_metadata.get("method") is None:
                         playbook_selection_metadata["method"] = "auto_detected"
+                        playbook_selection_metadata["playbook_id"] = chosen_id
                         playbook_selection_metadata["reason"] = reason
                         playbook_selection_metadata["detected_at"] = datetime.utcnow().isoformat() + "Z"
                     self.logger.info(f"Auto-routed to playbook {file_playbook_id} ({reason})")
-                elif not playbook_selection_metadata.get("method") or playbook_selection_metadata["method"] is None:
-                    # Playbook was provided, mark as manual
-                    playbook_selection_metadata["method"] = "manual"
+                else:
+                    # Playbook was provided, mark as manual (only on first file)
+                    if playbook_selection_metadata.get("method") is None:
+                        playbook_selection_metadata["method"] = "manual"
+                        playbook_selection_metadata["playbook_id"] = file_playbook_id
 
                 # Use file_playbook_id for this file's processing
                 playbook_id = file_playbook_id
@@ -372,11 +382,14 @@ class PreprocessStage(AirdStage):
         total_chunks = len(all_records)
         mid_sentence_rate = round(total_mid_sentence_ends / max(total_chunks, 1), 4)
 
+        # Ensure playbook_id is set from selection metadata if available
+        final_playbook_id = playbook_selection_metadata.get("playbook_id") or playbook_id
+
         # Store aggregate metrics
         metrics_list = [
             {
                 "file_stem": stem,
-                "playbook_id": playbook_id,
+                "playbook_id": final_playbook_id,
                 "sections": total_sections,
                 "chunks": total_chunks,
                 "mid_sentence_boundary_rate": mid_sentence_rate,
@@ -394,7 +407,7 @@ class PreprocessStage(AirdStage):
         }
 
         metrics = {
-            "playbook_id": playbook_id,
+            "playbook_id": final_playbook_id,
             "playbook_selection": playbook_selection_metadata,  # Include selection metadata
             "processed_files": len(processed_files),
             "failed_files": len(failed_files),
