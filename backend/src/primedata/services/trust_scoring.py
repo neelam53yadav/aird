@@ -279,16 +279,30 @@ def score_record_with_ai_ready_metrics(
     # Get base metrics from existing scorer
     base_metrics = score_record(record, weights)
     
-    # Extract chunk text
+    # Extract chunk text and domain_type
     chunk_text = (record.get("text") or "").strip()
+    domain_type = record.get("domain_type") or record.get("metadata", {}).get("domain_type")
     
-    # 1. Calculate Chunk Coherence
+    # 1. Calculate Chunk Coherence with domain-adaptive thresholds
     coherence_config = playbook.get("coherence", {}) if playbook else {}
+    
+    # Get domain-specific threshold if available, otherwise use default
+    domain_thresholds = coherence_config.get("domain_min_thresholds", {})
+    default_threshold = coherence_config.get("min_coherence_threshold", 0.6)
+    
+    if domain_type and domain_type.lower() in domain_thresholds:
+        min_coherence_threshold = domain_thresholds[domain_type.lower()]
+    elif domain_type and domain_type.lower() in ["regulatory", "finance_banking"]:
+        # Regulatory/finance content may have lower coherence due to cross-references
+        min_coherence_threshold = coherence_config.get("regulatory_min_threshold", 0.5)
+    else:
+        min_coherence_threshold = default_threshold
+    
     coherence_result = calculate_chunk_coherence(
         chunk_text=chunk_text,
         method=coherence_config.get("method", "embedding_similarity"),
         sentence_window=coherence_config.get("sentence_window", 3),
-        min_coherence_threshold=coherence_config.get("min_coherence_threshold", 0.6)
+        min_coherence_threshold=min_coherence_threshold
     )
     base_metrics["Chunk_Coherence"] = coherence_result["coherence_score"]
     
