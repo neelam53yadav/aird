@@ -143,83 +143,111 @@ export default function EditProductPage() {
         // Get settings based on mode - prefer saved settings over resolved_settings
         let settings: any = {}
         if (chunkingMode === 'auto') {
-          // In auto mode, use auto_settings for content_type and get optimal config based on content_type
-          const autoSettings = cfg.auto_settings || {}
-          const contentType = autoSettings.content_type || 'general'
-          
-          // Get optimal configuration based on content type (same as getOptimalChunkingConfig)
-          const optimalConfigs: Record<string, {
-            chunk_size: number
-            chunk_overlap: number
-            min_chunk_size: number
-            max_chunk_size: number
-            chunking_strategy: string
-          }> = {
-            'legal': {
-              chunk_size: 2000,
-              chunk_overlap: 400,
-              min_chunk_size: 200,
-              max_chunk_size: 3000,
-              chunking_strategy: 'semantic'
-            },
-            'code': {
-              chunk_size: 1500,
-              chunk_overlap: 300,
-              min_chunk_size: 100,
-              max_chunk_size: 2500,
-              chunking_strategy: 'recursive'
-            },
-            'documentation': {
-              chunk_size: 1200,
-              chunk_overlap: 200,
-              min_chunk_size: 100,
-              max_chunk_size: 2000,
-              chunking_strategy: 'semantic'
-            },
-            'conversation': {
-              chunk_size: 800,
-              chunk_overlap: 100,
-              min_chunk_size: 50,
-              max_chunk_size: 1500,
-              chunking_strategy: 'semantic'
-            },
-            'academic': {
-              chunk_size: 1800,
-              chunk_overlap: 350,
-              min_chunk_size: 150,
-              max_chunk_size: 2500,
-              chunking_strategy: 'semantic'
-            },
-            'technical': {
-              chunk_size: 1400,
-              chunk_overlap: 250,
-              min_chunk_size: 100,
-              max_chunk_size: 2200,
-              chunking_strategy: 'semantic'
-            },
-            'general': {
-              chunk_size: 1000,
-              chunk_overlap: 200,
-              min_chunk_size: 100,
-              max_chunk_size: 2000,
-              chunking_strategy: 'fixed_size'
+          // PRIORITY: Use resolved_settings if available (from actual content analysis)
+          if (cfg.resolved_settings && cfg.resolved_settings.content_type) {
+            const resolved = cfg.resolved_settings
+            settings = {
+              content_type: resolved.content_type,
+              chunk_size: resolved.chunk_size || 1000,
+              chunk_overlap: resolved.chunk_overlap || 200,
+              min_chunk_size: resolved.min_chunk_size || 100,
+              max_chunk_size: resolved.max_chunk_size || 2000,
+              chunking_strategy: resolved.chunking_strategy || 'fixed_size',
+              ...cfg.auto_settings, // Preserve other auto_settings like confidence_threshold, model_optimized
             }
+            console.log('Auto mode: Using resolved_settings from content analysis:', settings)
+          } else {
+            // Fallback: Use auto_settings for content_type and get optimal config
+            const autoSettings = cfg.auto_settings || {}
+            const contentType = autoSettings.content_type || 'general'
+            
+            // Get optimal configuration based on content type - ADD regulatory and finance_banking
+            const optimalConfigs: Record<string, {
+              chunk_size: number
+              chunk_overlap: number
+              min_chunk_size: number
+              max_chunk_size: number
+              chunking_strategy: string
+            }> = {
+              'legal': {
+                chunk_size: 2000,
+                chunk_overlap: 400,
+                min_chunk_size: 200,
+                max_chunk_size: 3000,
+                chunking_strategy: 'semantic'
+              },
+              'regulatory': {
+                chunk_size: 1400,
+                chunk_overlap: 280,
+                min_chunk_size: 200,
+                max_chunk_size: 2200,
+                chunking_strategy: 'semantic'
+              },
+              'finance_banking': {
+                chunk_size: 1300,
+                chunk_overlap: 260,
+                min_chunk_size: 200,
+                max_chunk_size: 2200,
+                chunking_strategy: 'semantic'
+              },
+              'code': {
+                chunk_size: 1500,
+                chunk_overlap: 300,
+                min_chunk_size: 100,
+                max_chunk_size: 2500,
+                chunking_strategy: 'recursive'
+              },
+              'documentation': {
+                chunk_size: 1200,
+                chunk_overlap: 200,
+                min_chunk_size: 100,
+                max_chunk_size: 2000,
+                chunking_strategy: 'semantic'
+              },
+              'conversation': {
+                chunk_size: 800,
+                chunk_overlap: 100,
+                min_chunk_size: 50,
+                max_chunk_size: 1500,
+                chunking_strategy: 'semantic'
+              },
+              'academic': {
+                chunk_size: 1800,
+                chunk_overlap: 350,
+                min_chunk_size: 150,
+                max_chunk_size: 2500,
+                chunking_strategy: 'semantic'
+              },
+              'technical': {
+                chunk_size: 1400,
+                chunk_overlap: 250,
+                min_chunk_size: 100,
+                max_chunk_size: 2200,
+                chunking_strategy: 'semantic'
+              },
+              'general': {
+                chunk_size: 1000,
+                chunk_overlap: 200,
+                min_chunk_size: 100,
+                max_chunk_size: 2000,
+                chunking_strategy: 'fixed_size'
+              }
+            }
+            
+            const optimal = optimalConfigs[contentType] || optimalConfigs['general']
+            
+            // In auto mode, use optimal config based on content_type
+            settings = {
+              ...autoSettings,
+              chunk_size: optimal.chunk_size,
+              chunk_overlap: optimal.chunk_overlap,
+              min_chunk_size: optimal.min_chunk_size,
+              max_chunk_size: optimal.max_chunk_size,
+              chunking_strategy: optimal.chunking_strategy,
+            }
+            
+            console.log('Auto mode: Using optimal config for content_type:', contentType, settings)
           }
-          
-          const optimal = optimalConfigs[contentType] || optimalConfigs['general']
-          
-          // In auto mode, use optimal config based on content_type
-          // Only fallback to manual_settings or resolved_settings if optimal is not available
-          settings = {
-            ...autoSettings,
-            chunk_size: optimal.chunk_size,
-            chunk_overlap: optimal.chunk_overlap,
-            min_chunk_size: optimal.min_chunk_size,
-            max_chunk_size: optimal.max_chunk_size,
-            chunking_strategy: optimal.chunking_strategy,
-          }
-          
-          console.log('Auto mode: Using optimal config for content_type:', contentType, settings)
         } else {
           // In manual mode, ALWAYS use manual_settings if it exists
           // Only fallback to resolved_settings if manual_settings is completely missing
@@ -254,7 +282,7 @@ export default function EditProductPage() {
         const derivedMinChunk = settings.min_chunk_size ?? 100
         const derivedMaxChunk = settings.max_chunk_size ?? 2000
         const derivedStrategy = settings.chunking_strategy ?? settings.strategy ?? 'fixed_size'
-        const derivedContentType = settings.content_type || cfg.auto_settings?.content_type || 'general'
+        const derivedContentType = settings.content_type || cfg.resolved_settings?.content_type || cfg.auto_settings?.content_type || 'general'
         const derivedModelOptimized = settings.model_optimized ?? cfg.auto_settings?.model_optimized ?? true
         const derivedConfidence = settings.confidence || settings.analysis_confidence || cfg.auto_settings?.confidence_threshold || 0.7
         
