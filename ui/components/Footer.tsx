@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { Mail, FileText, Shield, HelpCircle, Github, Twitter, Linkedin } from 'lucide-react'
+import { Mail, FileText, Shield, HelpCircle } from 'lucide-react'
 
 export function Footer() {
   const currentYear = new Date().getFullYear()
@@ -24,35 +24,6 @@ export function Footer() {
             <p className="text-gray-300 text-sm leading-relaxed mb-4">
               Making Data AI-Ready. Transform your data into production-ready AI assets with enterprise-grade processing and validation.
             </p>
-            <div className="flex space-x-4 mt-6">
-              <a
-                href="https://github.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-gray-400 hover:text-white transition-colors"
-                aria-label="GitHub"
-              >
-                <Github className="h-5 w-5" />
-              </a>
-              <a
-                href="https://twitter.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-gray-400 hover:text-white transition-colors"
-                aria-label="Twitter"
-              >
-                <Twitter className="h-5 w-5" />
-              </a>
-              <a
-                href="https://linkedin.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-gray-400 hover:text-white transition-colors"
-                aria-label="LinkedIn"
-              >
-                <Linkedin className="h-5 w-5" />
-              </a>
-            </div>
           </div>
 
           {/* Product Links */}
@@ -110,12 +81,6 @@ export function Footer() {
               </Link>
               <Link href="/privacy" className="hover:text-white transition-colors">
                 Privacy
-              </Link>
-              <Link href="/cookies" className="hover:text-white transition-colors">
-                Cookie Policy
-              </Link>
-              <Link href="/sitemap" className="hover:text-white transition-colors">
-                Sitemap
               </Link>
             </div>
           </div>
