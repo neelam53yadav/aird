@@ -171,3 +171,4 @@ def load_archived_violations(product_id: UUID, version: int, minio_client=None) 
         return []
 
 
+
