@@ -121,10 +121,21 @@ def route_playbook(sample_text: Optional[str] = None, filename: Optional[str] = 
     if any(k in txt or k in fn_lower for k in ("scanned", "ocr", "image", "tesseract")) and has("SCANNED"):
         return ("SCANNED", "ocr_keywords")
 
+    # Check for banking/finance indicators (before regulatory, as banking docs may have regulatory terms)
+    banking_keywords = (
+        "banking", "financial", "finance", "bank", "capital", "liquidity", "solvency", 
+        "credit risk", "market risk", "balance sheet", "income statement", "interest rate",
+        "basel", "crd", "crr", "eba", "ecb", "ssm", "supervision", "auditor", "supervisor"
+    )
+    if any(k in txt or k in fn_lower for k in banking_keywords) and has("FINANCIAL"):
+        return ("FINANCIAL", "banking_finance_keywords")
+    
     # Check for regulatory indicators
-    if any(
-        k in txt or k in fn_lower for k in ("label", "regulatory", "prescribing information", "safety", "fda", "ema")
-    ) and has("REGULATORY"):
+    regulatory_keywords = (
+        "label", "regulatory", "prescribing information", "safety", "fda", "ema",
+        "compliance", "regulation", "guidelines", "directive", "framework", "requirement"
+    )
+    if any(k in txt or k in fn_lower for k in regulatory_keywords) and has("REGULATORY"):
         return ("REGULATORY", "regulatory_keywords")
 
     # Default to TECH

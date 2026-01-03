@@ -1215,6 +1215,15 @@ class PreprocessStage(AirdStage):
                         product_id=self.product_id,
                         domain_type=detected_domain_type,  # Pass domain_type for domain-adaptive scoring
                     )
+                    
+                    # Log domain_type for verification (only log first chunk to avoid spam)
+                    if idx == 0:
+                        if detected_domain_type:
+                            self.logger.info(f"✅ Record {rec['chunk_id']} has domain_type: {detected_domain_type}")
+                            std_logger.info(f"✅ Record {rec['chunk_id']} has domain_type: {detected_domain_type}")
+                        else:
+                            self.logger.warning(f"⚠️ Record {rec['chunk_id']} missing domain_type (detected_domain_type was None)")
+                            std_logger.warning(f"⚠️ Record {rec['chunk_id']} missing domain_type")
 
                     # Enhanced metadata extraction if flag is set
                     if preprocessing_flags.get("force_metadata_extraction") or preprocessing_flags.get(
