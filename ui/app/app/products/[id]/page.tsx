@@ -1071,39 +1071,133 @@ export default function ProductDetailPage() {
 
         {activeTab === 'overview' && (
           <div className="space-y-6">
-            <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Product Information</h2>
-              <dl className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
+            {/* Product Information Card - Redesigned */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              {/* Header Section */}
+              <div className="bg-gradient-to-r from-gray-50 to-white border-b border-gray-200 px-6 py-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-blue-50 rounded-lg">
+                      <Package className="h-5 w-5 text-blue-600" />
+                    </div>
                 <div>
-                  <dt className="text-sm font-medium text-gray-500">Product ID</dt>
-                  <dd className="mt-1 text-sm text-gray-900 font-mono">{product.id}</dd>
+                      <h2 className="text-xl font-semibold text-gray-900">Product Information</h2>
+                      <p className="text-sm text-gray-500 mt-0.5">Product details and configuration</p>
                 </div>
-                <div>
-                  <dt className="text-sm font-medium text-gray-500">Status</dt>
-                  <dd className="mt-1">
+                  </div>
+                  {product.status && (
                     <StatusBadge status={product.status as any} />
+                  )}
+                </div>
+              </div>
+
+              {/* Content Section */}
+              <div className="p-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Left Column - Basic Information */}
+                  <div className="space-y-5">
+                <div>
+                      <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4 flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-gray-400" />
+                        Basic Information
+                      </h3>
+                      <dl className="space-y-4">
+                        <div className="flex items-start justify-between py-2 border-b border-gray-100">
+                          <dt className="text-sm font-medium text-gray-500">Product ID</dt>
+                          <dd className="text-sm text-gray-900 font-mono text-right max-w-xs truncate" title={product.id}>
+                            {product.id}
                   </dd>
                 </div>
-                <div>
+                        <div className="flex items-start justify-between py-2 border-b border-gray-100">
                   <dt className="text-sm font-medium text-gray-500">Current Version</dt>
-                  <dd className="mt-1 text-sm text-gray-900">{product.current_version}</dd>
-                </div>
-                <div>
-                  <dt className="text-sm font-medium text-gray-500">Created</dt>
-                  <dd className="mt-1 text-sm text-gray-900">
-                    {new Date(product.created_at).toLocaleDateString()}
+                          <dd className="text-sm font-semibold text-gray-900">
+                            v{product.current_version}
                   </dd>
                 </div>
                 {product.updated_at && (
-                  <div>
+                          <div className="flex items-start justify-between py-2 border-b border-gray-100">
                     <dt className="text-sm font-medium text-gray-500">Last Updated</dt>
-                    <dd className="mt-1 text-sm text-gray-900">
-                      {new Date(product.updated_at).toLocaleDateString()}
+                            <dd className="text-sm text-gray-900">
+                              {new Date(product.updated_at).toLocaleDateString('en-US', { 
+                                year: 'numeric', 
+                                month: 'short', 
+                                day: 'numeric' 
+                              })}
                     </dd>
                   </div>
                 )}
+                        <div className="flex items-start justify-between py-2 border-b border-gray-100">
+                          <dt className="text-sm font-medium text-gray-500">Created</dt>
+                          <dd className="text-sm text-gray-900">
+                            {new Date(product.created_at).toLocaleDateString('en-US', { 
+                              year: 'numeric', 
+                              month: 'short', 
+                              day: 'numeric' 
+                            })}
+                          </dd>
+                        </div>
+                      </dl>
+                    </div>
+                  </div>
+
+                  {/* Right Column - Configuration */}
+                  <div className="space-y-5">
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4 flex items-center gap-2">
+                        <Settings className="h-4 w-4 text-gray-400" />
+                        Configuration
+                      </h3>
+                      <dl className="space-y-4">
+                        {/* Content Type - Prominent Display */}
                 {(() => {
-                  // Get playbook_id from product or fallback to preprocessing_stats
+                          const chunkingConfig = (product as any).chunking_config
+                          const resolvedSettings = chunkingConfig?.resolved_settings
+                          const contentType = resolvedSettings?.content_type || 
+                                            chunkingConfig?.auto_settings?.content_type || 
+                                            'general'
+                          
+                          const contentTypeLabels: Record<string, string> = {
+                            'general': 'General',
+                            'legal': 'Legal',
+                            'regulatory': 'Regulatory',
+                            'finance_banking': 'Finance & Banking',
+                            'code': 'Code',
+                            'documentation': 'Documentation',
+                            'conversation': 'Conversation',
+                            'academic': 'Academic',
+                            'technical': 'Technical'
+                          }
+
+                          const contentTypeColors: Record<string, string> = {
+                            'general': 'bg-gray-100 text-gray-800 border-gray-300',
+                            'legal': 'bg-purple-100 text-purple-800 border-purple-300',
+                            'regulatory': 'bg-blue-100 text-blue-800 border-blue-300',
+                            'finance_banking': 'bg-emerald-100 text-emerald-800 border-emerald-300',
+                            'code': 'bg-orange-100 text-orange-800 border-orange-300',
+                            'documentation': 'bg-cyan-100 text-cyan-800 border-cyan-300',
+                            'conversation': 'bg-pink-100 text-pink-800 border-pink-300',
+                            'academic': 'bg-indigo-100 text-indigo-800 border-indigo-300',
+                            'technical': 'bg-teal-100 text-teal-800 border-teal-300'
+                          }
+
+                          return (
+                            <div className="py-2 border-b border-gray-100">
+                              <dt className="text-sm font-medium text-gray-500 mb-2">Content Type</dt>
+                              <dd>
+                                <span className={`inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-semibold border ${contentTypeColors[contentType] || contentTypeColors['general']}`}>
+                                  {contentTypeLabels[contentType] || contentType}
+                                </span>
+                                {resolvedSettings?.detection_confidence && (
+                                  <span className="ml-2 text-xs text-gray-500">
+                                    ({Math.round(resolvedSettings.detection_confidence * 100)}% confidence)
+                                  </span>
+                                )}
+                              </dd>
+                            </div>
+                          )
+                        })()}
+                        {/* Preprocessing Playbook */}
+                        {(() => {
                   const playbookId = product.playbook_id || 
                     (product.preprocessing_stats && typeof product.preprocessing_stats === 'object' &&
                      product.preprocessing_stats.playbook_id) ||
@@ -1111,127 +1205,132 @@ export default function ProductDetailPage() {
                   
                   const selection = product.playbook_selection
                   const isAutoDetected = selection?.method === 'auto_detected'
-                  const detectionReason = selection?.reason
                   
                   return playbookId ? (
-                    <div>
-                      <dt className="text-sm font-medium text-gray-500">Preprocessing Playbook</dt>
-                      <dd className="mt-1">
+                            <div className="py-2 border-b border-gray-100">
+                              <dt className="text-sm font-medium text-gray-500 mb-2">Preprocessing Playbook</dt>
+                              <dd>
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                  <span className="inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-semibold bg-blue-50 text-blue-700 border border-blue-200">
                             {playbookId}
                           </span>
-                          {isAutoDetected && (
-                            <span 
-                              className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"
-                              title={detectionReason ? `Auto-detected: ${detectionReason}` : 'Auto-detected'}
-                            >
+                                  {isAutoDetected ? (
+                                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200">
+                                      <CheckCircle2 className="h-3 w-3 mr-1" />
                               Auto-detected
                             </span>
-                          )}
-                          {selection?.method === 'manual' && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                  ) : (
+                                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-50 text-gray-700 border border-gray-200">
                               Manual
                             </span>
                           )}
                         </div>
-                        {isAutoDetected && detectionReason && (
-                          <p className="mt-1 text-xs text-gray-500">
-                            Reason: {detectionReason.replace(/_/g, ' ')}
-                          </p>
-                        )}
-                        {selection?.detected_at && (
-                          <p className="mt-1 text-xs text-gray-400">
-                            Detected: {new Date(selection.detected_at).toLocaleString()}
+                                {selection?.reason && (
+                                  <p className="mt-1.5 text-xs text-gray-500 italic">
+                                    {selection.reason.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                           </p>
                         )}
                       </dd>
                     </div>
                   ) : null
-                })()}
-                {(() => {
-                  const chunkingConfig = (product as any).chunking_config
-                  const embeddingConfig = (product as any).embedding_config
-                  const resolvedSettings = chunkingConfig?.resolved_settings
-                  
-                  if (!resolvedSettings && !embeddingConfig) return null
-                  
-                  return (
-                    <div>
-                      <dt className="text-sm font-medium text-gray-500">Pipeline Configuration</dt>
-                      <dd className="mt-1">
-                        <div className="space-y-2">
-                          {resolvedSettings && (
-                            <div className="flex flex-wrap gap-2">
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
-                                Content: {resolvedSettings.content_type || 'general'}
-                              </span>
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                                Strategy: {resolvedSettings.chunking_strategy || 'fixed_size'}
-                              </span>
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                                Chunk: {resolvedSettings.chunk_size || 'N/A'}
-                              </span>
-                              {resolvedSettings.detection_confidence && (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
-                                  Confidence: {Math.round(resolvedSettings.detection_confidence * 100)}%
-                                </span>
-                              )}
+                        })()}
+                        {/* Pipeline Configuration */}
+                        {(() => {
+                          const chunkingConfig = (product as any).chunking_config
+                          const embeddingConfig = (product as any).embedding_config
+                          const resolvedSettings = chunkingConfig?.resolved_settings
+                          
+                          if (!resolvedSettings && !embeddingConfig) return null
+                          
+                          return (
+                            <div className="py-2 border-b border-gray-100">
+                              <dt className="text-sm font-medium text-gray-500 mb-2">Pipeline Configuration</dt>
+                              <dd>
+                                <div className="space-y-2">
+                                  {resolvedSettings && (
+                                    <div className="flex flex-wrap gap-2">
+                                      <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-purple-50 text-purple-700 border border-purple-200">
+                                        <Layers className="h-3 w-3 mr-1" />
+                                        {resolvedSettings.chunking_strategy || 'fixed_size'}
+                                      </span>
+                                      <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-green-50 text-green-700 border border-green-200">
+                                        Chunk: {resolvedSettings.chunk_size || 'N/A'}
+                                      </span>
+                                      {resolvedSettings.chunk_overlap && (
+                                        <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                                          Overlap: {resolvedSettings.chunk_overlap}
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                  {embeddingConfig && (
+                                    <div className="flex flex-wrap gap-2 mt-2">
+                                      <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                        <Database className="h-3 w-3 mr-1" />
+                                        {embeddingConfig.embedder_name || 'minilm'}
+                                      </span>
+                                      <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                        Dim: {embeddingConfig.embedding_dimension || 384}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              </dd>
                             </div>
-                          )}
-                          {embeddingConfig && (
-                            <div className="flex flex-wrap gap-2">
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800">
-                                Model: {embeddingConfig.embedder_name || 'minilm'}
+                          )
+                        })()}
+                        {/* Policy Status */}
+                        {product.policy_status && product.policy_status !== 'unknown' && (
+                          <div className="py-2 border-b border-gray-100">
+                            <dt className="text-sm font-medium text-gray-500 mb-2">Policy Status</dt>
+                            <dd>
+                              <span className={`inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-semibold ${
+                                product.policy_status === 'passed' ? 'bg-green-50 text-green-700 border border-green-200' :
+                                product.policy_status === 'failed' ? 'bg-red-50 text-red-700 border border-red-200' :
+                                'bg-yellow-50 text-yellow-700 border border-yellow-200'
+                              }`}>
+                                <Shield className="h-3.5 w-3.5 mr-1.5" />
+                                {product.policy_status.charAt(0).toUpperCase() + product.policy_status.slice(1)}
                               </span>
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800">
-                                Dimension: {embeddingConfig.embedding_dimension || 384}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      </dd>
+                            </dd>
+                          </div>
+                        )}
+
+                        {/* AI Trust Score */}
+                        {product.trust_score !== undefined && (
+                          <div className="py-2">
+                            <dt className="text-sm font-medium text-gray-500 mb-2">AI Trust Score</dt>
+                            <dd>
+                              {(() => {
+                                const rawScore = product.trust_score || 0
+                                const normalizedScore = rawScore > 1 ? rawScore / 100 : rawScore
+                                const displayPercentage = rawScore > 1 ? rawScore : rawScore * 100
+                                
+                                return (
+                                  <div className="flex items-center gap-3">
+                                    <span className={`inline-flex items-center px-4 py-2 rounded-lg text-base font-semibold border ${
+                                      normalizedScore >= 0.8 ? 'bg-green-50 text-green-700 border-green-200' :
+                                      normalizedScore >= 0.6 ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                                      'bg-red-50 text-red-700 border-red-200'
+                                    }`}>
+                                      <TrendingUp className="h-4 w-4 mr-1.5" />
+                                      {displayPercentage.toFixed(1)}%
+                                    </span>
+                                    <span className="text-xs text-gray-500">
+                                      {normalizedScore >= 0.8 ? 'Excellent' :
+                                       normalizedScore >= 0.6 ? 'Good' : 'Needs Improvement'}
+                                    </span>
+                                  </div>
+                                )
+                              })()}
+                            </dd>
+                          </div>
+                        )}
+                      </dl>
                     </div>
-                  )
-                })()}
-                {product.trust_score !== undefined && (
-                  <div>
-                    <dt className="text-sm font-medium text-gray-500">AI Trust Score</dt>
-                    <dd className="mt-1">
-                      {(() => {
-                        // Normalize trust_score: backend stores 0-100, normalize to 0-1 for comparison
-                        const rawScore = product.trust_score || 0
-                        const normalizedScore = rawScore > 1 ? rawScore / 100 : rawScore
-                        const displayPercentage = rawScore > 1 ? rawScore : rawScore * 100
-                        
-                        return (
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            normalizedScore >= 0.8 ? 'bg-green-100 text-green-800' :
-                            normalizedScore >= 0.6 ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-red-100 text-red-800'
-                          }`}>
-                            {displayPercentage.toFixed(1)}%
-                          </span>
-                        )
-                      })()}
-                    </dd>
                   </div>
-                )}
-                {product.policy_status && product.policy_status !== 'unknown' && (
-                  <div>
-                    <dt className="text-sm font-medium text-gray-500">Policy Status</dt>
-                    <dd className="mt-1">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        product.policy_status === 'passed' ? 'bg-green-100 text-green-800' :
-                        product.policy_status === 'failed' ? 'bg-red-100 text-red-800' :
-                        'bg-yellow-100 text-yellow-800'
-                      }`}>
-                        {product.policy_status}
-                      </span>
-                    </dd>
-                  </div>
-                )}
-              </dl>
+                </div>
+              </div>
             </div>
 
             {/* Preprocessing Stats Section (M1) */}
