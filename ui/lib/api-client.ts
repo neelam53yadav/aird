@@ -582,11 +582,11 @@ class ApiClient {
 
   // Workspaces API
   async getWorkspaces(): Promise<ApiResponse> {
-    return this.get('/api/v1/workspaces')
+    return this.get('/api/v1/workspaces/')
   }
 
   async createWorkspace(): Promise<ApiResponse> {
-    return this.post('/api/v1/workspaces', {})
+    return this.post('/api/v1/workspaces/', {})
   }
 
   // Billing API

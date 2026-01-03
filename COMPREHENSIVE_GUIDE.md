@@ -800,7 +800,7 @@ Authorization: Bearer <jwt_token>
 - `POST /api/v1/auth/session/exchange` - Exchange NextAuth token for backend JWT
 - `GET /api/v1/users/me` - Get current user information
 - `PUT /api/v1/user/profile` - Update user profile
-- `GET /api/v1/workspaces` - Get user's workspaces
+- `GET /api/v1/workspaces/` - Get user's workspaces
 
 #### **Product Management**
 
