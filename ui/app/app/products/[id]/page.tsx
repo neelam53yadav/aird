@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Package, Database, Settings, Play, Pause, Search, TrendingUp, BarChart3, AlertTriangle, GitBranch, FileText, Download, FileSpreadsheet, Upload, Loader2, ArrowDownToLine, CheckCircle2, Home, Shield, Layers, Lock, FileCheck, FileJson, FileCode, FileSpreadsheet as FileCsv, RefreshCw, X, Eye } from 'lucide-react'
+import { ArrowLeft, Package, Database, Settings, Settings2, Play, Pause, Search, TrendingUp, BarChart3, AlertTriangle, GitBranch, FileText, Download, FileSpreadsheet, Upload, Loader2, ArrowDownToLine, CheckCircle2, Home, Shield, Layers, Lock, FileCheck, FileJson, FileCode, FileSpreadsheet as FileCsv, RefreshCw, X, Eye, Cpu } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { TableSkeleton, CardSkeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
@@ -1149,51 +1149,6 @@ export default function ProductDetailPage() {
                     </div>
                   ) : null
                 })()}
-                {(() => {
-                  const chunkingConfig = (product as any).chunking_config
-                  const embeddingConfig = (product as any).embedding_config
-                  const resolvedSettings = chunkingConfig?.resolved_settings
-                  
-                  if (!resolvedSettings && !embeddingConfig) return null
-                  
-                  return (
-                    <div>
-                      <dt className="text-sm font-medium text-gray-500">Pipeline Configuration</dt>
-                      <dd className="mt-1">
-                        <div className="space-y-2">
-                          {resolvedSettings && (
-                            <div className="flex flex-wrap gap-2">
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
-                                Content: {resolvedSettings.content_type || 'general'}
-                              </span>
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                                Strategy: {resolvedSettings.chunking_strategy || 'fixed_size'}
-                              </span>
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                                Chunk: {resolvedSettings.chunk_size || 'N/A'}
-                              </span>
-                              {resolvedSettings.detection_confidence && (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
-                                  Confidence: {Math.round(resolvedSettings.detection_confidence * 100)}%
-                                </span>
-                              )}
-                            </div>
-                          )}
-                          {embeddingConfig && (
-                            <div className="flex flex-wrap gap-2">
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800">
-                                Model: {embeddingConfig.embedder_name || 'minilm'}
-                              </span>
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800">
-                                Dimension: {embeddingConfig.embedding_dimension || 384}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      </dd>
-                    </div>
-                  )
-                })()}
                 {product.trust_score !== undefined && (
                   <div>
                     <dt className="text-sm font-medium text-gray-500">AI Trust Score</dt>
@@ -1233,6 +1188,118 @@ export default function ProductDetailPage() {
                 )}
               </dl>
             </div>
+
+            {/* Pipeline Configuration Card */}
+            {(() => {
+              const chunkingConfig = (product as any).chunking_config
+              const embeddingConfig = (product as any).embedding_config
+              const resolvedSettings = chunkingConfig?.resolved_settings
+              const chunkingMode = chunkingConfig?.mode || 'auto'
+              
+              // Show if we have any config data
+              if (!resolvedSettings && !embeddingConfig && !chunkingConfig) return null
+              
+              return (
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="p-2 bg-indigo-100 rounded-lg">
+                      <Settings2 className="h-5 w-5 text-indigo-600" />
+                    </div>
+                    <h2 className="text-lg font-semibold text-gray-900">Pipeline Configuration</h2>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Chunking Configuration */}
+                    {resolvedSettings && (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                          <Layers className="h-4 w-4 text-gray-500" />
+                          Chunking Configuration
+                        </div>
+                        <div className="space-y-2 pl-6">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-gray-600">Content Type</span>
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-purple-100 text-purple-800 capitalize">
+                              {resolvedSettings.content_type || 'general'}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-gray-600">Strategy</span>
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-blue-100 text-blue-800">
+                              {resolvedSettings.chunking_strategy?.replace('_', ' ') || 'fixed size'}
+                            </span>
+                          </div>
+                          {resolvedSettings.chunk_size && (
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm text-gray-600">Chunk Size</span>
+                              <span className="text-sm font-medium text-gray-900">{resolvedSettings.chunk_size}</span>
+                            </div>
+                          )}
+                          {resolvedSettings.chunk_overlap !== undefined && (
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm text-gray-600">Overlap</span>
+                              <span className="text-sm font-medium text-gray-900">{resolvedSettings.chunk_overlap}</span>
+                            </div>
+                          )}
+                          {resolvedSettings.detection_confidence && (
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm text-gray-600">Detection Confidence</span>
+                              <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-yellow-100 text-yellow-800">
+                                {Math.round(resolvedSettings.detection_confidence * 100)}%
+                              </span>
+                            </div>
+                          )}
+                          <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+                            <span className="text-sm text-gray-600">Mode</span>
+                            <span className="text-xs text-gray-500 capitalize">{chunkingMode}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Embedding Configuration */}
+                    {embeddingConfig && (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                          <Cpu className="h-4 w-4 text-gray-500" />
+                          Embedding Configuration
+                        </div>
+                        <div className="space-y-2 pl-6">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-gray-600">Model</span>
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-indigo-100 text-indigo-800">
+                              {embeddingConfig.embedder_name || 'minilm'}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-gray-600">Dimensions</span>
+                            <span className="text-sm font-medium text-gray-900">{embeddingConfig.embedding_dimension || 384}</span>
+                          </div>
+                          {embeddingConfig.embedding_provider && (
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm text-gray-600">Provider</span>
+                              <span className="text-sm font-medium text-gray-900 capitalize">
+                                {embeddingConfig.embedding_provider}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Fallback if no resolved settings but have config */}
+                  {!resolvedSettings && chunkingConfig && (
+                    <div className="mt-4 p-3 bg-gray-50 rounded-md border border-gray-200">
+                      <p className="text-xs text-gray-600">
+                        Configuration mode: <span className="font-medium capitalize">{chunkingMode}</span>
+                        {chunkingMode === 'auto' && ' (Settings will be determined automatically)'}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
 
             {/* Preprocessing Stats Section (M1) */}
             {product.preprocessing_stats && (
