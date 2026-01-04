@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Play, Clock, CheckCircle, XCircle, AlertTriangle, Loader2, X, Eye } from 'lucide-react'
+import { ArrowLeft, Play, Clock, CheckCircle, XCircle, AlertTriangle, Loader2, X, Eye, Square } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import AppLayout from '@/components/layout/AppLayout'
 import { apiClient, PipelineRun } from '@/lib/api-client'
@@ -28,6 +28,11 @@ export default function PipelineRunsPage() {
   const [promotingVersion, setPromotingVersion] = useState<number | null>(null)
   const [selectedRunForDetails, setSelectedRunForDetails] = useState<PipelineRun | null>(null)
   const RUNS_PER_PAGE = 20
+  
+  // Ref to track the polling interval
+  const intervalRef = useRef<NodeJS.Timeout | null>(null)
+  // Ref to track latest pipelineRuns state for checking inside interval callback
+  const pipelineRunsRef = useRef<PipelineRun[]>([])
 
   const loadProduct = useCallback(async () => {
     try {
@@ -85,26 +90,58 @@ export default function PipelineRunsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [productId]) // Only reload when productId changes
 
+  // Update pipelineRunsRef whenever pipelineRuns changes
+  useEffect(() => {
+    pipelineRunsRef.current = pipelineRuns
+  }, [pipelineRuns])
+
   // Poll for running pipelines
   useEffect(() => {
+    // Clear any existing interval first
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current)
+      intervalRef.current = null
+    }
+
+    // Check initial state
     const hasRunningRuns = pipelineRuns.some(
       (run) => run.status === 'running' || run.status === 'queued'
     )
 
-    if (hasRunningRuns && !polling) {
+    if (hasRunningRuns) {
       setPolling(true)
-      const interval = setInterval(() => {
-        loadPipelineRuns(currentPage, false) // Don't show loading spinner during polling
+      intervalRef.current = setInterval(() => {
+        loadPipelineRuns(currentPage, false).then(() => {
+          // Check the latest state from ref after loading
+          const stillHasRunning = pipelineRunsRef.current.some(
+            (run) => run.status === 'running' || run.status === 'queued'
+          )
+          
+          if (!stillHasRunning) {
+            // Stop polling if no running runs
+            if (intervalRef.current) {
+              clearInterval(intervalRef.current)
+              intervalRef.current = null
+            }
+            setPolling(false)
+          }
+        })
       }, 90000) // Poll every 90 seconds
-
-      return () => {
-        clearInterval(interval)
-        setPolling(false)
-      }
-    } else if (!hasRunningRuns) {
+    } else {
       setPolling(false)
     }
-  }, [pipelineRuns, polling, loadPipelineRuns, currentPage])
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+        intervalRef.current = null
+      }
+      setPolling(false)
+    }
+    // Only recreate when loadPipelineRuns or currentPage changes
+    // This prevents constant recreation when pipelineRuns updates
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadPipelineRuns, currentPage])
 
   const handleTriggerPipeline = async (forceRun: boolean = false) => {
     setTriggering(true)
@@ -480,18 +517,7 @@ export default function PipelineRunsPage() {
                               </div>
                             </div>
                           ) : (
-                            <div className="flex flex-col gap-2">
-                              <span className="text-sm text-gray-400">No stages tracked</span>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleViewDetails(run)}
-                                className="flex items-center gap-1"
-                              >
-                                <Eye className="h-4 w-4" />
-                                View Stages
-                              </Button>
-                            </div>
+                            <span className="text-sm text-gray-400">No stages tracked</span>
                           )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
@@ -503,8 +529,8 @@ export default function PipelineRunsPage() {
                                 onClick={() => handleCancelRun(run.id!)}
                                 className="text-red-600 hover:text-red-700 hover:bg-red-50"
                               >
-                                <X className="h-4 w-4 mr-1" />
-                                Cancel
+                                <Square className="h-4 w-4 mr-1" />
+                                Stop
                               </Button>
                             )}
                             {run.status === 'succeeded' && (
