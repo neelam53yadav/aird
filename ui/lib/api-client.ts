@@ -546,6 +546,10 @@ class ApiClient {
     return this.get(`/api/v1/pipeline/runs/${runId}/logs`)
   }
 
+  async getPipelineChunkingConfig(runId: string): Promise<ApiResponse> {
+    return this.get(`/api/v1/pipeline/runs/${runId}/chunking-config`)
+  }
+
   async getPipelineArtifacts(productId: string, version?: number): Promise<ApiResponse> {
     const params = new URLSearchParams()
     params.append('product_id', productId)

@@ -912,6 +912,24 @@ def task_preprocess(**context) -> Dict[str, Any]:
                     product.chunking_config = current_config
                     logger.info(f"Updated product {product_id} with chunking_config: {product.chunking_config}")
 
+                    # Store chunking config resolved_settings in pipeline_run metrics for UI display
+                    if aird_context.get("pipeline_run") and resolved_chunking:
+                        pipeline_run = aird_context["pipeline_run"]
+                        if pipeline_run.metrics is None:
+                            pipeline_run.metrics = {}
+                        
+                        # Store resolved_settings for this pipeline run
+                        pipeline_run.metrics["chunking_config"] = {
+                            "resolved_settings": resolved_chunking,
+                            "timestamp": datetime.utcnow().isoformat(),
+                            "version": version
+                        }
+                        # Use flag_modified to ensure SQLAlchemy detects the change
+                        from sqlalchemy.orm.attributes import flag_modified
+                        flag_modified(pipeline_run, "metrics")
+                        db.commit()
+                        logger.info(f"Stored chunking_config resolved_settings in pipeline_run {pipeline_run.id} metrics")
+
                 # Store playbook selection metadata for verification
                 playbook_selection = result.metrics.get("playbook_selection")
                 if playbook_selection:

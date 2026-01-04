@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Play, Clock, CheckCircle, XCircle, AlertTriangle, Loader2, X, Eye, Square } from 'lucide-react'
+import { ArrowLeft, Play, Clock, CheckCircle, XCircle, AlertTriangle, Loader2, X, Eye, Square, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import AppLayout from '@/components/layout/AppLayout'
 import { apiClient, PipelineRun } from '@/lib/api-client'
@@ -29,6 +29,7 @@ export default function PipelineRunsPage() {
   const [promotingVersion, setPromotingVersion] = useState<number | null>(null)
   const [selectedRunForDetails, setSelectedRunForDetails] = useState<PipelineRun | null>(null)
   const [selectedChunkingConfig, setSelectedChunkingConfig] = useState<any | null>(null)
+  const [loadingChunkingConfig, setLoadingChunkingConfig] = useState(false)
   const RUNS_PER_PAGE = 20
   
   // Ref to track the polling interval
@@ -316,7 +317,11 @@ export default function PipelineRunsPage() {
   const getChunkingConfigForRun = (run: PipelineRun) => {
     // For successful runs, always return config (even if empty) to show the button
     if (run.status === 'succeeded') {
-      // Only use resolved_settings if it exists
+      // First check if it's in run.metrics (from backend, stored during execution)
+      if (run.metrics?.chunking_config?.resolved_settings) {
+        return run.metrics.chunking_config.resolved_settings
+      }
+      // Fallback to product chunking_config (for backward compatibility)
       if (product?.chunking_config?.resolved_settings) {
         return product.chunking_config.resolved_settings
       }
@@ -346,6 +351,38 @@ export default function PipelineRunsPage() {
 
   const handlePipelineCancelled = () => {
     loadPipelineRuns(currentPage, false)
+  }
+
+  const handleViewChunkingConfig = async (run: PipelineRun) => {
+    setLoadingChunkingConfig(true)
+    setSelectedChunkingConfig(null)
+    
+    try {
+      // First check if we already have it in run.metrics or product
+      const existingConfig = getChunkingConfigForRun(run)
+      if (existingConfig && Object.keys(existingConfig).length > 0) {
+        setSelectedChunkingConfig(existingConfig)
+        setLoadingChunkingConfig(false)
+        return
+      }
+
+      // If not, fetch from API
+      const response = await apiClient.getPipelineChunkingConfig(run.id!)
+      if (response.error || !response.data?.resolved_settings) {
+        setSelectedChunkingConfig({}) // Show empty config message
+      } else {
+        setSelectedChunkingConfig(response.data.resolved_settings)
+      }
+    } catch (err) {
+      console.error('Failed to fetch chunking config:', err)
+      addToast({
+        type: 'error',
+        message: 'Failed to fetch chunking configuration',
+      })
+      setSelectedChunkingConfig({}) // Show empty config message
+    } finally {
+      setLoadingChunkingConfig(false)
+    }
   }
 
   return (
@@ -550,12 +587,25 @@ export default function PipelineRunsPage() {
                         </td>
                         <td className="px-6 py-4">
                           {chunkingConfig !== null ? (
-                            <button
-                              onClick={() => setSelectedChunkingConfig(chunkingConfig)}
-                              className="text-sm text-blue-600 hover:text-blue-800 hover:underline cursor-pointer text-left"
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleViewChunkingConfig(run)}
+                              disabled={loadingChunkingConfig}
+                              className="flex items-center gap-1"
                             >
-                              {configSummary || 'View Config'}
-                            </button>
+                              {loadingChunkingConfig ? (
+                                <>
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  Loading...
+                                </>
+                              ) : (
+                                <>
+                                  <Settings className="h-4 w-4" />
+                                  View Config
+                                </>
+                              )}
+                            </Button>
                           ) : (
                             <span className="text-sm text-gray-400">No config</span>
                           )}

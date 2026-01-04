@@ -917,6 +917,37 @@ async def get_pipeline_run_logs(
         }
 
 
+@router.get("/runs/{run_id}/chunking-config")
+async def get_pipeline_chunking_config(
+    run_id: UUID,
+    request_obj: Request,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Get chunking configuration for a pipeline run from stored metrics.
+    Returns resolved_settings that were used during preprocessing.
+    """
+    run = db.query(PipelineRun).filter(PipelineRun.id == run_id).first()
+    if not run:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pipeline run not found")
+    
+    ensure_product_access(db, request_obj, run.product_id)
+    
+    # Load metrics (handles S3 archival)
+    from primedata.services.lazy_json_loader import load_pipeline_run_metrics
+    metrics = load_pipeline_run_metrics(run)
+    
+    chunking_config = metrics.get("chunking_config", {})
+    resolved_settings = chunking_config.get("resolved_settings")
+    
+    return {
+        "resolved_settings": resolved_settings,
+        "timestamp": chunking_config.get("timestamp"),
+        "version": chunking_config.get("version")
+    }
+
+
 class PipelineArtifactResponse(BaseModel):
     """Response model for pipeline artifact information."""
 
