@@ -129,20 +129,17 @@ export default function PipelineRunsPage() {
     }
   }, [pipelineRuns])
 
-  // Poll for running pipelines - use faster interval when running
+  // Check if we need to start polling when pipelineRuns changes
+  // This only starts polling if there are running runs and we're not already polling
   useEffect(() => {
-    // Clear any existing interval first
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current)
-      intervalRef.current = null
-    }
-
-    // Check initial state
     const hasRunningRuns = pipelineRuns.some(
       (run) => run.status === 'running' || run.status === 'queued'
     )
 
-    if (hasRunningRuns) {
+    // Only start polling if:
+    // 1. There are running runs
+    // 2. We're not already polling (interval doesn't exist)
+    if (hasRunningRuns && !intervalRef.current) {
       setPolling(true)
       intervalRef.current = setInterval(() => {
         loadPipelineRuns(currentPage, false).then(() => {
@@ -160,11 +157,17 @@ export default function PipelineRunsPage() {
             setPolling(false)
           }
         })
-      }, 10000) // Poll every 10 seconds when pipelines are running (instead of 90)
-    } else {
-      setPolling(false)
+      }, 10000) // Poll every 10 seconds when pipelines are running
     }
+    // Only re-check when pipelineRuns changes, but don't recreate interval unnecessarily
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pipelineRuns, currentPage, loadPipelineRuns])
 
+  // Poll for running pipelines - cleanup effect
+  useEffect(() => {
+    // This effect handles cleanup when dependencies change
+    // The actual polling start is handled by the effect above
+    
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current)
@@ -172,8 +175,6 @@ export default function PipelineRunsPage() {
       }
       setPolling(false)
     }
-    // Only recreate when loadPipelineRuns or currentPage changes
-    // This prevents constant recreation when pipelineRuns updates
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadPipelineRuns, currentPage])
 
@@ -203,10 +204,8 @@ export default function PipelineRunsPage() {
           type: 'success',
           message: `Pipeline run triggered successfully. Version: ${response.data.version}`,
         })
-        // Refresh runs after a short delay
-        setTimeout(() => {
-          loadPipelineRuns(currentPage, false) // Don't show loading spinner during refresh
-        }, 1000)
+        // Immediately refresh runs to detect the new pipeline and start polling
+        await loadPipelineRuns(currentPage, false)
       }
     } catch (err) {
       addToast({
