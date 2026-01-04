@@ -467,22 +467,35 @@ export default function PipelineRunsPage() {
                                   {stagesInfo.stages.length > 3 && '...'}
                                 </div>
                               )}
+                              <div className="mt-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleViewDetails(run)}
+                                  className="flex items-center gap-1"
+                                >
+                                  <Eye className="h-4 w-4" />
+                                  View Stages
+                                </Button>
+                              </div>
                             </div>
                           ) : (
-                            <span className="text-sm text-gray-400">No stages tracked</span>
+                            <div className="flex flex-col gap-2">
+                              <span className="text-sm text-gray-400">No stages tracked</span>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleViewDetails(run)}
+                                className="flex items-center gap-1"
+                              >
+                                <Eye className="h-4 w-4" />
+                                View Stages
+                              </Button>
+                            </div>
                           )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleViewDetails(run)}
-                              className="flex items-center gap-1"
-                            >
-                              <Eye className="h-4 w-4" />
-                              View Details
-                            </Button>
                             {(run.status === 'running' || run.status === 'queued') && run.id && (
                               <Button
                                 variant="outline"
