@@ -1075,30 +1075,22 @@ export default function ProductDetailPage() {
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Product Information</h2>
               <dl className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
                 <div>
-                  <dt className="text-sm font-medium text-gray-500">Product ID</dt>
-                  <dd className="mt-1 text-sm text-gray-900 font-mono">{product.id}</dd>
-                </div>
-                <div>
                   <dt className="text-sm font-medium text-gray-500">Status</dt>
                   <dd className="mt-1">
                     <StatusBadge status={product.status as any} />
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-sm font-medium text-gray-500">Current Version</dt>
-                  <dd className="mt-1 text-sm text-gray-900">{product.current_version}</dd>
-                </div>
-                <div>
                   <dt className="text-sm font-medium text-gray-500">Created</dt>
                   <dd className="mt-1 text-sm text-gray-900">
-                    {new Date(product.created_at).toLocaleDateString()}
+                    {new Date(product.created_at).toLocaleString()}
                   </dd>
                 </div>
                 {product.updated_at && (
                   <div>
                     <dt className="text-sm font-medium text-gray-500">Last Updated</dt>
                     <dd className="mt-1 text-sm text-gray-900">
-                      {new Date(product.updated_at).toLocaleDateString()}
+                      {new Date(product.updated_at).toLocaleString()}
                     </dd>
                   </div>
                 )}
@@ -1115,7 +1107,7 @@ export default function ProductDetailPage() {
                   
                   return playbookId ? (
                     <div>
-                      <dt className="text-sm font-medium text-gray-500">Preprocessing Playbook</dt>
+                      <dt className="text-sm font-medium text-gray-500">Playbook</dt>
                       <dd className="mt-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
@@ -1186,120 +1178,50 @@ export default function ProductDetailPage() {
                     </dd>
                   </div>
                 )}
+                {/* Content Type from chunking config */}
+                {(() => {
+                  const chunkingConfig = (product as any).chunking_config
+                  const resolvedSettings = chunkingConfig?.resolved_settings
+                  const contentType = resolvedSettings?.content_type || chunkingConfig?.auto_settings?.content_type
+                  
+                  if (!contentType) return null
+                  
+                  return (
+                    <div>
+                      <dt className="text-sm font-medium text-gray-500">Content Type</dt>
+                      <dd className="mt-1">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 capitalize">
+                          {contentType}
+                        </span>
+                      </dd>
+                    </div>
+                  )
+                })()}
+                {/* Embedding Model from embedding config */}
+                {(() => {
+                  const embeddingConfig = (product as any).embedding_config
+                  const modelName = embeddingConfig?.embedder_name
+                  
+                  if (!modelName) return null
+                  
+                  return (
+                    <div>
+                      <dt className="text-sm font-medium text-gray-500">Embedding Model</dt>
+                      <dd className="mt-1">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+                          {modelName}
+                        </span>
+                        {embeddingConfig?.embedding_dimension && (
+                          <span className="ml-2 text-xs text-gray-500">
+                            ({embeddingConfig.embedding_dimension}D)
+                          </span>
+                        )}
+                      </dd>
+                    </div>
+                  )
+                })()}
               </dl>
             </div>
-
-            {/* Pipeline Configuration Card */}
-            {(() => {
-              const chunkingConfig = (product as any).chunking_config
-              const embeddingConfig = (product as any).embedding_config
-              const resolvedSettings = chunkingConfig?.resolved_settings
-              const chunkingMode = chunkingConfig?.mode || 'auto'
-              
-              // Show if we have any config data
-              if (!resolvedSettings && !embeddingConfig && !chunkingConfig) return null
-              
-              return (
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                  <div className="flex items-center gap-2 mb-4">
-                    <div className="p-2 bg-indigo-100 rounded-lg">
-                      <Settings2 className="h-5 w-5 text-indigo-600" />
-                    </div>
-                    <h2 className="text-lg font-semibold text-gray-900">Pipeline Configuration</h2>
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Chunking Configuration */}
-                    {resolvedSettings && (
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                          <Layers className="h-4 w-4 text-gray-500" />
-                          Chunking Configuration
-                        </div>
-                        <div className="space-y-2 pl-6">
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm text-gray-600">Content Type</span>
-                            <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-purple-100 text-purple-800 capitalize">
-                              {resolvedSettings.content_type || 'general'}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm text-gray-600">Strategy</span>
-                            <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-blue-100 text-blue-800">
-                              {resolvedSettings.chunking_strategy?.replace('_', ' ') || 'fixed size'}
-                            </span>
-                          </div>
-                          {resolvedSettings.chunk_size && (
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm text-gray-600">Chunk Size</span>
-                              <span className="text-sm font-medium text-gray-900">{resolvedSettings.chunk_size}</span>
-                            </div>
-                          )}
-                          {resolvedSettings.chunk_overlap !== undefined && (
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm text-gray-600">Overlap</span>
-                              <span className="text-sm font-medium text-gray-900">{resolvedSettings.chunk_overlap}</span>
-                            </div>
-                          )}
-                          {resolvedSettings.detection_confidence && (
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm text-gray-600">Detection Confidence</span>
-                              <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-yellow-100 text-yellow-800">
-                                {Math.round(resolvedSettings.detection_confidence * 100)}%
-                              </span>
-                            </div>
-                          )}
-                          <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-                            <span className="text-sm text-gray-600">Mode</span>
-                            <span className="text-xs text-gray-500 capitalize">{chunkingMode}</span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* Embedding Configuration */}
-                    {embeddingConfig && (
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                          <Cpu className="h-4 w-4 text-gray-500" />
-                          Embedding Configuration
-                        </div>
-                        <div className="space-y-2 pl-6">
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm text-gray-600">Model</span>
-                            <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-indigo-100 text-indigo-800">
-                              {embeddingConfig.embedder_name || 'minilm'}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm text-gray-600">Dimensions</span>
-                            <span className="text-sm font-medium text-gray-900">{embeddingConfig.embedding_dimension || 384}</span>
-                          </div>
-                          {embeddingConfig.embedding_provider && (
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm text-gray-600">Provider</span>
-                              <span className="text-sm font-medium text-gray-900 capitalize">
-                                {embeddingConfig.embedding_provider}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  
-                  {/* Fallback if no resolved settings but have config */}
-                  {!resolvedSettings && chunkingConfig && (
-                    <div className="mt-4 p-3 bg-gray-50 rounded-md border border-gray-200">
-                      <p className="text-xs text-gray-600">
-                        Configuration mode: <span className="font-medium capitalize">{chunkingMode}</span>
-                        {chunkingMode === 'auto' && ' (Settings will be determined automatically)'}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )
-            })()}
 
             {/* Preprocessing Stats Section (M1) */}
             {product.preprocessing_stats && (
