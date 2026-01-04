@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import React from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Play, Clock, CheckCircle, XCircle, AlertTriangle, Loader2, X, Eye, Square, Settings } from 'lucide-react'
@@ -36,6 +37,10 @@ export default function PipelineRunsPage() {
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
   // Ref to track latest pipelineRuns state for checking inside interval callback
   const pipelineRunsRef = useRef<PipelineRun[]>([])
+  // State for current time to update duration in real-time
+  const [currentTime, setCurrentTime] = useState(new Date())
+  // Ref to track the duration update interval
+  const durationIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
   const loadProduct = useCallback(async () => {
     try {
@@ -98,7 +103,33 @@ export default function PipelineRunsPage() {
     pipelineRunsRef.current = pipelineRuns
   }, [pipelineRuns])
 
-  // Poll for running pipelines
+  // Update current time every second ONLY for running pipelines
+  useEffect(() => {
+    const hasRunningRuns = pipelineRuns.some(
+      (run) => run.status === 'running' || run.status === 'queued'
+    )
+
+    if (hasRunningRuns) {
+      // Update every second for real-time duration
+      durationIntervalRef.current = setInterval(() => {
+        setCurrentTime(new Date())
+      }, 1000)
+    } else {
+      if (durationIntervalRef.current) {
+        clearInterval(durationIntervalRef.current)
+        durationIntervalRef.current = null
+      }
+    }
+
+    return () => {
+      if (durationIntervalRef.current) {
+        clearInterval(durationIntervalRef.current)
+        durationIntervalRef.current = null
+      }
+    }
+  }, [pipelineRuns])
+
+  // Poll for running pipelines - use faster interval when running
   useEffect(() => {
     // Clear any existing interval first
     if (intervalRef.current) {
@@ -129,7 +160,7 @@ export default function PipelineRunsPage() {
             setPolling(false)
           }
         })
-      }, 90000) // Poll every 90 seconds
+      }, 10000) // Poll every 10 seconds when pipelines are running (instead of 90)
     } else {
       setPolling(false)
     }
@@ -279,6 +310,38 @@ export default function PipelineRunsPage() {
     }
   }
 
+  // Memoized duration cell component to prevent unnecessary re-renders
+  const DurationCell = React.memo(({ run, currentTime }: { run: PipelineRun, currentTime: Date }) => {
+    const duration = useMemo(() => {
+      if (!run.started_at) return 'N/A'
+      
+      const start = new Date(run.started_at)
+      const end = run.finished_at 
+        ? new Date(run.finished_at) 
+        : (run.status === 'running' || run.status === 'queued') 
+          ? currentTime 
+          : new Date()
+      const diff = end.getTime() - start.getTime()
+      
+      const seconds = Math.floor(diff / 1000)
+      const minutes = Math.floor(seconds / 60)
+      const hours = Math.floor(minutes / 60)
+      
+      if (hours > 0) {
+        return `${hours}h ${minutes % 60}m`
+      } else if (minutes > 0) {
+        return `${minutes}m ${seconds % 60}s`
+      } else {
+        return `${seconds}s`
+      }
+    }, [run.started_at, run.finished_at, run.status, currentTime])
+    
+    return <div className="text-sm text-gray-900">{duration}</div>
+  })
+  
+  DurationCell.displayName = 'DurationCell'
+
+  // Keep formatDuration for backward compatibility (if used elsewhere)
   const formatDuration = (startedAt?: string, finishedAt?: string) => {
     if (!startedAt) return 'N/A'
     
@@ -555,9 +618,7 @@ export default function PipelineRunsPage() {
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">
-                            {formatDuration(run.started_at, run.finished_at)}
-                          </div>
+                          <DurationCell run={run} currentTime={currentTime} />
                         </td>
                         <td className="px-6 py-4">
                           {stagesInfo ? (
@@ -619,7 +680,7 @@ export default function PipelineRunsPage() {
                                 onClick={() => handleCancelRun(run.id!)}
                                 className="text-red-600 hover:text-red-700 hover:bg-red-50"
                               >
-                                <Square className="h-4 w-4 mr-1" />
+                                <Square className="h-4 w-4 mr-1 fill-current" />
                                 Stop
                               </Button>
                             )}
