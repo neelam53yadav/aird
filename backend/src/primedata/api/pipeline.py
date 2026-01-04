@@ -923,7 +923,6 @@ class PipelineArtifactResponse(BaseModel):
     file_size: int
     created_at: str
     download_url: Optional[str] = None
-    view_url: Optional[str] = None  # URL for viewing in browser/modal (inline)
     display_name: Optional[str] = None
     description: Optional[str] = None
 
@@ -987,7 +986,6 @@ async def get_pipeline_artifacts(
     for artifact in artifacts:
         # Generate presigned URL for download (only for non-vector artifacts)
         download_url = None
-        view_url = None
         file_size = artifact.file_size
         
         # For vector artifacts, get size from Qdrant collection
@@ -1026,14 +1024,12 @@ async def get_pipeline_artifacts(
                     f"skipping presigned URL generation (no file in storage)"
                 )
                 download_url = None
-                view_url = None
             elif not artifact.storage_key or artifact.storage_key.strip() == "":
                 logger.warning(
                     f"Artifact {artifact.id} has invalid storage_key: '{artifact.storage_key}'. "
                     f"Skipping presigned URL generation."
                 )
                 download_url = None
-                view_url = None
             else:
                 try:
                     # Generate download URL (attachment) for downloading files
@@ -1044,15 +1040,7 @@ async def get_pipeline_artifacts(
                         inline=False,  # Explicit for downloads
                     )
                     
-                    # Generate view URL (inline) for viewing in browser/modal
-                    view_url = minio_client.presign(
-                        artifact.storage_bucket,
-                        artifact.storage_key,
-                        expiry=3600,  # 1 hour expiry
-                        inline=True,  # For viewing in browser
-                    )
-                    
-                    # Validate the presigned URLs
+                    # Validate the presigned URL
                     if download_url:
                         # Check if it's a valid signed URL (contains signature parameters)
                         if 'X-Goog-Signature' in download_url or 'Signature' in download_url or 'Expires' in download_url:
@@ -1066,16 +1054,6 @@ async def get_pipeline_artifacts(
                             f"Failed to generate presigned URL for artifact {artifact.id} "
                             f"(bucket={artifact.storage_bucket}, key={artifact.storage_key[:50] if artifact.storage_key else 'None'}...)"
                         )
-                    
-                    # Validate view_url similarly
-                    if view_url and not ('X-Goog-Signature' in view_url or 'Signature' in view_url or 'Expires' in view_url):
-                        logger.warning(f"View URL for artifact {artifact.id} doesn't contain signature parameters")
-                        view_url = None
-                    elif not view_url:
-                        logger.warning(
-                            f"Failed to generate view URL for artifact {artifact.id} "
-                            f"(bucket={artifact.storage_bucket}, key={artifact.storage_key[:50] if artifact.storage_key else 'None'}...)"
-                        )
                 except Exception as e:
                     # Log the full exception details to understand what's failing
                     error_type = type(e).__name__
@@ -1086,7 +1064,6 @@ async def get_pipeline_artifacts(
                         exc_info=True
                     )
                     download_url = None
-                    view_url = None
 
         # Get display name
         display_name = artifact_display_names.get(artifact.artifact_name, artifact.artifact_name.replace("_", " ").title())
@@ -1103,13 +1080,95 @@ async def get_pipeline_artifacts(
                 file_size=file_size,  # Use calculated size for vectors
                 created_at=artifact.created_at.isoformat() if artifact.created_at else "",
                 download_url=download_url,  # Only set if presigned URL was successfully generated
-                view_url=view_url,  # View URL for browser/modal (inline)
                 display_name=display_name,
                 description=description,
             )
         )
 
     return {"artifacts": result, "total": len(result)}
+
+
+@router.get("/artifacts/{artifact_id}/content")
+async def get_artifact_content(
+    artifact_id: UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Get artifact content by ID. Acts as a proxy to avoid CORS issues.
+    Returns the file content with proper content-type headers.
+    """
+    # Get the artifact
+    artifact = db.query(PipelineArtifact).filter(PipelineArtifact.id == artifact_id).first()
+    if not artifact:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact not found")
+    
+    # Ensure user has access to the product
+    ensure_product_access(db, request, artifact.product_id)
+    
+    # Check if artifact has storage info
+    if not artifact.storage_bucket or not artifact.storage_key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Artifact does not have storage information"
+        )
+    
+    # Skip vector artifacts
+    if artifact.artifact_type.value.lower() == 'vector':
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Vector artifacts cannot be viewed as files. Use the RAG Playground to query them."
+        )
+    
+    try:
+        # Fetch file content from storage
+        file_content = minio_client.get_bytes(artifact.storage_bucket, artifact.storage_key)
+        
+        if not file_content:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Artifact file not found in storage"
+            )
+        
+        # Determine content type based on artifact type or file extension
+        content_type = "application/octet-stream"
+        if artifact.artifact_type.value.lower() == 'json':
+            content_type = "application/json"
+        elif artifact.artifact_type.value.lower() == 'csv':
+            content_type = "text/csv"
+        elif artifact.artifact_type.value.lower() == 'pdf':
+            content_type = "application/pdf"
+        elif artifact.artifact_type.value.lower() == 'jsonl':
+            content_type = "application/x-ndjson"
+        elif artifact.storage_key.endswith('.json'):
+            content_type = "application/json"
+        elif artifact.storage_key.endswith('.csv'):
+            content_type = "text/csv"
+        elif artifact.storage_key.endswith('.pdf'):
+            content_type = "application/pdf"
+        elif artifact.storage_key.endswith('.jsonl'):
+            content_type = "application/x-ndjson"
+        elif artifact.storage_key.endswith('.txt'):
+            content_type = "text/plain"
+        
+        from fastapi.responses import Response
+        return Response(
+            content=file_content,
+            media_type=content_type,
+            headers={
+                "Content-Disposition": "inline",
+                "Cache-Control": "private, max-age=3600",
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to fetch artifact content for {artifact_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch artifact content: {str(e)}"
+        )
 
 
 def _check_airflow_dag_run_status(
