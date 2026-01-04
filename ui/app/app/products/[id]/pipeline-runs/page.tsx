@@ -519,7 +519,7 @@ export default function PipelineRunsPage() {
                         </td>
                         <td className="px-6 py-4">
                           {stagesInfo ? (
-                            <div className="text-sm text-gray-900">
+                            <div className="text-sm text-gray-900 mb-2">
                               <div className="font-medium">
                                 {stagesInfo.completed}/{stagesInfo.total} completed
                               </div>
@@ -529,19 +529,19 @@ export default function PipelineRunsPage() {
                                   {stagesInfo.stages.length > 3 && '...'}
                                 </div>
                               )}
-                              <div className="mt-2">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleViewDetails(run)}
-                                  className="flex items-center gap-1"
-                                >
-                                  <Eye className="h-4 w-4" />
-                                  View Stages
-                                </Button>
-                              </div>
                             </div>
                           ) : null}
+                          <div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleViewDetails(run)}
+                              className="flex items-center gap-1"
+                            >
+                              <Eye className="h-4 w-4" />
+                              View Stages
+                            </Button>
+                          </div>
                         </td>
                         <td className="px-6 py-4">
                           {chunkingConfig ? (
