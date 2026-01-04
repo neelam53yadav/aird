@@ -23,7 +23,10 @@ export default function ChunkingConfigModal({
   onClose,
   config,
 }: ChunkingConfigModalProps) {
-  if (!isOpen || !config) return null
+  if (!isOpen) return null
+
+  // Check if config is empty (no properties)
+  const hasConfig = config && Object.keys(config).length > 0
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
@@ -42,7 +45,8 @@ export default function ChunkingConfigModal({
           </div>
           
           <div className="px-6 py-4">
-            <dl className="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2">
+            {hasConfig ? (
+              <dl className="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2">
               {config.chunk_size && (
                 <div>
                   <dt className="text-sm font-medium text-gray-500">Chunk Size</dt>
@@ -99,7 +103,12 @@ export default function ChunkingConfigModal({
                   <dd className="mt-1 text-sm text-gray-900 capitalize">{config.source.replace(/_/g, ' ')}</dd>
                 </div>
               )}
-            </dl>
+              </dl>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <p>Chunking configuration is not available for this pipeline run.</p>
+              </div>
+            )}
           </div>
           
           <div className="bg-gray-50 px-6 py-3 flex justify-end">
