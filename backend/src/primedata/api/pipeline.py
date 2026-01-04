@@ -923,6 +923,7 @@ class PipelineArtifactResponse(BaseModel):
     file_size: int
     created_at: str
     download_url: Optional[str] = None
+    view_url: Optional[str] = None  # URL for viewing in browser/modal (inline)
     display_name: Optional[str] = None
     description: Optional[str] = None
 
@@ -986,6 +987,7 @@ async def get_pipeline_artifacts(
     for artifact in artifacts:
         # Generate presigned URL for download (only for non-vector artifacts)
         download_url = None
+        view_url = None
         file_size = artifact.file_size
         
         # For vector artifacts, get size from Qdrant collection
@@ -1024,20 +1026,33 @@ async def get_pipeline_artifacts(
                     f"skipping presigned URL generation (no file in storage)"
                 )
                 download_url = None
+                view_url = None
             elif not artifact.storage_key or artifact.storage_key.strip() == "":
                 logger.warning(
                     f"Artifact {artifact.id} has invalid storage_key: '{artifact.storage_key}'. "
                     f"Skipping presigned URL generation."
                 )
                 download_url = None
+                view_url = None
             else:
                 try:
+                    # Generate download URL (attachment) for downloading files
                     download_url = minio_client.presign(
                         artifact.storage_bucket,
                         artifact.storage_key,
                         expiry=3600,  # 1 hour expiry
+                        inline=False,  # Explicit for downloads
                     )
-                    # Validate the presigned URL
+                    
+                    # Generate view URL (inline) for viewing in browser/modal
+                    view_url = minio_client.presign(
+                        artifact.storage_bucket,
+                        artifact.storage_key,
+                        expiry=3600,  # 1 hour expiry
+                        inline=True,  # For viewing in browser
+                    )
+                    
+                    # Validate the presigned URLs
                     if download_url:
                         # Check if it's a valid signed URL (contains signature parameters)
                         if 'X-Goog-Signature' in download_url or 'Signature' in download_url or 'Expires' in download_url:
@@ -1051,6 +1066,16 @@ async def get_pipeline_artifacts(
                             f"Failed to generate presigned URL for artifact {artifact.id} "
                             f"(bucket={artifact.storage_bucket}, key={artifact.storage_key[:50] if artifact.storage_key else 'None'}...)"
                         )
+                    
+                    # Validate view_url similarly
+                    if view_url and not ('X-Goog-Signature' in view_url or 'Signature' in view_url or 'Expires' in view_url):
+                        logger.warning(f"View URL for artifact {artifact.id} doesn't contain signature parameters")
+                        view_url = None
+                    elif not view_url:
+                        logger.warning(
+                            f"Failed to generate view URL for artifact {artifact.id} "
+                            f"(bucket={artifact.storage_bucket}, key={artifact.storage_key[:50] if artifact.storage_key else 'None'}...)"
+                        )
                 except Exception as e:
                     # Log the full exception details to understand what's failing
                     error_type = type(e).__name__
@@ -1061,6 +1086,7 @@ async def get_pipeline_artifacts(
                         exc_info=True
                     )
                     download_url = None
+                    view_url = None
 
         # Get display name
         display_name = artifact_display_names.get(artifact.artifact_name, artifact.artifact_name.replace("_", " ").title())
@@ -1077,6 +1103,7 @@ async def get_pipeline_artifacts(
                 file_size=file_size,  # Use calculated size for vectors
                 created_at=artifact.created_at.isoformat() if artifact.created_at else "",
                 download_url=download_url,  # Only set if presigned URL was successfully generated
+                view_url=view_url,  # View URL for browser/modal (inline)
                 display_name=display_name,
                 description=description,
             )

@@ -434,18 +434,21 @@ export default function ProductDetailPage() {
         return
       }
 
-      if (!artifact.download_url) {
+      // Use view_url for viewing (inline), fallback to download_url if view_url not available
+      const urlToFetch = artifact.view_url || artifact.download_url
+
+      if (!urlToFetch) {
         addToast({
           type: 'error',
-          message: 'No download URL available for this artifact',
+          message: 'No URL available for this artifact',
         })
-        setArtifactContent('No download URL available for this artifact. Please contact support.')
+        setArtifactContent('No URL available for this artifact. Please contact support.')
         setLoadingArtifactContent(false)
         return
       }
 
       // Fetch artifact content using presigned URL
-      const response = await fetch(artifact.download_url, {
+      const response = await fetch(urlToFetch, {
         method: 'GET',
         headers: {
           'Accept': '*/*',
@@ -482,7 +485,7 @@ export default function ProductDetailPage() {
         message: errorMessage,
       })
       // Set error content to show in modal
-      setArtifactContent(`Error loading artifact: ${errorMessage}\n\nDownload URL: ${artifact.download_url || 'N/A'}`)
+      setArtifactContent(`Error loading artifact: ${errorMessage}\n\nView URL: ${artifact.view_url || artifact.download_url || 'N/A'}`)
     } finally {
       setLoadingArtifactContent(false)
     }
