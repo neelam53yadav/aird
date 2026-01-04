@@ -76,6 +76,7 @@ class ProductResponse(BaseModel):
     trust_report_path: Optional[str] = None  # M3
     chunking_config: Optional[Dict[str, Any]] = None
     embedding_config: Optional[Dict[str, Any]] = None
+    chunking_strategy: Optional[str] = None  # From latest successful pipeline run
     created_at: datetime
     updated_at: Optional[datetime] = None
 
@@ -260,6 +261,23 @@ async def get_product(
     # Lazy-load JSON fields from S3 if needed
     from primedata.services.lazy_json_loader import load_product_json_field
 
+    # Get chunking strategy from latest successful pipeline run
+    chunking_strategy = None
+    latest_successful_run = (
+        db.query(PipelineRun)
+        .filter(
+            PipelineRun.product_id == product_id,
+            PipelineRun.status == PipelineRunStatus.SUCCEEDED
+        )
+        .order_by(PipelineRun.finished_at.desc(), PipelineRun.started_at.desc())
+        .first()
+    )
+    
+    if latest_successful_run:
+        from primedata.services.lazy_json_loader import load_pipeline_run_metrics
+        metrics = load_pipeline_run_metrics(latest_successful_run)
+        chunking_strategy = metrics.get("chunking_config", {}).get("resolved_settings", {}).get("chunking_strategy")
+
     product_dict = {
         "id": product.id,
         "workspace_id": product.workspace_id,
@@ -280,6 +298,7 @@ async def get_product(
         "trust_report_path": product.trust_report_path,
         "chunking_config": product.chunking_config,
         "embedding_config": product.embedding_config,
+        "chunking_strategy": chunking_strategy,
         "created_at": product.created_at,
         "updated_at": product.updated_at,
     }

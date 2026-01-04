@@ -49,6 +49,17 @@ export default function PipelineDetailsModal({
     }
   }, [isOpen, runId])
 
+  // Debug: Log to see what we're getting for cancelled pipelines
+  useEffect(() => {
+    if (isOpen && runStatus === 'failed') {
+      console.log('Modal debug - runStatus:', runStatus)
+      console.log('Modal debug - logs?.metrics:', logs?.metrics)
+      console.log('Modal debug - initialMetrics:', initialMetrics)
+      console.log('Modal debug - logs?.metrics?.cancelled_reason:', logs?.metrics?.cancelled_reason)
+      console.log('Modal debug - initialMetrics?.cancelled_reason:', initialMetrics?.cancelled_reason)
+    }
+  }, [isOpen, runStatus, logs, initialMetrics])
+
   const loadLogs = async () => {
     setLoading(true)
     try {
@@ -134,8 +145,16 @@ export default function PipelineDetailsModal({
   const stageMetrics = logs?.stage_metrics || initialMetrics?.aird_stages || {}
   
   // Check if pipeline was cancelled
-  const cancelledReason = logs?.metrics?.cancelled_reason || initialMetrics?.cancelled_reason
-  const isCancelled = runStatus === 'failed' && cancelledReason
+  // cancelled_reason is stored in run.metrics.cancelled_reason
+  // It can come from:
+  // 1. logs.metrics.cancelled_reason (from getPipelineRunLogs API)
+  // 2. initialMetrics.cancelled_reason (from selectedRunForDetails.metrics passed as prop)
+  // Note: Both should be the metrics dictionary with cancelled_reason as a direct property
+  const cancelledReason = logs?.metrics?.cancelled_reason || 
+                         (initialMetrics && typeof initialMetrics === 'object' && 'cancelled_reason' in initialMetrics ? initialMetrics.cancelled_reason : null)
+  
+  // Only check for 'failed' status (cancellation sets status to 'failed')
+  const isCancelled = runStatus === 'failed' && !!cancelledReason
 
   if (!isOpen) return null
 

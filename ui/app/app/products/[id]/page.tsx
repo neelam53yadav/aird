@@ -43,6 +43,7 @@ interface Product {
   }
   trust_score?: number  // M2
   policy_status?: string  // M2: 'passed' | 'failed' | 'warnings' | 'unknown'
+  chunking_strategy?: string  // From latest successful pipeline run
   created_at: string
   updated_at?: string
 }
@@ -1195,6 +1196,30 @@ export default function ProductDetailPage() {
                       <dd className="mt-1">
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 capitalize">
                           {contentType}
+                        </span>
+                      </dd>
+                    </div>
+                  )
+                })()}
+                {/* Chunking Strategy from latest successful pipeline run */}
+                {(() => {
+                  const chunkingStrategy = (product as any).chunking_strategy
+                  
+                  if (!chunkingStrategy) return null
+                  
+                  // Format the strategy name (replace underscores with spaces and capitalize)
+                  const formattedStrategy = chunkingStrategy
+                    .replace(/_/g, ' ')
+                    .split(' ')
+                    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                    .join(' ')
+                  
+                  return (
+                    <div>
+                      <dt className="text-sm font-medium text-gray-500">Chunking Strategy</dt>
+                      <dd className="mt-1">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                          {formattedStrategy}
                         </span>
                       </dd>
                     </div>
