@@ -434,47 +434,47 @@ export default function ProductDetailPage() {
         return
       }
 
-      // Use view_url for viewing (inline), fallback to download_url if view_url not available
-      const urlToFetch = artifact.view_url || artifact.download_url
-
-      if (!urlToFetch) {
+      if (!artifact.id) {
         addToast({
           type: 'error',
-          message: 'No URL available for this artifact',
+          message: 'Artifact ID is missing',
         })
-        setArtifactContent('No URL available for this artifact. Please contact support.')
+        setArtifactContent('Artifact ID is missing. Please contact support.')
         setLoadingArtifactContent(false)
         return
       }
 
-      // Fetch artifact content using presigned URL
-      const response = await fetch(urlToFetch, {
+      // Use backend proxy endpoint to avoid CORS issues
+      // Use relative path - Next.js will proxy to the backend
+      const proxyUrl = `/api/v1/pipeline/artifacts/${artifact.id}/content`
+      
+      const fetchResponse = await fetch(proxyUrl, {
         method: 'GET',
         headers: {
           'Accept': '*/*',
         },
-        // Don't send credentials for presigned URLs (they're public)
-        credentials: 'omit',
+        credentials: 'include', // Include cookies for authentication
       })
 
-      if (!response.ok) {
-        throw new Error(`Failed to fetch artifact: ${response.status} ${response.statusText}`)
+      if (!fetchResponse.ok) {
+        const errorText = await fetchResponse.text()
+        throw new Error(`Failed to fetch artifact: ${fetchResponse.status} ${fetchResponse.statusText} - ${errorText}`)
       }
 
-      const contentType = response.headers.get('content-type') || ''
+      const contentType = fetchResponse.headers.get('content-type') || ''
       
       if (contentType.includes('application/json') || artifact.artifact_type?.toLowerCase() === 'json') {
-        const json = await response.json()
+        const json = await fetchResponse.json()
         setArtifactContent(JSON.stringify(json, null, 2))
       } else if (contentType.includes('text/csv') || artifact.artifact_type?.toLowerCase() === 'csv') {
-        const text = await response.text()
+        const text = await fetchResponse.text()
         setArtifactContent(text)
       } else if (contentType.includes('application/pdf') || artifact.artifact_type?.toLowerCase() === 'pdf') {
         // For PDF, show message and provide download link
         setArtifactContent('PDF files cannot be displayed in the viewer. Please use the download button to view the file.')
       } else {
         // For JSONL or other text formats
-        const text = await response.text()
+        const text = await fetchResponse.text()
         setArtifactContent(text)
       }
     } catch (err) {
@@ -485,7 +485,7 @@ export default function ProductDetailPage() {
         message: errorMessage,
       })
       // Set error content to show in modal
-      setArtifactContent(`Error loading artifact: ${errorMessage}\n\nView URL: ${artifact.view_url || artifact.download_url || 'N/A'}`)
+      setArtifactContent(`Error loading artifact: ${errorMessage}`)
     } finally {
       setLoadingArtifactContent(false)
     }
