@@ -818,6 +818,7 @@ async def get_pipeline_run_logs(
             "dag_run_id": None,
             "logs": {},
             "stage_metrics": stage_metrics,
+            "metrics": metrics,  # Include full metrics object
             "message": "No DAG run ID available for this pipeline run",
         }
 
@@ -846,6 +847,7 @@ async def get_pipeline_run_logs(
                 "dag_run_id": run.dag_run_id,
                 "logs": {},
                 "stage_metrics": stage_metrics,
+                "metrics": metrics,  # Include full metrics object
                 "error": "Failed to fetch logs from Airflow",
             }
 
@@ -899,6 +901,7 @@ async def get_pipeline_run_logs(
             "dag_run_state": dag_run_data.get("state", "unknown"),
             "logs": logs,
             "stage_metrics": stage_metrics,
+            "metrics": metrics,  # Include full metrics object for cancelled_reason and other metadata
         }
 
     except Exception as e:
@@ -909,6 +912,7 @@ async def get_pipeline_run_logs(
             "dag_run_id": run.dag_run_id,
             "logs": {},
             "stage_metrics": stage_metrics,
+            "metrics": metrics,  # Include full metrics object
             "error": f"Failed to fetch logs: {str(e)}",
         }
 

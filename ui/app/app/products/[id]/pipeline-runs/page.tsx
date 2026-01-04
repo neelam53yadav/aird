@@ -9,6 +9,7 @@ import AppLayout from '@/components/layout/AppLayout'
 import { apiClient, PipelineRun } from '@/lib/api-client'
 import { useToast } from '@/components/ui/toast'
 import PipelineDetailsModal from '@/components/PipelineDetailsModal'
+import ChunkingConfigModal from '@/components/ChunkingConfigModal'
 
 export default function PipelineRunsPage() {
   const params = useParams()
@@ -27,6 +28,7 @@ export default function PipelineRunsPage() {
   const [product, setProduct] = useState<any>(null)
   const [promotingVersion, setPromotingVersion] = useState<number | null>(null)
   const [selectedRunForDetails, setSelectedRunForDetails] = useState<PipelineRun | null>(null)
+  const [selectedChunkingConfig, setSelectedChunkingConfig] = useState<any | null>(null)
   const RUNS_PER_PAGE = 20
   
   // Ref to track the polling interval
@@ -311,6 +313,24 @@ export default function PipelineRunsPage() {
     }
   }
 
+  const getChunkingConfigForRun = (run: PipelineRun) => {
+    // For successful runs, check if product has chunking_config with resolved_settings
+    if (run.status === 'succeeded' && product?.chunking_config?.resolved_settings) {
+      return product.chunking_config.resolved_settings
+    }
+    return null
+  }
+
+  const formatChunkingConfigSummary = (config: any) => {
+    if (!config) return null
+    const parts = []
+    if (config.chunk_size) parts.push(`Size: ${config.chunk_size}`)
+    if (config.chunk_overlap !== undefined) parts.push(`Overlap: ${config.chunk_overlap}`)
+    if (config.chunking_strategy) parts.push(`Strategy: ${config.chunking_strategy.replace(/_/g, ' ')}`)
+    if (config.content_type) parts.push(`Type: ${config.content_type}`)
+    return parts.length > 0 ? parts.join(', ') : 'Available'
+  }
+
   const handleViewDetails = (run: PipelineRun) => {
     setSelectedRunForDetails(run)
   }
@@ -453,6 +473,9 @@ export default function PipelineRunsPage() {
                       AIRD Stages
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Chunking Config
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
                     </th>
                   </tr>
@@ -460,6 +483,8 @@ export default function PipelineRunsPage() {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {pipelineRuns.map((run) => {
                     const stagesInfo = getAirdStagesInfo(run.metrics)
+                    const chunkingConfig = getChunkingConfigForRun(run)
+                    const configSummary = formatChunkingConfigSummary(chunkingConfig)
                     return (
                       <tr key={run.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap">
@@ -516,8 +541,18 @@ export default function PipelineRunsPage() {
                                 </Button>
                               </div>
                             </div>
+                          ) : null}
+                        </td>
+                        <td className="px-6 py-4">
+                          {chunkingConfig ? (
+                            <button
+                              onClick={() => setSelectedChunkingConfig(chunkingConfig)}
+                              className="text-sm text-blue-600 hover:text-blue-800 hover:underline cursor-pointer text-left"
+                            >
+                              {configSummary || 'View Config'}
+                            </button>
                           ) : (
-                            <span className="text-sm text-gray-400">No stages tracked</span>
+                            <span className="text-sm text-gray-400">No config</span>
                           )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
@@ -617,6 +652,13 @@ export default function PipelineRunsPage() {
             onPipelineCancelled={handlePipelineCancelled}
           />
         )}
+
+        {/* Chunking Config Modal */}
+        <ChunkingConfigModal
+          isOpen={!!selectedChunkingConfig}
+          onClose={() => setSelectedChunkingConfig(null)}
+          config={selectedChunkingConfig}
+        />
       </div>
     </AppLayout>
   )

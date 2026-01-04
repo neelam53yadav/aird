@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, CheckCircle, XCircle, Clock, Loader2, ChevronDown, ChevronUp, FileText } from 'lucide-react'
+import { X, CheckCircle, XCircle, Clock, Loader2, ChevronDown, ChevronUp, FileText, AlertTriangle } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
 import { useToast } from '@/components/ui/toast'
 
@@ -132,6 +132,10 @@ export default function PipelineDetailsModal({
   }
 
   const stageMetrics = logs?.stage_metrics || initialMetrics?.aird_stages || {}
+  
+  // Check if pipeline was cancelled
+  const cancelledReason = logs?.metrics?.cancelled_reason || initialMetrics?.cancelled_reason
+  const isCancelled = runStatus === 'failed' && cancelledReason
 
   if (!isOpen) return null
 
@@ -163,6 +167,25 @@ export default function PipelineDetailsModal({
               </div>
             ) : (
               <div className="space-y-4">
+                {/* Cancellation Notice */}
+                {isCancelled && (
+                  <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                    <div className="flex items-start">
+                      <AlertTriangle className="h-5 w-5 text-orange-600 mr-3 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <h4 className="text-sm font-semibold text-orange-900">Pipeline Cancelled</h4>
+                        <p className="text-sm text-orange-800 mt-1">
+                          {cancelledReason}
+                        </p>
+                        <p className="text-xs text-orange-700 mt-2">
+                          Note: Stages that completed successfully before cancellation will show as "succeeded", 
+                          but the pipeline overall status is "failed" because it was manually cancelled.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Stage Status Overview */}
                 {Object.keys(stageMetrics).length > 0 && (
                   <div>
