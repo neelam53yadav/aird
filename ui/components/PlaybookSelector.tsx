@@ -122,7 +122,7 @@ export function PlaybookSelector({
           disabled={disabled}
           className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
         >
-          <option value="">None (Auto-detect)</option>
+          <option value="">Auto-Detect</option>
           <optgroup label="Built-in Playbooks">
             {playbooks.filter((pb: any) => !pb.path?.startsWith('custom:')).map((playbook) => (
               <option key={playbook.id} value={playbook.id}>

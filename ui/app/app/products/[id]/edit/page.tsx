@@ -132,14 +132,6 @@ export default function EditProductPage() {
         const cfg = (productData as any).chunking_config || {}
         const chunkingMode = cfg.mode || 'auto'
 
-        // Debug logging - show full config structure
-        console.log('=== Loading Product Configuration ===')
-        console.log('Full chunking_config from API:', JSON.stringify(cfg, null, 2))
-        console.log('Mode:', chunkingMode)
-        console.log('auto_settings:', cfg.auto_settings)
-        console.log('manual_settings:', cfg.manual_settings)
-        console.log('resolved_settings:', cfg.resolved_settings)
-        
         // Get settings based on mode - prefer saved settings over resolved_settings
         let settings: any = {}
         if (chunkingMode === 'auto') {
@@ -155,7 +147,6 @@ export default function EditProductPage() {
               chunking_strategy: resolved.chunking_strategy || 'fixed_size',
               ...cfg.auto_settings, // Preserve other auto_settings like confidence_threshold, model_optimized
             }
-            console.log('Auto mode: Using resolved_settings from content analysis:', settings)
           } else {
             // Fallback: Use auto_settings for content_type and get optimal config
             const autoSettings = cfg.auto_settings || {}
@@ -245,8 +236,6 @@ export default function EditProductPage() {
               max_chunk_size: optimal.max_chunk_size,
               chunking_strategy: optimal.chunking_strategy,
             }
-            
-            console.log('Auto mode: Using optimal config for content_type:', contentType, settings)
           }
         } else {
           // In manual mode, ALWAYS use manual_settings if it exists
@@ -255,7 +244,6 @@ export default function EditProductPage() {
           if (manualSettings && typeof manualSettings === 'object' && Object.keys(manualSettings).length > 0) {
             // manual_settings exists and has values - use it directly (this is the source of truth for manual mode)
             settings = manualSettings
-            console.log('Using manual_settings for manual mode:', settings)
           } else {
             // manual_settings is missing or empty, fallback to resolved_settings or defaults
             console.warn('manual_settings is empty, falling back to resolved_settings')
@@ -854,7 +842,7 @@ export default function EditProductPage() {
               <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
                 <h4 className="text-sm font-medium text-gray-700 mb-2">Saved Configuration (for verification)</h4>
                 <div className="text-xs text-gray-600 space-y-1 font-mono">
-                  <div><strong>Playbook ID:</strong> {(product as any).playbook_id || 'None (Auto-detect)'}</div>
+                  <div><strong>Playbook ID:</strong> {(product as any).playbook_id || 'Auto-Detect'}</div>
                   <div><strong>Chunking Mode:</strong> {(product as any).chunking_config?.mode || 'auto'}</div>
                   <div><strong>Optimization Mode:</strong> {(product as any).chunking_config?.optimization_mode || formData.optimization_mode || 'pattern'}</div>
                   {formData.chunking_mode === 'manual' && (product as any).chunking_config?.manual_settings && (
