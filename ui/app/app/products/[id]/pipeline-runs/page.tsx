@@ -314,9 +314,14 @@ export default function PipelineRunsPage() {
   }
 
   const getChunkingConfigForRun = (run: PipelineRun) => {
-    // For successful runs, check if product has chunking_config with resolved_settings
-    if (run.status === 'succeeded' && product?.chunking_config?.resolved_settings) {
-      return product.chunking_config.resolved_settings
+    // For successful runs, always return config (even if empty) to show the button
+    if (run.status === 'succeeded') {
+      // Only use resolved_settings if it exists
+      if (product?.chunking_config?.resolved_settings) {
+        return product.chunking_config.resolved_settings
+      }
+      // Return empty object to indicate config should be shown but is not available
+      return {}
     }
     return null
   }
@@ -544,7 +549,7 @@ export default function PipelineRunsPage() {
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          {chunkingConfig ? (
+                          {chunkingConfig !== null ? (
                             <button
                               onClick={() => setSelectedChunkingConfig(chunkingConfig)}
                               className="text-sm text-blue-600 hover:text-blue-800 hover:underline cursor-pointer text-left"
