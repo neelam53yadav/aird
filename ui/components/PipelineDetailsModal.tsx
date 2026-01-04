@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, CheckCircle, XCircle, Clock, Loader2, ChevronDown, ChevronUp, FileText, Square } from 'lucide-react'
+import { X, CheckCircle, XCircle, Clock, Loader2, ChevronDown, ChevronUp, FileText } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
 import { useToast } from '@/components/ui/toast'
 
@@ -39,7 +39,6 @@ export default function PipelineDetailsModal({
 }: PipelineDetailsModalProps) {
   const [logs, setLogs] = useState<any>(null)
   const [loading, setLoading] = useState(false)
-  const [cancelling, setCancelling] = useState(false)
   const [expandedStages, setExpandedStages] = useState<Set<string>>(new Set())
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set())
   const { addToast } = useToast()
@@ -91,54 +90,6 @@ export default function PipelineDetailsModal({
     }
     setExpandedTasks(newExpanded)
   }
-
-  const handleCancelPipeline = async () => {
-    // Confirm cancellation
-    const confirmed = window.confirm(
-      `Are you sure you want to stop this pipeline run (Version ${runVersion})? This action cannot be undone.`
-    )
-    
-    if (!confirmed) return
-
-    setCancelling(true)
-    try {
-      const response = await apiClient.cancelPipelineRun(runId)
-      
-      if (response.error) {
-        addToast({
-          type: 'error',
-          message: `Failed to stop pipeline: ${response.error}`,
-        })
-      } else {
-        addToast({
-          type: 'success',
-          message: 'Pipeline stopped successfully',
-        })
-        
-        // Refresh logs to show updated status
-        await loadLogs()
-        
-        // Notify parent to refresh pipeline runs list
-        if (onPipelineCancelled) {
-          onPipelineCancelled()
-        }
-      }
-    } catch (err) {
-      console.error('Failed to cancel pipeline:', err)
-      addToast({
-        type: 'error',
-        message: 'Failed to stop pipeline. Please try again.',
-      })
-    } finally {
-      setCancelling(false)
-    }
-  }
-
-  // Check if pipeline can be cancelled (more robust status check)
-  const canCancel = runStatus && (
-    runStatus.toLowerCase() === 'running' || 
-    runStatus.toLowerCase() === 'queued'
-  )
 
   const getStageStatusIcon = (status: string) => {
     switch (status?.toLowerCase()) {
@@ -341,28 +292,7 @@ export default function PipelineDetailsModal({
           </div>
 
           {/* Footer */}
-          <div className="bg-gray-50 px-6 py-3 flex justify-between items-center">
-            <div>
-              {canCancel && (
-                <button
-                  onClick={handleCancelPipeline}
-                  disabled={cancelling}
-                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-red-700 rounded-md hover:bg-red-700 disabled:bg-red-400 disabled:cursor-not-allowed flex items-center space-x-2 transition-colors"
-                >
-                  {cancelling ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span>Stopping...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Square className="h-4 w-4" />
-                      <span>Stop Pipeline</span>
-                    </>
-                  )}
-                </button>
-              )}
-            </div>
+          <div className="bg-gray-50 px-6 py-3 flex justify-end items-center">
             <button
               onClick={onClose}
               className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
