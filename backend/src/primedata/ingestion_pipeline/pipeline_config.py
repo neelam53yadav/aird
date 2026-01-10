@@ -89,6 +89,15 @@ def resolve_effective_pipeline_config(
     dag_conf = dag_conf or {}
 
     product_chunking = _ensure_dict(getattr(product, "chunking_config", None))
+    if dag_conf.get("force_product_chunking_config"):
+        effective_chunking_config = product_chunking
+        playbook_id = dag_conf.get("playbook_id") or getattr(product, "playbook_id", None)
+        playbook_selection = _ensure_dict(getattr(product, "playbook_selection", None))
+        return {
+            "chunking_config": effective_chunking_config,
+            "playbook_id": playbook_id,
+            "playbook_selection": playbook_selection or None,
+        }
     chunking_config = _merge_chunking_config(product_chunking, dag_conf.get("chunking_config"))
 
     manual_settings = _ensure_dict(chunking_config.get("manual_settings")) or DEFAULT_MANUAL_SETTINGS.copy()
