@@ -199,6 +199,7 @@ class PreprocessStage(AirdStage):
         total_mid_sentence_ends = 0
         processed_files = []
         failed_files = []
+        last_exception = None
         file_chunk_counts: Dict[str, int] = {}
         file_sections_counts: Dict[str, int] = {}
         chunking_config_used: Optional[Dict[str, Any]] = None
@@ -461,17 +462,22 @@ class PreprocessStage(AirdStage):
 
             except Exception as e:
                 error_msg = f"[PreprocessStage] ❌ EXCEPTION while processing {file_stem}: {type(e).__name__}: {str(e)}"
+                self.logger.exception(f"Preprocess failed for file_stem={file_stem}")
                 self.logger.error(error_msg, exc_info=True)
                 import traceback
 
                 self.logger.error(f"[PreprocessStage] Full traceback for {file_stem}:\n{traceback.format_exc()}")
                 self.logger.error(f"[PreprocessStage] Exception details for {file_stem}: {repr(e)}")
+                last_exception = error_msg
                 failed_files.append(file_stem)
             finally:
                 file_duration = (datetime.utcnow() - file_start_time).total_seconds()
                 self.logger.info(f"[PreprocessStage] ====== Finished processing {file_stem} in {file_duration:.2f}s ======")
 
         if not all_records:
+            failure_reason = "No records produced from preprocessing"
+            if last_exception:
+                failure_reason = f"{failure_reason}. Last error: {last_exception}"
             return self._create_result(
                 status=StageStatus.FAILED,
                 metrics={
@@ -479,7 +485,7 @@ class PreprocessStage(AirdStage):
                     "failed_files": len(failed_files),
                     "failed_file_list": failed_files,
                 },
-                error="No records produced from preprocessing",
+                error=failure_reason,
                 started_at=started_at,
             )
 
@@ -930,6 +936,9 @@ class PreprocessStage(AirdStage):
             "mode": chunking_config.get("mode", "auto"),
             "source": None,  # manual | product_auto | playbook_default
         }
+        confidence_threshold = None
+        confidence = None
+        confidence_met = None
 
         # Priority: Product manual settings > Product auto settings > Playbook defaults
         if chunking_config and chunking_config.get("mode") == "manual":
@@ -1280,6 +1289,18 @@ class PreprocessStage(AirdStage):
             if chunking_config:
                 resolved = chunking_config.get("resolved_settings", {})
                 detected_domain_type = resolved.get("content_type")
+
+        # Log final chunking settings being used for processing
+        self.logger.info(
+            f"🔧 Final chunking settings for {file_stem}: "
+            f"mode={chunking_config.get('mode', 'auto') if chunking_config else 'auto'}, "
+            f"strategy={strategy}, chunk_size={chunk_size}, chunk_overlap={chunk_overlap}, "
+            f"confidence={confidence}, confidence_threshold={confidence_threshold}, confidence_met={confidence_met}"
+        )
+        std_logger.info(
+            f"🔧 Final chunking settings: mode={chunking_config.get('mode', 'auto') if chunking_config else 'auto'}, "
+            f"strategy={strategy}, chunk_size={chunk_size}, chunk_overlap={chunk_overlap}"
+        )
 
         # 4) Process pages and sections
         records: List[Dict[str, Any]] = []

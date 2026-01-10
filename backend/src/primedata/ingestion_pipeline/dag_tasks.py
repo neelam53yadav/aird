@@ -1188,6 +1188,7 @@ def task_preprocess(**context) -> Dict[str, Any]:
                         
                         # Commit updates to database
                         db.commit()
+                        db.expire_all()
                         db.refresh(product)
                         logger.info("✅ Auto-detection updates committed to database")
                         refreshed_product = db.get(Product, product_id)
