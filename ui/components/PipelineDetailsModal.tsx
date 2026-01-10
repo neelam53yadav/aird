@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, CheckCircle, XCircle, Clock, Loader2, ChevronDown, ChevronUp, FileText, AlertTriangle } from 'lucide-react'
+import { X, CheckCircle, XCircle, Clock, Loader2, ChevronDown, ChevronUp, FileText, AlertTriangle, MinusCircle } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
 import { useToast } from '@/components/ui/toast'
 
@@ -99,6 +99,8 @@ export default function PipelineDetailsModal({
         return <XCircle className="h-4 w-4 text-red-500" />
       case 'running':
         return <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />
+      case 'skipped':
+        return <MinusCircle className="h-4 w-4 text-yellow-500" />
       default:
         return <Clock className="h-4 w-4 text-gray-500" />
     }
@@ -113,6 +115,8 @@ export default function PipelineDetailsModal({
         return 'bg-red-100 text-red-800'
       case 'running':
         return 'bg-blue-100 text-blue-800'
+      case 'skipped':
+        return 'bg-yellow-100 text-yellow-800'
       default:
         return 'bg-gray-100 text-gray-800'
     }
@@ -213,6 +217,11 @@ export default function PipelineDetailsModal({
                               <span className="font-medium text-gray-900 capitalize">
                                 {stageName.replace(/_/g, ' ')}
                               </span>
+                              {stageData?.status && (
+                                <span className={`text-xs px-2 py-0.5 rounded ${getStatusColor(stageData.status)}`}>
+                                  {stageData.status}
+                                </span>
+                              )}
                               {stageData?.error && (
                                 <span className="text-xs text-red-600">(Error)</span>
                               )}
@@ -230,6 +239,12 @@ export default function PipelineDetailsModal({
                                 <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded">
                                   <p className="text-sm font-medium text-red-800">Error:</p>
                                   <p className="text-sm text-red-700 mt-1">{stageData.error}</p>
+                                </div>
+                              )}
+                              {stageData?.status === 'skipped' && stageData?.metrics?.reason && (
+                                <div className="mb-3 p-3 bg-yellow-50 border border-yellow-200 rounded">
+                                  <p className="text-sm font-medium text-yellow-800">Skipped:</p>
+                                  <p className="text-sm text-yellow-700 mt-1">{stageData.metrics.reason}</p>
                                 </div>
                               )}
                               {stageData?.metrics && Object.keys(stageData.metrics).length > 0 && (
@@ -336,4 +351,3 @@ export default function PipelineDetailsModal({
     </div>
   )
 }
-
