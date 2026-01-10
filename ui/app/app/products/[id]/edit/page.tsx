@@ -52,6 +52,7 @@ export default function EditProductPage() {
     embedder_name: string
     embedding_dimension: number
     optimization_mode: 'pattern' | 'hybrid' | 'llm'
+    vector_creation_enabled: boolean
   }>({
     name: '',
     status: 'draft',
@@ -70,7 +71,9 @@ export default function EditProductPage() {
     embedder_name: 'minilm',
     embedding_dimension: 384,
     // Optimization mode
-    optimization_mode: 'pattern'
+    optimization_mode: 'pattern',
+    // Vector creation configuration
+    vector_creation_enabled: true
   })
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [autoConfiguring, setAutoConfiguring] = useState(false)
@@ -298,7 +301,9 @@ export default function EditProductPage() {
           confidence_threshold: derivedConfidence,
           embedder_name: derivedEmbedder,
           embedding_dimension: derivedDim,
-          optimization_mode: optimizationMode as 'pattern' | 'hybrid' | 'llm'
+          optimization_mode: optimizationMode as 'pattern' | 'hybrid' | 'llm',
+          // Vector creation configuration
+          vector_creation_enabled: (productData as any).vector_creation_enabled !== undefined ? (productData as any).vector_creation_enabled : true
         })
       }
     } catch (err) {
@@ -573,7 +578,8 @@ export default function EditProductPage() {
         embedding_config: {
           embedder_name: formData.embedder_name,
           embedding_dimension: formData.embedding_dimension
-        }
+        },
+        vector_creation_enabled: formData.vector_creation_enabled
       })
 
       console.log('Update response:', response)
@@ -1318,6 +1324,53 @@ export default function EditProductPage() {
                     Vector dimension (automatically set based on model)
                   </p>
                 </div>
+              </div>
+            </div>
+
+            {/* Vector Creation Configuration Section */}
+            <div className="border-t border-gray-200 pt-6">
+              <div className="flex items-center mb-4">
+                <div className="bg-green-100 rounded-lg p-2 mr-3">
+                  <Sparkles className="h-5 w-5 text-green-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900">Vector Creation</h3>
+                  <p className="text-sm text-gray-500">Control whether vectors/embeddings are created and indexed</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="vector_creation_enabled" className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      id="vector_creation_enabled"
+                      checked={formData.vector_creation_enabled}
+                      onChange={(e) => handleInputChange('vector_creation_enabled', e.target.checked)}
+                      disabled={saving}
+                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                    <span className="font-medium">Enable Vector Creation</span>
+                  </Label>
+                  <p className="mt-1 ml-6 text-sm text-gray-500">
+                    When enabled, vectors/embeddings will be created and indexed in Qdrant during pipeline runs. 
+                    When disabled, the indexing stage will be skipped.
+                  </p>
+                </div>
+
+                {product && (product as any).use_case_description && (
+                  <div className="bg-gray-50 rounded-md p-3 border border-gray-200">
+                    <Label className="block text-sm font-medium text-gray-700 mb-2">
+                      Use Case Description (Read-only)
+                    </Label>
+                    <p className="text-sm text-gray-600 whitespace-pre-wrap">
+                      {(product as any).use_case_description}
+                    </p>
+                    <p className="mt-2 text-xs text-gray-500">
+                      This field can only be set during product creation.
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
 
