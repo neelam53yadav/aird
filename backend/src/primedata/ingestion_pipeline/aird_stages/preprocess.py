@@ -33,6 +33,7 @@ from primedata.ingestion_pipeline.aird_stages.utils.text_processing import (
     split_pages_by_config,
 )
 from primedata.analysis.content_analyzer import content_analyzer
+from primedata.ingestion_pipeline.pipeline_config import resolve_content_hint
 
 # Audience patterns (aligned with AIRD) - ordered by specificity
 AUDIENCE_PATTERNS = {
@@ -140,6 +141,7 @@ class PreprocessStage(AirdStage):
         self._context_cache = {
             "workspace_id": context.get("workspace_id"),
             "db": context.get("db"),
+            "use_case_description": context.get("use_case_description"),
         }
 
         storage = context.get("storage")
@@ -150,6 +152,12 @@ class PreprocessStage(AirdStage):
         if initial_playbook_id == "":
             initial_playbook_id = None
         chunking_config = context.get("chunking_config", {})  # Get product chunking config
+        if (
+            isinstance(chunking_config, dict)
+            and "resolved_settings" not in chunking_config
+            and isinstance(chunking_config.get("chunking_config"), dict)
+        ):
+            chunking_config = chunking_config.get("chunking_config", chunking_config)
 
         # Track playbook selection metadata for verification
         # Will be updated based on whether playbook is provided or auto-detected
@@ -159,6 +167,9 @@ class PreprocessStage(AirdStage):
             "detected_at": None,
             "playbook_id": None,  # Will be set when playbook is determined
         }
+        context_playbook_selection = context.get("playbook_selection")
+        if context_playbook_selection and isinstance(context_playbook_selection, dict):
+            playbook_selection_metadata.update(context_playbook_selection)
 
         if not storage:
             return self._create_result(
@@ -1002,6 +1013,23 @@ class PreprocessStage(AirdStage):
                 manual_settings_provided = False
             
             if resolved_settings and isinstance(resolved_settings, dict):
+                confidence_threshold = 0.7
+                auto_settings = chunking_config.get("auto_settings", {})
+                if isinstance(auto_settings, dict):
+                    confidence_threshold = auto_settings.get("confidence_threshold", confidence_threshold)
+                if (
+                    resolved_settings.get("confidence") is not None
+                    and resolved_settings.get("confidence") < confidence_threshold
+                ):
+                    self.logger.info(
+                        "Resolved_settings confidence %.2f below threshold %.2f; rerunning analysis.",
+                        resolved_settings.get("confidence"),
+                        confidence_threshold,
+                    )
+                    std_logger.info("Resolved_settings below confidence threshold; rerunning analysis.")
+                    resolved_settings = {}
+
+            if resolved_settings and isinstance(resolved_settings, dict):
                 # Use existing resolved_settings from task_preprocess auto-detection
                 self.logger.info(
                     f"✅ Using existing resolved_settings from auto-detection: "
@@ -1063,19 +1091,15 @@ class PreprocessStage(AirdStage):
                 # Sample cleaned text for analysis (use up to 20k chars for good detection)
                 sample_text = cleaned[:20000] if len(cleaned) > 20000 else cleaned
                 
-                # Extract playbook hint (map playbook_id to domain hint)
-                playbook_hint = None
-                playbook_id_lower = playbook_id.lower() if playbook_id else ""
-                if "regulatory" in playbook_id_lower or playbook_id_lower in ["regulatory", "reg"]:
-                    playbook_hint = "regulatory"
-                elif "finance" in playbook_id_lower or "banking" in playbook_id_lower or playbook_id_lower in ["finance", "banking"]:
-                    playbook_hint = "finance_banking"
-                elif "legal" in playbook_id_lower:
-                    playbook_hint = "legal"
-                elif "academic" in playbook_id_lower:
-                    playbook_hint = "academic"
-                elif "technical" in playbook_id_lower or playbook_id_lower == "tech":
-                    playbook_hint = "technical"
+                use_case_description = None
+                if isinstance(self._context_cache, dict):
+                    use_case_description = self._context_cache.get("use_case_description")
+                playbook_hint = resolve_content_hint(playbook_id, use_case_description)
+                hint_reason = None
+                if playbook_hint and use_case_description:
+                    hint_reason = "use_case_description"
+                elif playbook_hint:
+                    hint_reason = "playbook_id"
                 
                 # Analyze content using ContentAnalyzer
                 try:
@@ -1188,6 +1212,8 @@ class PreprocessStage(AirdStage):
                     "detection_confidence": confidence,  # Store confidence score
                     "detection_reasoning": reasoning,  # Store reasoning
                     "detection_evidence": evidence,  # Store evidence for UI
+                    "hint_applied": bool(evidence and evidence.get("hint_applied")),
+                    "hint_reason": hint_reason,
                 }
             )
 
