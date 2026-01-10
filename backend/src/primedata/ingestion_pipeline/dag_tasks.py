@@ -34,6 +34,11 @@ from primedata.db.models import (
 # causes heavy import chains (embedding_config, sentence_transformers, etc.) that exceed this limit.
 # Import only lightweight enums at module level.
 from primedata.ingestion_pipeline.aird_stages.base import StageStatus
+from primedata.ingestion_pipeline.pipeline_config import (
+    resolve_content_hint,
+    resolve_effective_pipeline_config,
+    should_skip_vectors,
+)
 from primedata.ingestion_pipeline.artifact_registry import (
     calculate_checksum,
     get_artifact_summary_for_run,
@@ -797,6 +802,19 @@ def auto_detect_playbook_and_chunking(
     chunking_analyses = []
     sample_files_analyzed = []
     
+    hint_reason = None
+    content_hint = resolve_content_hint(product.playbook_id, product.use_case_description)
+    if content_hint and product.use_case_description:
+        hint_reason = "use_case_description"
+    elif content_hint and product.playbook_id:
+        hint_reason = "playbook_id"
+
+    confidence_threshold = 0.7
+    if product.chunking_config and isinstance(product.chunking_config, dict):
+        auto_settings = product.chunking_config.get("auto_settings", {})
+        if isinstance(auto_settings, dict):
+            confidence_threshold = auto_settings.get("confidence_threshold", confidence_threshold)
+
     for raw_file in sampled_files:
         try:
             # Extract text sample (2000-5000 chars for analysis)
@@ -825,7 +843,11 @@ def auto_detect_playbook_and_chunking(
             # Auto-detect chunking config if needed
             if needs_chunking_detection:
                 try:
-                    chunking_config = content_analyzer.analyze_content(content=text_sample, filename=raw_file.filename)
+                    chunking_config = content_analyzer.analyze_content(
+                        content=text_sample,
+                        filename=raw_file.filename,
+                        hint=content_hint,
+                    )
                     chunking_analyses.append(chunking_config)
                     logger.info(
                         f"Analyzed chunking for {raw_file.filename}: "
@@ -900,6 +922,11 @@ def auto_detect_playbook_and_chunking(
             "chunking_strategy": best_analysis.strategy.value,
             "confidence": best_analysis.confidence,
             "reasoning": best_analysis.reasoning,
+            "confidence_threshold": confidence_threshold,
+            "confidence_met": best_analysis.confidence >= confidence_threshold,
+            "evidence": best_analysis.evidence,
+            "hint_applied": bool(best_analysis.evidence and best_analysis.evidence.get("hint_applied")),
+            "hint_reason": hint_reason,
         }
         
         # Preserve existing settings (backward compatibility)
@@ -919,6 +946,13 @@ def auto_detect_playbook_and_chunking(
         updates["chunking_config"] = updated_config
         
         logger.info(f"Updated chunking_config with resolved_settings: {resolved_settings}")
+        if best_analysis.confidence < confidence_threshold:
+            logger.info(
+                "Auto-detected chunking confidence %.2f below threshold %.2f; "
+                "resolved_settings will be treated as low confidence.",
+                best_analysis.confidence,
+                confidence_threshold,
+            )
     
     return updates
 
@@ -1193,12 +1227,17 @@ def task_preprocess(**context) -> Dict[str, Any]:
             logger.error(f"PreprocessStage creation traceback:\n{traceback.format_exc()}")
             raise
 
-        # Get chunking config from product or params
-        chunking_config = params.get("chunking_config")
-        if not chunking_config and product:
-            # Refresh product to get latest chunking_config (including resolved_settings from auto-detection)
+        # Refresh product to get latest chunking_config (including resolved_settings from auto-detection)
+        if product:
             db.refresh(product)
-            chunking_config = product.chunking_config
+
+        effective_config = resolve_effective_pipeline_config(product, params, aird_context.get("pipeline_run"))
+        chunking_config = effective_config.get("chunking_config")
+        playbook_id = effective_config.get("playbook_id") or playbook_id
+        playbook_selection = effective_config.get("playbook_selection")
+
+        logger.info(f"Effective chunking config (preprocess): {chunking_config}")
+        logger.info(f"Effective playbook (preprocess): {playbook_selection or {'playbook_id': playbook_id}}")
 
         # Log preprocessing flags if present (from recommendations)
         if chunking_config and isinstance(chunking_config, dict):
@@ -1218,10 +1257,12 @@ def task_preprocess(**context) -> Dict[str, Any]:
             "storage": storage,
             "raw_files": raw_files,
             "playbook_id": playbook_id,
+            "playbook_selection": playbook_selection,
             "file_stem_to_storage_key": file_stem_to_storage_key,  # Pass mapping for accurate file retrieval
             "chunking_config": chunking_config,  # Pass product chunking config (including preprocessing_flags)
             "workspace_id": workspace_id,  # For loading custom playbooks
             "db": db,  # For loading custom playbooks
+            "use_case_description": product.use_case_description if product else None,
         }
         logger.info(f"Executing PreprocessStage with context keys: {list(stage_context.keys())}")
         logger.info(f"Context storage type: {type(stage_context['storage']).__name__}")
@@ -1432,15 +1473,16 @@ def task_scoring(**context) -> Dict[str, Any]:
                 "message": "No processed files to score",
             }
 
+        product = db.query(Product).filter(Product.id == product_id).first()
+        effective_config = resolve_effective_pipeline_config(product, params, aird_context.get("pipeline_run"))
+        chunking_config = effective_config.get("chunking_config")
+        playbook_selection = effective_config.get("playbook_selection")
+        playbook_id = effective_config.get("playbook_id")
+
+        logger.info(f"Effective chunking config (scoring): {chunking_config}")
+        logger.info(f"Effective playbook (scoring): {playbook_selection or {'playbook_id': playbook_id}}")
+
         # Load playbook for AI-Ready metrics (noise patterns, coherence settings)
-        playbook_id = params.get("playbook_id")
-        if not playbook_id:
-            # Try to get from product
-            from primedata.db.models import Product
-            product = db.query(Product).filter(Product.id == product_id).first()
-            if product and product.playbook_id:
-                playbook_id = product.playbook_id
-        
         playbook = {}
         if playbook_id:
             try:
@@ -1471,6 +1513,7 @@ def task_scoring(**context) -> Dict[str, Any]:
             "preprocess_result": preprocess_result,
             "playbook": playbook,
             "playbook_id": playbook_id,
+            "chunking_config": chunking_config,
         }
 
         result = scoring_stage.execute(stage_context)
@@ -2026,6 +2069,53 @@ def task_reporting(**context) -> Dict[str, Any]:
         db.close()
 
 
+def task_decide_vector_indexing(**context) -> str:
+    """Branching task: decide whether to run indexing based on vector_creation_enabled."""
+    params = get_dag_params(**context)
+    product_id = params["product_id"]
+    db = next(get_db())
+
+    try:
+        product = db.query(Product).filter(Product.id == product_id).first()
+        if product and should_skip_vectors(product):
+            logger.info(f"Vector creation disabled for product {product_id}; branching to skip_indexing")
+            return "skip_indexing"
+        logger.info(f"Vector creation enabled for product {product_id}; branching to indexing")
+        return "indexing"
+    finally:
+        db.close()
+
+
+def task_record_vectors_skipped(**context) -> Dict[str, Any]:
+    """Record vector skip in pipeline metrics when vector creation is disabled."""
+    params = get_dag_params(**context)
+    product_id = params["product_id"]
+    version = params["version"]
+    db = next(get_db())
+
+    try:
+        product = db.query(Product).filter(Product.id == product_id).first()
+        if product and should_skip_vectors(product):
+            pipeline_run = (
+                db.query(PipelineRun)
+                .filter(PipelineRun.product_id == product_id, PipelineRun.version == version)
+                .first()
+            )
+            if pipeline_run:
+                if pipeline_run.metrics is None:
+                    pipeline_run.metrics = {}
+                pipeline_run.metrics["vectors_skipped"] = True
+                pipeline_run.metrics["vectors_skip_reason"] = "vector_creation_enabled is False"
+                from sqlalchemy.orm.attributes import flag_modified
+
+                flag_modified(pipeline_run, "metrics")
+                db.commit()
+                logger.info(f"Recorded vectors_skipped in pipeline_run {pipeline_run.id}")
+        return {"status": "skipped", "vectors_skipped": True}
+    finally:
+        db.close()
+
+
 def task_indexing(**context) -> Dict[str, Any]:
     """Index chunks to Qdrant using AIRD IndexingStage."""
     params = get_dag_params(**context)
@@ -2039,6 +2129,7 @@ def task_indexing(**context) -> Dict[str, Any]:
     storage = aird_context["storage"]
     tracker = aird_context.get("tracker")
     db = aird_context["db"]
+    pipeline_run = aird_context.get("pipeline_run")
 
     try:
         # Check if vector creation is enabled for this product
@@ -2047,8 +2138,16 @@ def task_indexing(**context) -> Dict[str, Any]:
         if not product:
             raise ValueError(f"Product {product_id} not found")
         
-        if not product.vector_creation_enabled:
+        if should_skip_vectors(product):
             logger.info(f"Vector creation is disabled for product {product_id}, skipping indexing stage")
+            if pipeline_run is not None:
+                if pipeline_run.metrics is None:
+                    pipeline_run.metrics = {}
+                pipeline_run.metrics["vectors_skipped"] = True
+                pipeline_run.metrics["vectors_skip_reason"] = "vector_creation_enabled is False"
+                from sqlalchemy.orm.attributes import flag_modified
+                flag_modified(pipeline_run, "metrics")
+                db.commit()
             if tracker:
                 from primedata.ingestion_pipeline.aird_stages.base import StageResult, StageStatus
                 skipped_result = StageResult(
@@ -2071,6 +2170,13 @@ def task_indexing(**context) -> Dict[str, Any]:
         # Continue with indexing if we can't check the flag (fallback to default behavior)
 
     try:
+        effective_config = resolve_effective_pipeline_config(product, params, pipeline_run)
+        chunking_config = effective_config.get("chunking_config")
+        playbook_selection = effective_config.get("playbook_selection")
+
+        logger.info(f"Effective chunking config (indexing): {chunking_config}")
+        logger.info(f"Effective playbook (indexing): {playbook_selection or {'playbook_id': product.playbook_id}}")
+
         # Get processed files from preprocessing
         preprocess_result = context["task_instance"].xcom_pull(task_ids="preprocess", key="preprocess_result")
         if not preprocess_result:
@@ -2097,6 +2203,7 @@ def task_indexing(**context) -> Dict[str, Any]:
             "processed_files": processed_files,
             "preprocess_result": preprocess_result,
             "scoring_result": scoring_result,
+            "chunking_config": chunking_config,
         }
 
         result = indexing_stage.execute(stage_context)
