@@ -1767,6 +1767,14 @@ class PreprocessStage(AirdStage):
             f"📊 Chunking diagnostics for {file_stem}: "
             f"pages_with_content={len(pages)}, "
             f"chunks_before_rules={chunks_before_rules}, "
+            f"chunks_after_rules={total_chunks}, "
+            f"records_written_to_db={len(records)}"
+        )
+        std_logger.info(
+            f"📊 Chunking diagnostics: pages_with_content={len(pages)}, "
+            f"chunks_before_rules={chunks_before_rules}, "
+            f"chunks_after_rules={total_chunks}, "
+            f"records_written_to_db={len(records)}"
             f"chunks_after_rules={total_chunks}"
         )
         std_logger.info(

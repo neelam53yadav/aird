@@ -1194,6 +1194,10 @@ def task_preprocess(**context) -> Dict[str, Any]:
                         refreshed_product = db.get(Product, product_id)
                         if refreshed_product:
                             product = refreshed_product
+                            refreshed_chunking_config = product.chunking_config or {}
+                            if isinstance(refreshed_chunking_config, dict) and refreshed_chunking_config.get("mode") == "auto":
+                                refreshed_chunking_config["manual_settings"] = {}
+                            chunking_config = refreshed_chunking_config
                             chunking_config = product.chunking_config
                             if product.playbook_id and not playbook_id:
                                 playbook_id = product.playbook_id
@@ -1203,6 +1207,12 @@ def task_preprocess(**context) -> Dict[str, Any]:
                                     f"last_analyzed={chunking_config.get('last_analyzed')}, "
                                     f"sample_files_analyzed={chunking_config.get('sample_files_analyzed')}"
                                 )
+                            params["chunking_config"] = refreshed_chunking_config
+                            params["force_product_chunking_config"] = True
+                            dag_run = context.get("dag_run")
+                            if dag_run and isinstance(getattr(dag_run, "conf", None), dict):
+                                dag_run.conf["chunking_config"] = refreshed_chunking_config
+                                dag_run.conf["force_product_chunking_config"] = True
                     else:
                         logger.info("ℹ️ No auto-detection updates needed or available")
                 except Exception as e:
