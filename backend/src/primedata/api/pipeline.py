@@ -190,50 +190,28 @@ async def trigger_pipeline(
 
         logger.info(f"Using explicit raw file version {raw_file_version} (validated: {raw_file_count} raw files found)")
     else:
-        # Auto-detect: Prefer PROCESSED versions over FAILED versions for reprocessing
-        # This ensures we use valid, successfully processed data as the source
-        latest_processed = (
+        # Auto-detect: Pick the latest raw file version regardless of status (except DELETED)
+        # This allows retrying failed pipelines easily - picks latest version with any status
+        latest_raw_file = (
             db.query(RawFile)
-            .filter(RawFile.product_id == product.id, RawFile.status == RawFileStatus.PROCESSED)
+            .filter(RawFile.product_id == product.id, RawFile.status != RawFileStatus.DELETED)
             .order_by(RawFile.version.desc())
             .first()
         )
 
-        if latest_processed:
-            raw_file_version = latest_processed.version
-            logger.info(f"Auto-detected latest processed raw file version: {raw_file_version} " f"(found file: {latest_processed.filename})")
-        else:
-            # Fallback to INGESTED files if no PROCESSED files exist
-            latest_ingested = (
-                db.query(RawFile)
-                .filter(RawFile.product_id == product.id, RawFile.status == RawFileStatus.INGESTED)
-                .order_by(RawFile.version.desc())
-                .first()
-            )
+        if not latest_raw_file:
+            error_detail = {
+                "message": "No raw files found for this product",
+                "suggestion": "Please run initial ingestion first to upload data",
+            }
+            logger.warning(f"Pipeline trigger failed: No raw files for product {product.id}")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_detail)
 
-            if not latest_ingested:
-                # Check if any raw files exist at all
-                any_raw_file = (
-                    db.query(RawFile).filter(RawFile.product_id == product.id, RawFile.status != RawFileStatus.DELETED).first()
-                )
-
-                if any_raw_file:
-                    error_detail = {
-                        "message": "No raw files found for processing.",
-                        "suggestion": "Please run initial ingestion to create a new version with raw files",
-                    }
-                else:
-                    error_detail = {
-                        "message": "No raw files found for this product",
-                        "suggestion": "Please run initial ingestion first to upload data",
-                    }
-
-                logger.warning(f"Pipeline trigger failed: No raw files for product {product.id}")
-
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_detail)
-
-            raw_file_version = latest_ingested.version
-            logger.info(f"Auto-detected latest ingested raw file version: {raw_file_version} " f"(found file: {latest_ingested.filename})")
+        raw_file_version = latest_raw_file.version
+        logger.info(
+            f"Auto-detected latest raw file version: {raw_file_version} "
+            f"(status: {latest_raw_file.status.value}, filename: {latest_raw_file.filename})"
+        )
 
     # ALWAYS create a new pipeline run version number (independent of raw file version)
     # Get the maximum existing pipeline run version for this product
