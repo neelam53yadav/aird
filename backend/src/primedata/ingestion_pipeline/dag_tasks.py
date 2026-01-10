@@ -708,7 +708,7 @@ def sample_files_for_analysis(
 
 
 def extract_text_sample_from_file(
-    storage: Any, raw_file: RawFile, max_chars: int = 5000
+    storage: Any, raw_file: RawFile, max_chars: Optional[int] = 5000
 ) -> Optional[str]:
     """
     Extract text sample from a raw file for analysis.
@@ -716,7 +716,7 @@ def extract_text_sample_from_file(
     Args:
         storage: AirdStorageAdapter instance
         raw_file: RawFile record
-        max_chars: Maximum characters to extract (default: 5000)
+        max_chars: Maximum characters to extract (default: 5000). Use None for full text.
     
     Returns:
         Text sample or None if extraction fails
@@ -733,7 +733,7 @@ def extract_text_sample_from_file(
             try:
                 text = storage.get_raw_text(file_stem, minio_key=storage_key, minio_bucket=storage_bucket)
                 if text:
-                    return text[:max_chars]
+                    return text if max_chars is None else text[:max_chars]
             except Exception as e:
                 logger.warning(f"Failed to extract text from PDF {filename}: {e}")
                 return None
@@ -742,7 +742,7 @@ def extract_text_sample_from_file(
             try:
                 text = storage.get_raw_text(file_stem, minio_key=storage_key, minio_bucket=storage_bucket)
                 if text:
-                    return text[:max_chars]
+                    return text if max_chars is None else text[:max_chars]
             except Exception as e:
                 logger.warning(f"Failed to extract text from {filename}: {e}")
                 return None
@@ -773,7 +773,7 @@ def auto_detect_playbook_and_chunking(
     """
     from collections import Counter
     from primedata.ingestion_pipeline.aird_stages.playbooks import route_playbook
-    from primedata.analysis.content_analyzer import content_analyzer
+    from primedata.analysis.content_analyzer import build_representative_sample, content_analyzer
     
     updates = {}
     needs_playbook_detection = product.playbook_id is None
@@ -817,8 +817,9 @@ def auto_detect_playbook_and_chunking(
 
     for raw_file in sampled_files:
         try:
-            # Extract text sample (2000-5000 chars for analysis)
-            text_sample = extract_text_sample_from_file(storage, raw_file, max_chars=5000)
+            # Extract full text for representative sampling
+            full_text = extract_text_sample_from_file(storage, raw_file, max_chars=None)
+            text_sample = build_representative_sample(full_text or "", chunk=5000, max_total=20000)
             
             if not text_sample or len(text_sample.strip()) < 100:
                 logger.warning(f"Skipping {raw_file.filename}: insufficient text content ({len(text_sample or '')} chars)")
@@ -829,12 +830,13 @@ def auto_detect_playbook_and_chunking(
                 "file_stem": raw_file.file_stem,
                 "data_source_id": str(raw_file.data_source_id) if raw_file.data_source_id else None,
                 "chars_extracted": len(text_sample),
+                "full_text_length": len(full_text or ""),
             })
             
             # Auto-detect playbook if needed
             if needs_playbook_detection:
                 try:
-                    playbook_id, reason = route_playbook(sample_text=text_sample[:2000], filename=raw_file.filename)
+                    playbook_id, reason = route_playbook(sample_text=text_sample, filename=raw_file.filename)
                     playbook_detections.append((playbook_id, reason))
                     logger.info(f"Detected playbook for {raw_file.filename}: {playbook_id} ({reason})")
                 except Exception as e:
@@ -847,6 +849,7 @@ def auto_detect_playbook_and_chunking(
                         content=text_sample,
                         filename=raw_file.filename,
                         hint=content_hint,
+                        full_text_length=len(full_text or ""),
                     )
                     chunking_analyses.append(chunking_config)
                     logger.info(
@@ -1185,8 +1188,28 @@ def task_preprocess(**context) -> Dict[str, Any]:
                         
                         # Commit updates to database
                         db.commit()
+                        db.expire_all()
                         db.refresh(product)
                         logger.info("✅ Auto-detection updates committed to database")
+                        refreshed_product = db.get(Product, product_id)
+                        if refreshed_product:
+                            product = refreshed_product
+                            refreshed_chunking_config = product.chunking_config or {}
+                            if isinstance(refreshed_chunking_config, dict) and refreshed_chunking_config.get("mode") == "auto":
+                                refreshed_chunking_config["manual_settings"] = {}
+                            chunking_config = refreshed_chunking_config
+                            if product.playbook_id and not playbook_id:
+                                playbook_id = product.playbook_id
+                            if isinstance(chunking_config, dict):
+                                logger.info(
+                                    "🔄 Refreshed chunking_config after auto-detection: "
+                                    f"last_analyzed={chunking_config.get('last_analyzed')}, "
+                                    f"sample_files_analyzed={chunking_config.get('sample_files_analyzed')}"
+                                )
+                            params["chunking_config"] = refreshed_chunking_config
+                            dag_run = context.get("dag_run")
+                            if dag_run and isinstance(getattr(dag_run, "conf", None), dict):
+                                dag_run.conf["chunking_config"] = refreshed_chunking_config
                     else:
                         logger.info("ℹ️ No auto-detection updates needed or available")
                 except Exception as e:
