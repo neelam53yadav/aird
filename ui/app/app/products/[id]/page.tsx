@@ -28,12 +28,29 @@ interface Product {
   status: 'draft' | 'running' | 'ready' | 'failed' | 'failed_policy' | 'ready_with_warnings'  // M2
   current_version: number
   promoted_version?: number
-  playbook_id?: string  // M1
+  playbook_id?: string | null  // M1 (null means auto-detect)
   playbook_selection?: {  // Auto-detection metadata
     playbook_id?: string
     method?: 'auto_detected' | 'manual' | 'document_type_mapped'
     reason?: string
     detected_at?: string
+    confidence?: number
+    files_analyzed?: number
+  }
+  chunking_config?: {
+    mode?: 'auto' | 'manual'
+    resolved_settings?: {
+      content_type?: string
+      chunk_size?: number
+      chunk_overlap?: number
+      chunking_strategy?: string
+      confidence?: number
+    }
+    auto_settings?: any
+    manual_settings?: any
+    last_analyzed?: string
+    analysis_confidence?: number
+    sample_files_analyzed?: any[]
   }
   preprocessing_stats?: {  // M1
     sections?: number
@@ -1108,32 +1125,47 @@ export default function ProductDetailPage() {
                   const selection = product.playbook_selection
                   const isAutoDetected = selection?.method === 'auto_detected'
                   const detectionReason = selection?.reason
+                  const isAutoDetectMode = product.playbook_id === null || product.playbook_id === undefined
                   
-                  return playbookId ? (
+                  return (
                     <div>
                       <dt className="text-sm font-medium text-gray-500">Playbook</dt>
                       <dd className="mt-1">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                            {playbookId}
-                          </span>
-                          {isAutoDetected && (
-                            <span 
-                              className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"
-                              title={detectionReason ? `Auto-detected: ${detectionReason}` : 'Auto-detected'}
-                            >
-                              Auto-detected
+                          {isAutoDetectMode && !playbookId ? (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                              Auto-Detect (Will be detected during pipeline run)
                             </span>
-                          )}
-                          {selection?.method === 'manual' && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                              Manual
-                            </span>
-                          )}
+                          ) : playbookId ? (
+                            <>
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                {playbookId}
+                              </span>
+                              {isAutoDetected && (
+                                <span 
+                                  className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"
+                                  title={detectionReason ? `Auto-detected: ${detectionReason}` : 'Auto-detected'}
+                                >
+                                  Auto-Detected
+                                </span>
+                              )}
+                              {selection?.method === 'manual' && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                  Manual
+                                </span>
+                              )}
+                            </>
+                          ) : null}
                         </div>
                         {isAutoDetected && detectionReason && (
                           <p className="mt-1 text-xs text-gray-500">
                             Reason: {detectionReason.replace(/_/g, ' ')}
+                            {selection?.confidence && ` (Confidence: ${(selection.confidence * 100).toFixed(0)}%)`}
+                          </p>
+                        )}
+                        {isAutoDetected && selection?.files_analyzed && (
+                          <p className="mt-1 text-xs text-gray-500">
+                            Analyzed {selection.files_analyzed} file{selection.files_analyzed !== 1 ? 's' : ''}
                           </p>
                         )}
                         {selection?.detected_at && (
@@ -1143,7 +1175,7 @@ export default function ProductDetailPage() {
                         )}
                       </dd>
                     </div>
-                  ) : null
+                  )
                 })()}
                 {product.trust_score !== undefined && (
                   <div>
@@ -1182,21 +1214,60 @@ export default function ProductDetailPage() {
                     </dd>
                   </div>
                 )}
-                {/* Content Type from chunking config */}
+                {/* Chunking Configuration */}
                 {(() => {
                   const chunkingConfig = (product as any).chunking_config
+                  const chunkingMode = chunkingConfig?.mode || 'auto'
                   const resolvedSettings = chunkingConfig?.resolved_settings
                   const contentType = resolvedSettings?.content_type || chunkingConfig?.auto_settings?.content_type
+                  const isAutoMode = chunkingMode === 'auto'
                   
-                  if (!contentType) return null
+                  if (!contentType && !isAutoMode) return null
                   
                   return (
                     <div>
-                      <dt className="text-sm font-medium text-gray-500">Content Type</dt>
+                      <dt className="text-sm font-medium text-gray-500">Chunking Configuration</dt>
                       <dd className="mt-1">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 capitalize">
-                          {contentType}
-                        </span>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {isAutoMode && !resolvedSettings ? (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                              Auto-Detect (Will be detected during pipeline run)
+                            </span>
+                          ) : resolvedSettings ? (
+                            <>
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 capitalize">
+                                {contentType || 'general'}
+                              </span>
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                Auto-Detected
+                              </span>
+                            </>
+                          ) : (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                              Manual Mode
+                            </span>
+                          )}
+                        </div>
+                        {resolvedSettings && (
+                          <div className="mt-2 text-xs text-gray-600 space-y-1">
+                            <p>Chunk Size: {resolvedSettings.chunk_size || 'N/A'} tokens</p>
+                            <p>Chunk Overlap: {resolvedSettings.chunk_overlap || 'N/A'} tokens</p>
+                            <p>Strategy: {resolvedSettings.chunking_strategy || 'N/A'}</p>
+                            {resolvedSettings.confidence && (
+                              <p>Confidence: {(resolvedSettings.confidence * 100).toFixed(0)}%</p>
+                            )}
+                          </div>
+                        )}
+                        {chunkingConfig?.last_analyzed && (
+                          <p className="mt-1 text-xs text-gray-400">
+                            Last analyzed: {new Date(chunkingConfig.last_analyzed).toLocaleString()}
+                          </p>
+                        )}
+                        {chunkingConfig?.sample_files_analyzed && chunkingConfig.sample_files_analyzed.length > 0 && (
+                          <p className="mt-1 text-xs text-gray-400">
+                            Analyzed {chunkingConfig.sample_files_analyzed.length} sample file{chunkingConfig.sample_files_analyzed.length !== 1 ? 's' : ''}
+                          </p>
+                        )}
                       </dd>
                     </div>
                   )
