@@ -186,7 +186,9 @@ def register_stage_artifacts(
                 input_artifact_ids=input_artifact_ids,  # Would be raw file artifact IDs
                 artifact_metadata={
                     "file_stem": file_stem,
-                    "chunks_count": result.metrics.get("total_chunks", 0),
+                    "chunks_count": result.metrics.get("file_chunk_counts", {}).get(
+                        file_stem, result.metrics.get("total_chunks", 0)
+                    ),
                     "playbook_id": result.metrics.get("playbook_id"),
                 },
                 retention_policy=RetentionPolicy.DAYS_90,
@@ -2051,6 +2053,9 @@ def task_indexing(**context) -> Dict[str, Any]:
                 from primedata.ingestion_pipeline.aird_stages.base import StageResult, StageStatus
                 skipped_result = StageResult(
                     status=StageStatus.SKIPPED,
+                    stage_name="indexing",
+                    product_id=product_id,
+                    version=version,
                     metrics={"points_indexed": 0, "reason": "vector_creation_enabled is False"},
                     error=None,
                 )
