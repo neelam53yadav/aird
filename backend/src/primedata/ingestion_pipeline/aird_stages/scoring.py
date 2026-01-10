@@ -44,6 +44,9 @@ class ScoringStage(AirdStage):
         started_at = datetime.utcnow()
         storage = context.get("storage")
         processed_files = context.get("processed_files", [])
+        chunking_config = context.get("chunking_config")
+        if chunking_config:
+            self.logger.info(f"Effective chunking config (scoring stage): {chunking_config}")
 
         if not storage:
             return self._create_result(
@@ -189,6 +192,7 @@ class ScoringStage(AirdStage):
             "scored_file_list": scored_files,
             # Include AI-Ready aggregate metrics
             "ai_ready_metrics": aggregated_metrics,
+            "chunking_config_used": chunking_config,
         }
 
         return self._create_result(
