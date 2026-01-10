@@ -294,6 +294,9 @@ class Product(Base):
     )
     # Embedding configuration
     embedding_config = Column(JSON, nullable=True, default=lambda: {"embedder_name": "minilm", "embedding_dimension": 384})
+    # Vector creation configuration
+    vector_creation_enabled = Column(Boolean, nullable=False, default=True)  # Enable vector/embedding creation and indexing
+    use_case_description = Column(Text, nullable=True, default=None)  # Use case description (only set during creation)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

@@ -1674,6 +1674,33 @@ def task_indexing(**context) -> Dict[str, Any]:
     db = aird_context["db"]
 
     try:
+        # Check if vector creation is enabled for this product
+        from primedata.db.models import Product
+        product = db.query(Product).filter(Product.id == product_id).first()
+        if not product:
+            raise ValueError(f"Product {product_id} not found")
+        
+        if not product.vector_creation_enabled:
+            logger.info(f"Vector creation is disabled for product {product_id}, skipping indexing stage")
+            if tracker:
+                from primedata.ingestion_pipeline.aird_stages.base import StageResult, StageStatus
+                skipped_result = StageResult(
+                    status=StageStatus.SKIPPED,
+                    metrics={"points_indexed": 0, "reason": "vector_creation_enabled is False"},
+                    error=None,
+                )
+                tracker.record_stage_result(skipped_result)
+            return {
+                "status": "skipped",
+                "vectors_indexed": 0,
+                "reason": "vector_creation_enabled is False",
+            }
+
+    except Exception as e:
+        logger.error(f"Failed to check vector_creation_enabled for product {product_id}: {e}", exc_info=True)
+        # Continue with indexing if we can't check the flag (fallback to default behavior)
+
+    try:
         # Get processed files from preprocessing
         preprocess_result = context["task_instance"].xcom_pull(task_ids="preprocess", key="preprocess_result")
         if not preprocess_result:

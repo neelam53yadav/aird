@@ -49,17 +49,6 @@ export default function PipelineDetailsModal({
     }
   }, [isOpen, runId])
 
-  // Debug: Log to see what we're getting for cancelled pipelines
-  useEffect(() => {
-    if (isOpen && runStatus === 'failed') {
-      console.log('Modal debug - runStatus:', runStatus)
-      console.log('Modal debug - logs?.metrics:', logs?.metrics)
-      console.log('Modal debug - initialMetrics:', initialMetrics)
-      console.log('Modal debug - logs?.metrics?.cancelled_reason:', logs?.metrics?.cancelled_reason)
-      console.log('Modal debug - initialMetrics?.cancelled_reason:', initialMetrics?.cancelled_reason)
-    }
-  }, [isOpen, runStatus, logs, initialMetrics])
-
   const loadLogs = async () => {
     setLoading(true)
     try {
