@@ -1,0 +1,218 @@
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.16.2
+    container_name: primedata-qdrant
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    restart: unless-stopped
+    networks:
+      - primedata-network
+
+  airflow-webserver:
+    image: infra-airflow-webserver:latest
+    pull_policy: never
+    container_name: primedata-airflow-webserver
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: ${AIRFLOW_DB_URL}
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth'
+      AIRFLOW__WEBSERVER__EXPOSE_CONFIG: 'true'
+      AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY:-your-secret-key-here}
+      AIRFLOW__WEBSERVER__BASE_URL: https://airdops.com/airflow
+      AIRFLOW__WEBSERVER__WEB_SERVER_URL_PREFIX: /airflow
+      AIRFLOW__WEBSERVER__ENABLE_PROXY_FIX: 'True'
+      AIRFLOW__WEBSERVER__WARN_DEPLOYMENT_EXPOSURE: 'False'
+      # REMOVED: _AIRFLOW_DB_UPGRADE: 'true' (migrations should be run manually to avoid lock conflicts)
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+      _AIRFLOW_WWW_USER_USERNAME: ${AIRFLOW_USERNAME:-admin}
+      _AIRFLOW_WWW_USER_PASSWORD: ${AIRFLOW_PASSWORD:-admin}
+      # PrimeData specific environment variables
+      PRIMEDATA_BACKEND_URL: http://backend:8000
+      DATABASE_URL: ${DATABASE_URL}
+      MINIO_HOST: ${MINIO_HOST:-storage.googleapis.com}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_SECURE: ${MINIO_SECURE:-true}
+      # GCS Configuration (for production)
+      USE_GCS: ${USE_GCS:-true}
+      GCS_PROJECT_ID: ${GCS_PROJECT_ID:-project-f3c8a334-a3f2-4f66-a06}
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: '6333'
+      QDRANT_GRPC_PORT: '6334'
+      DISABLE_AUTH: ${DISABLE_AUTH:-false}
+      PYTHONPATH: /opt/airflow/primedata/src
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-}
+      GCS_SIGNER_SERVICE_ACCOUNT: ${GCS_SIGNER_SERVICE_ACCOUNT:-primedata-storage-sa@project-f3c8a334-a3f2-4f66-a06.iam.gserviceaccount.com}
+    ports:
+      - "8080:8080"
+    volumes:
+      - airflow_dags:/opt/airflow/dags
+      - airflow_logs:/opt/airflow/logs
+      - airflow_plugins:/opt/airflow/plugins
+      - ../infra/airflow/triggers:/opt/airflow/triggers
+      - ../infra/airflow/dags:/opt/airflow/dags:ro
+      - /opt/primedata/backend/src:/opt/airflow/primedata/src:ro
+      - /opt/primedata/data:/opt/airflow/data
+    command: webserver
+    depends_on:
+      qdrant:
+        condition: service_started
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/airflow/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - primedata-network
+
+  airflow-scheduler:
+    image: infra-airflow-scheduler:latest
+    pull_policy: never
+    container_name: primedata-airflow-scheduler
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: ${AIRFLOW_DB_URL}
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY:-your-secret-key-here}
+      # REMOVED: _AIRFLOW_DB_UPGRADE: 'true' (migrations should be run manually to avoid lock conflicts)
+      # PrimeData specific environment variables
+      PRIMEDATA_BACKEND_URL: http://backend:8000
+      DATABASE_URL: ${DATABASE_URL}
+      MINIO_HOST: ${MINIO_HOST:-storage.googleapis.com}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_SECURE: ${MINIO_SECURE:-true}
+      # GCS Configuration (for production)
+      USE_GCS: ${USE_GCS:-true}
+      GCS_PROJECT_ID: ${GCS_PROJECT_ID:-project-f3c8a334-a3f2-4f66-a06}
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: '6333'
+      QDRANT_GRPC_PORT: '6334'
+      DISABLE_AUTH: ${DISABLE_AUTH:-false}
+      PYTHONPATH: /opt/airflow/primedata/src
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-}
+      GCS_SIGNER_SERVICE_ACCOUNT: ${GCS_SIGNER_SERVICE_ACCOUNT:-primedata-storage-sa@project-f3c8a334-a3f2-4f66-a06.iam.gserviceaccount.com}
+    volumes:
+      - airflow_dags:/opt/airflow/dags
+      - airflow_logs:/opt/airflow/logs
+      - airflow_plugins:/opt/airflow/plugins
+      - ../infra/airflow/triggers:/opt/airflow/triggers
+      - ../infra/airflow/dags:/opt/airflow/dags:ro
+      - /opt/primedata/backend/src:/opt/airflow/primedata/src:ro
+      - /opt/primedata/data:/opt/airflow/data
+    command: scheduler
+    depends_on:
+      qdrant:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - primedata-network
+
+  backend:
+    image: infra-backend:latest
+    pull_policy: never
+    container_name: primedata-backend
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      MINIO_HOST: ${MINIO_HOST:-storage.googleapis.com}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_SECURE: ${MINIO_SECURE:-true}
+      # GCS Configuration (for production)
+      USE_GCS: ${USE_GCS:-true}
+      GCS_PROJECT_ID: ${GCS_PROJECT_ID:-project-f3c8a334-a3f2-4f66-a06}
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: '6333'
+      QDRANT_GRPC_PORT: '6334'
+      AIRFLOW_HOST: airflow-webserver
+      AIRFLOW_PORT: '8080'
+      AIRFLOW_URL: ${AIRFLOW_URL:-https://airdops.com/airflow}
+      AIRFLOW_USERNAME: ${AIRFLOW_USERNAME:-admin}
+      AIRFLOW_PASSWORD: ${AIRFLOW_PASSWORD:-admin}
+      CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost:3000","https://airdops.com","https://www.airdops.com"]}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      FRONTEND_URL: ${FRONTEND_URL}
+      DISABLE_AUTH: ${DISABLE_AUTH:-false}
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-}
+      GCS_SIGNER_SERVICE_ACCOUNT: ${GCS_SIGNER_SERVICE_ACCOUNT:-primedata-storage-sa@project-f3c8a334-a3f2-4f66-a06.iam.gserviceaccount.com}
+      # SMTP Configuration
+      SMTP_ENABLED: ${SMTP_ENABLED:-false}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
+      SMTP_USE_SSL: ${SMTP_USE_SSL:-false}
+      SMTP_USERNAME: ${SMTP_USERNAME:-primedata.feedback@gmail.com}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-primedata.feedback@gmail.com}
+    depends_on:
+      qdrant:
+        condition: service_started
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - primedata-network
+
+  frontend:
+    image: infra-frontend:latest
+    pull_policy: never
+    container_name: primedata-frontend
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      NEXTAUTH_URL: ${NEXTAUTH_URL}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - primedata-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: primedata-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /var/www/certbot:/var/www/certbot:ro
+    depends_on:
+      - frontend
+      - backend
+      - airflow-webserver
+    restart: unless-stopped
+    networks:
+      - primedata-network
+
+volumes:
+  qdrant_data:
+    driver: local
+  airflow_dags:
+    driver: local
+  airflow_logs:
+    driver: local
+  airflow_plugins:
+    driver: local
+
+networks:
+  primedata-network:
+    driver: bridge

@@ -1,0 +1,23 @@
+# Example: Import existing resources into Terraform state
+# Uncomment and modify these if you have existing resources you want to manage
+
+# Import existing VM (if it already exists)
+# terraform import google_compute_instance.primedata_vm projects/project-f3c8a334-a3f2-4f66-a06/zones/us-central1-c/instances/primedata-beta
+
+# Import existing service account (if it already exists)
+# terraform import google_service_account.primedata_sa projects/project-f3c8a334-a3f2-4f66-a06/serviceAccounts/primedata-compute-sa-beta@project-f3c8a334-a3f2-4f66-a06.iam.gserviceaccount.com
+
+# Import existing firewall rules (if they already exist)
+# terraform import google_compute_firewall.allow_http projects/project-f3c8a334-a3f2-4f66-a06/global/firewalls/primedata-allow-http-beta
+# terraform import google_compute_firewall.allow_https projects/project-f3c8a334-a3f2-4f66-a06/global/firewalls/primedata-allow-https-beta
+# terraform import google_compute_firewall.allow_ssh projects/project-f3c8a334-a3f2-4f66-a06/global/firewalls/primedata-allow-ssh-beta
+
+# To import, run:
+# terraform import <resource_type>.<resource_name> <resource_id>
+
+
+
+
+
+
+

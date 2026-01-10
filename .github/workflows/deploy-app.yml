@@ -1,0 +1,914 @@
+name: Deploy Application
+
+on:
+  push:
+    branches:
+      - main
+      - db-fixes
+    paths:
+      - 'backend/**'
+      - 'ui/**'
+      - 'infra/docker-compose.prod.yml'
+      - 'infra/airflow/**'
+      - 'infra/nginx/**'
+      - '.github/workflows/deploy-app.yml'
+  workflow_dispatch:
+
+env:
+  GCP_PROJECT_ID: project-f3c8a334-a3f2-4f66-a06
+  GCP_ZONE: us-central1-c
+  VM_NAME: primedata-beta
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch full history to avoid missing commit issues
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/890841479962/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+          service_account: github-actions@project-f3c8a334-a3f2-4f66-a06.iam.gserviceaccount.com
+          create_credentials_file: true
+          export_environment_variables: true
+          universe: googleapis.com
+          cleanup_credentials: true
+          access_token_lifetime: 3600s
+          access_token_scopes: https://www.googleapis.com/auth/cloud-platform
+          id_token_include_email: false
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        # Note: Project is already set via CLOUDSDK_CORE_PROJECT environment variable
+        # Skipping explicit project setting to avoid token refresh issues
+
+      - name: Check/Create VM
+        id: vm-check
+        run: |
+          # Check if VM exists
+          VM_EXISTS=$(gcloud compute instances describe ${{ env.VM_NAME }} \
+            --zone=${{ env.GCP_ZONE }} \
+            --format="value(name)" 2>/dev/null || echo "")
+          
+          if [ -z "$VM_EXISTS" ]; then
+            echo "::error::VM '${{ env.VM_NAME }}' does not exist!"
+            echo ""
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "📋 **ACTION REQUIRED: Create VM Before Deployment**"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo ""
+            echo "The VM '${{ env.VM_NAME }}' needs to be created first using Terraform."
+            echo ""
+            echo "**🚀 Quick Fix (Recommended):**"
+            echo ""
+            echo "1. Go to: https://github.com/neelam53yadav/aird/actions/workflows/deploy-infra.yml"
+            echo "   (If you don't see it, click 'All workflows' in the left sidebar)"
+            echo ""
+            echo "2. Click the 'Run workflow' dropdown button (top right)"
+            echo ""
+            echo "3. Configure:"
+            echo "   - Branch: ${{ github.ref_name }}"
+            echo "   - Action: apply"
+            echo "   - Auto-approve: true (optional)"
+            echo ""
+            echo "4. Click 'Run workflow'"
+            echo ""
+            echo "5. Wait 2-3 minutes for VM creation, then re-run this workflow"
+            echo ""
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            exit 1
+          fi
+          
+          # Check VM status
+          VM_STATUS=$(gcloud compute instances describe ${{ env.VM_NAME }} \
+            --zone=${{ env.GCP_ZONE }} \
+            --format="value(status)" 2>/dev/null || echo "")
+          
+          if [ "$VM_STATUS" != "RUNNING" ]; then
+            echo "⚠️  VM exists but is not running (status: $VM_STATUS)"
+            echo "Starting VM..."
+            gcloud compute instances start ${{ env.VM_NAME }} \
+              --zone=${{ env.GCP_ZONE }}
+            
+            echo "Waiting for VM to start (this may take 30-60 seconds)..."
+            sleep 30
+            
+            # Wait for VM to be fully running
+            for i in {1..10}; do
+              CURRENT_STATUS=$(gcloud compute instances describe ${{ env.VM_NAME }} \
+                --zone=${{ env.GCP_ZONE }} \
+                --format="value(status)" 2>/dev/null || echo "")
+              if [ "$CURRENT_STATUS" == "RUNNING" ]; then
+                echo "✅ VM is now running"
+                break
+              fi
+              echo "Waiting for VM to start... (attempt $i/10)"
+              sleep 10
+            done
+          else
+            echo "✅ VM is running"
+          fi
+
+      - name: Get VM IP
+        id: get-vm-ip
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Retrieving VM IP address..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          
+          VM_IP=""
+          
+          # Method 1: Try getting external IP via accessConfigs (most direct method)
+          # Note: API uses accessConfigs (plural), not accessConfig
+          echo "Method 1: Trying accessConfigs method..."
+          VM_IP=$(gcloud compute instances describe ${{ env.VM_NAME }} \
+            --zone=${{ env.GCP_ZONE }} \
+            --project=${{ env.GCP_PROJECT_ID }} \
+            --format="value(networkInterfaces[0].accessConfigs[0].natIP)" 2>&1 | grep -v "^$" | head -1)
+          
+          # Remove any error messages and check if we got an IP
+          if echo "$VM_IP" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "✅ Found IP via Method 1: $VM_IP"
+          else
+            VM_IP=""
+            echo "Method 1 failed, trying Method 2..."
+            
+            # Method 2: Parse JSON output to find natIP
+            VM_JSON=$(gcloud compute instances describe ${{ env.VM_NAME }} \
+              --zone=${{ env.GCP_ZONE }} \
+              --project=${{ env.GCP_PROJECT_ID }} \
+              --format="json" 2>/dev/null)
+            
+            if [ -n "$VM_JSON" ]; then
+              # Extract natIP from JSON using jq if available, otherwise use grep
+              if command -v jq &> /dev/null; then
+                VM_IP=$(echo "$VM_JSON" | jq -r '.networkInterfaces[0].accessConfigs[]? | select(.natIP != null) | .natIP' | head -1)
+              else
+                # Fallback to grep method
+                VM_IP=$(echo "$VM_JSON" | grep -o '"natIP"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"natIP"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')
+              fi
+              
+              if echo "$VM_IP" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
+                echo "✅ Found IP via Method 2: $VM_IP"
+              else
+                VM_IP=""
+                echo "Method 2 failed, trying Method 3..."
+              fi
+            fi
+          fi
+          
+          # Method 3: Try YAML format (sometimes more reliable)
+          if [ -z "$VM_IP" ]; then
+            VM_YAML=$(gcloud compute instances describe ${{ env.VM_NAME }} \
+              --zone=${{ env.GCP_ZONE }} \
+              --project=${{ env.GCP_PROJECT_ID }} \
+              --format="yaml(networkInterfaces[0].accessConfigs)" 2>/dev/null)
+            
+            if [ -n "$VM_YAML" ]; then
+              VM_IP=$(echo "$VM_YAML" | grep -A 10 "accessConfigs:" | grep "natIP:" | head -1 | awk '{print $2}' | tr -d '"' | tr -d "'")
+              
+              if echo "$VM_IP" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
+                echo "✅ Found IP via Method 3: $VM_IP"
+              else
+                VM_IP=""
+              fi
+            fi
+          fi
+          
+          # Method 4: Last resort - try getting IP from networkInterfaces.accessConfigs list (handles different array structures)
+          if [ -z "$VM_IP" ]; then
+            echo "Method 3 failed, trying Method 4 (alternative accessConfig parsing)..."
+            VM_IP=$(gcloud compute instances describe ${{ env.VM_NAME }} \
+              --zone=${{ env.GCP_ZONE }} \
+              --project=${{ env.GCP_PROJECT_ID }} \
+              --format="get(networkInterfaces[0].accessConfigs[0].natIP)" 2>/dev/null | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' || echo "")
+            
+            if [ -n "$VM_IP" ]; then
+              echo "✅ Found IP via Method 4: $VM_IP"
+            fi
+          fi
+          
+          # If we still don't have an IP, show detailed VM information for debugging
+          if [ -z "$VM_IP" ]; then
+            echo ""
+            echo "❌ Error: Could not retrieve VM external IP address after trying 4 methods."
+            echo ""
+            echo "VM Details:"
+            VM_STATUS=$(gcloud compute instances describe ${{ env.VM_NAME }} \
+              --zone=${{ env.GCP_ZONE }} \
+              --project=${{ env.GCP_PROJECT_ID }} \
+              --format="value(status)" 2>/dev/null || echo "Unknown")
+            echo "  Status: $VM_STATUS"
+            echo ""
+            echo "Full Network Configuration (for debugging):"
+            gcloud compute instances describe ${{ env.VM_NAME }} \
+              --zone=${{ env.GCP_ZONE }} \
+              --project=${{ env.GCP_PROJECT_ID }} \
+              --format="yaml(networkInterfaces)" 2>/dev/null || echo "  Could not retrieve network configuration"
+            echo ""
+            echo "Attempting to list all network interfaces and access configs..."
+            gcloud compute instances describe ${{ env.VM_NAME }} \
+              --zone=${{ env.GCP_ZONE }} \
+              --project=${{ env.GCP_PROJECT_ID }} \
+              --format="json" | grep -A 20 "networkInterfaces" || echo "  Could not retrieve network details"
+            echo ""
+            echo "Please check the VM configuration in GCP Console:"
+            echo "  https://console.cloud.google.com/compute/instancesDetail/zones/${{ env.GCP_ZONE }}/instances/${{ env.VM_NAME }}?project=${{ env.GCP_PROJECT_ID }}"
+            exit 1
+          fi
+          
+          echo ""
+          echo "✅ VM IP: $VM_IP"
+          echo "vm_ip=$VM_IP" >> $GITHUB_OUTPUT
+
+      - name: Setup SSH
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Setting up SSH authentication..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          
+          # Validate required secrets
+          if [ -z "${{ secrets.VM_USERNAME }}" ]; then
+            echo "❌ Error: VM_USERNAME secret is not set in GitHub repository secrets"
+            echo ""
+            echo "Please add VM_USERNAME to your repository secrets:"
+            echo "1. Go to: Settings → Secrets and variables → Actions"
+            echo "2. Click 'New repository secret'"
+            echo "3. Name: VM_USERNAME"
+            echo "4. Value: <your-vm-username> (e.g., 'ubuntu' for Ubuntu VMs)"
+            exit 1
+          fi
+          
+          if [ -z "${{ secrets.VM_SSH_KEY }}" ]; then
+            echo "❌ Error: VM_SSH_KEY secret is not set in GitHub repository secrets"
+            echo ""
+            echo "Please add VM_SSH_KEY to your repository secrets:"
+            echo "1. Go to: Settings → Secrets and variables → Actions"
+            echo "2. Click 'New repository secret'"
+            echo "3. Name: VM_SSH_KEY"
+            echo "4. Value: <your-ssh-private-key-content>"
+            echo ""
+            echo "To generate SSH key pair and add to VM:"
+            echo "  ssh-keygen -t rsa -b 4096 -C 'github-actions' -f ~/.ssh/vm_key"
+            echo "  ssh-copy-id -i ~/.ssh/vm_key.pub ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }}"
+            echo "  # Then copy ~/.ssh/vm_key content as VM_SSH_KEY secret"
+            exit 1
+          fi
+          
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          
+          # Write SSH private key
+          echo "${{ secrets.VM_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          
+          # Verify key file was created properly
+          if [ ! -s ~/.ssh/id_rsa ]; then
+            echo "❌ Error: SSH key file is empty or not created properly"
+            exit 1
+          fi
+          
+          # Add VM to known_hosts
+          ssh-keyscan -H ${{ steps.get-vm-ip.outputs.vm_ip }} >> ~/.ssh/known_hosts 2>/dev/null
+          chmod 644 ~/.ssh/known_hosts
+          
+          echo "✅ SSH setup complete"
+          echo "  Username: ${{ secrets.VM_USERNAME }}"
+          echo "  VM IP: ${{ steps.get-vm-ip.outputs.vm_ip }}"
+          echo ""
+
+      - name: Detect changed files and determine which services to rebuild
+        id: detect-changes
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Detecting changed files..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          
+          # Get the base commit (for push events, use the previous commit)
+          if [ "${{ github.event_name }}" == "push" ]; then
+            BASE_SHA="${{ github.event.before }}"
+            HEAD_SHA="${{ github.sha }}"
+            echo "Push event detected"
+            echo "  Base SHA: ${BASE_SHA}"
+            echo "  Head SHA: ${HEAD_SHA}"
+            
+            # Check if BASE_SHA exists (might not exist after force push)
+            # Use ^{commit} suffix to ensure we're checking a commit object
+            if ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+              echo "⚠️  Base commit ${BASE_SHA} not found (likely force push). Rebuilding all services to be safe."
+              echo "rebuild_backend=true" >> $GITHUB_OUTPUT
+              echo "rebuild_frontend=true" >> $GITHUB_OUTPUT
+              echo "rebuild_airflow=true" >> $GITHUB_OUTPUT
+              echo "nginx_changed=true" >> $GITHUB_OUTPUT
+              echo "skip_build=false" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+            
+            # Also verify HEAD_SHA exists
+            if ! git cat-file -e "${HEAD_SHA}^{commit}" 2>/dev/null; then
+              echo "❌ Error: Head commit ${HEAD_SHA} not found. This should not happen."
+              exit 1
+            fi
+          else
+            # For workflow_dispatch, compare with the branch's previous commit
+            BASE_SHA="HEAD~1"
+            HEAD_SHA="HEAD"
+            echo "Manual/workflow_dispatch event detected"
+            echo "  Comparing: ${BASE_SHA}..${HEAD_SHA}"
+          fi
+          
+          # Try multiple methods to get changed files
+          CHANGED_FILES=""
+          
+          # Method 1: git diff with commit range (with proper error handling)
+          if [ -n "${BASE_SHA}" ] && [ -n "${HEAD_SHA}" ]; then
+            echo "Method 1: Trying git diff ${BASE_SHA}..${HEAD_SHA}..."
+            set +e  # Disable exit on error for this command
+            CHANGED_FILES=$(git diff --name-only "${BASE_SHA}..${HEAD_SHA}" 2>&1)
+            rc=$?
+            set -e  # Re-enable exit on error
+            if [ $rc -eq 0 ] && [ -n "$CHANGED_FILES" ]; then
+              echo "✅ Method 1 succeeded"
+            else
+              echo "⚠️  Method 1 failed or no changes (exit code: $rc)"
+              CHANGED_FILES=""
+            fi
+          fi
+          
+          # Method 2: git diff-tree (more reliable for commits)
+          if [ -z "$CHANGED_FILES" ] && [ -n "${BASE_SHA}" ] && [ -n "${HEAD_SHA}" ]; then
+            echo "Method 2: Trying git diff-tree..."
+            set +e
+            CHANGED_FILES=$(git diff-tree --no-commit-id --name-only -r "${BASE_SHA}" "${HEAD_SHA}" 2>&1)
+            rc=$?
+            set -e
+            if [ $rc -eq 0 ] && [ -n "$CHANGED_FILES" ]; then
+              echo "✅ Method 2 succeeded"
+            else
+              echo "⚠️  Method 2 failed or no changes (exit code: $rc)"
+              CHANGED_FILES=""
+            fi
+          fi
+          
+          # Method 3: git log with --name-only (fallback)
+          if [ -z "$CHANGED_FILES" ] && [ -n "${BASE_SHA}" ] && [ -n "${HEAD_SHA}" ]; then
+            echo "Method 3: Trying git log --name-only..."
+            set +e
+            CHANGED_FILES=$(git log --name-only --pretty=format: "${BASE_SHA}..${HEAD_SHA}" 2>&1 | grep -v "^$" | sort -u)
+            rc=$?
+            set -e
+            if [ $rc -eq 0 ] && [ -n "$CHANGED_FILES" ]; then
+              echo "✅ Method 3 succeeded"
+            else
+              echo "⚠️  Method 3 failed or no changes (exit code: $rc)"
+              CHANGED_FILES=""
+            fi
+          fi
+          
+          # Method 4: Check files changed in current commit only (last resort)
+          if [ -z "$CHANGED_FILES" ]; then
+            echo "Method 4: Checking files changed in current commit only..."
+            set +e
+            CHANGED_FILES=$(git diff-tree --no-commit-id --name-only -r "${HEAD_SHA}" 2>&1)
+            rc=$?
+            set -e
+            if [ $rc -eq 0 ] && [ -n "$CHANGED_FILES" ]; then
+              echo "✅ Method 4 succeeded (using current commit only)"
+            else
+              echo "⚠️  Method 4 failed or no changes (exit code: $rc)"
+              CHANGED_FILES=""
+            fi
+          fi
+          
+          # If all methods failed, rebuild all services to be safe
+          if [ -z "$CHANGED_FILES" ]; then
+            echo ""
+            echo "⚠️  Could not detect changed files. Rebuilding all services to be safe."
+            echo "rebuild_backend=true" >> $GITHUB_OUTPUT
+            echo "rebuild_frontend=true" >> $GITHUB_OUTPUT
+            echo "rebuild_airflow=true" >> $GITHUB_OUTPUT
+            echo "nginx_changed=true" >> $GITHUB_OUTPUT
+            echo "skip_build=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          echo ""
+          echo "Changed files detected:"
+          echo "$CHANGED_FILES" | sed 's/^/  /'
+          echo ""
+          
+          # Check for backend changes (including migration files)
+          BACKEND_CHANGED=false
+          if echo "$CHANGED_FILES" | grep -qE "^backend/(src|Dockerfile|requirements|alembic)"; then
+            BACKEND_CHANGED=true
+            echo "✅ Backend source files changed"
+          fi
+          
+          # Force backend rebuild if migration files changed
+          if echo "$CHANGED_FILES" | grep -qE "^backend/alembic/versions/"; then
+            BACKEND_CHANGED=true
+            echo "✅ Backend migration files changed - forcing rebuild"
+          fi
+          
+          # Check for frontend changes
+          FRONTEND_CHANGED=false
+          if echo "$CHANGED_FILES" | grep -qE "^ui/(app|lib|components|Dockerfile|package\.json|next\.config|tsconfig)"; then
+            FRONTEND_CHANGED=true
+            echo "✅ Frontend source files changed"
+          fi
+          
+          # Check for Airflow changes
+          AIRFLOW_CHANGED=false
+          if echo "$CHANGED_FILES" | grep -qE "^infra/airflow"; then
+            AIRFLOW_CHANGED=true
+            echo "✅ Airflow files changed"
+          fi
+          
+          # Check for docker-compose changes (affects all services)
+          COMPOSE_CHANGED=false
+          if echo "$CHANGED_FILES" | grep -qE "^infra/docker-compose\.prod\.yml"; then
+            COMPOSE_CHANGED=true
+            echo "✅ Docker Compose config changed - will rebuild all services"
+          fi
+          
+          # Check for nginx config changes (affects all services - need to reload nginx)
+          NGINX_CHANGED=false
+          if echo "$CHANGED_FILES" | grep -qE "^infra/nginx"; then
+            NGINX_CHANGED=true
+            echo "✅ Nginx config changed - will reload nginx"
+          fi
+          
+          # Check for workflow file changes (affects build process - force frontend rebuild)
+          WORKFLOW_CHANGED=false
+          if echo "$CHANGED_FILES" | grep -qE "^\.github/workflows/deploy-app\.yml"; then
+            WORKFLOW_CHANGED=true
+            echo "✅ Workflow file changed - will rebuild frontend to apply build changes"
+          fi
+          
+          # Determine which services to rebuild
+          if [ "$COMPOSE_CHANGED" = true ]; then
+            # If compose file changed, rebuild all
+            REBUILD_BACKEND=true
+            REBUILD_FRONTEND=true
+            REBUILD_AIRFLOW=true
+          else
+            REBUILD_BACKEND=$BACKEND_CHANGED
+            # Force frontend rebuild if workflow changed (build process changed)
+            if [ "$WORKFLOW_CHANGED" = true ]; then
+              REBUILD_FRONTEND=true
+            else
+              REBUILD_FRONTEND=$FRONTEND_CHANGED
+            fi
+            REBUILD_AIRFLOW=$AIRFLOW_CHANGED
+          fi
+          
+          # Set outputs
+          echo "rebuild_backend=$REBUILD_BACKEND" >> $GITHUB_OUTPUT
+          echo "rebuild_frontend=$REBUILD_FRONTEND" >> $GITHUB_OUTPUT
+          echo "rebuild_airflow=$REBUILD_AIRFLOW" >> $GITHUB_OUTPUT
+          echo "nginx_changed=$NGINX_CHANGED" >> $GITHUB_OUTPUT
+          echo "skip_build=false" >> $GITHUB_OUTPUT
+          
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Build Plan:"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "  Backend:   $REBUILD_BACKEND"
+          echo "  Frontend: $REBUILD_FRONTEND"
+          echo "  Airflow:  $REBUILD_AIRFLOW"
+          echo "  Nginx:    $NGINX_CHANGED (config reload only)"
+          echo ""
+
+      - name: Prepare VM directory
+        id: prepare-vm-dir
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Preparing deployment directory on VM..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          
+          # Try to create /opt/primedata with sudo (if user has sudo access)
+          echo "Attempting to create /opt/primedata with proper permissions..."
+          if ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+            "sudo mkdir -p /opt/primedata/data /opt/primedata/logs && \
+             sudo chown -R ${{ secrets.VM_USERNAME }}:${{ secrets.VM_USERNAME }} /opt/primedata && \
+             sudo chmod -R 755 /opt/primedata" 2>/dev/null; then
+            echo "✅ Successfully created /opt/primedata with sudo"
+            echo "deploy_path=/opt/primedata" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️  Could not create /opt/primedata (may need sudo access)"
+            echo "Using user's home directory instead..."
+            # Use home directory as fallback
+            ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+              "mkdir -p ~/primedata/data ~/primedata/logs"
+            echo "✅ Created ~/primedata directory"
+            echo "deploy_path=~/primedata" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Copy files to VM
+        run: |
+          DEPLOY_PATH="${{ steps.prepare-vm-dir.outputs.deploy_path }}"
+          echo "Copying files to: ${DEPLOY_PATH}"
+          rsync -avz --exclude='.git' --exclude='node_modules' --exclude='venv' \
+            --exclude='gha-creds-*.json' --exclude='*.tmp' --exclude='.env.local' \
+            -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
+            ./ ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }}:${DEPLOY_PATH}/
+
+      - name: Verify Docker on VM
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Verifying Docker installation on VM..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          
+          # Check if Docker is installed and accessible
+          if ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} "command -v docker" > /dev/null 2>&1; then
+            echo "✅ Docker is installed"
+            ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} "docker --version"
+          else
+            echo "❌ Docker not found. Attempting to install Docker..."
+            ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+              "curl -fsSL https://get.docker.com -o get-docker.sh && sudo sh get-docker.sh && rm get-docker.sh && sudo usermod -aG docker $USER || true"
+            echo "✅ Docker installation initiated"
+          fi
+          
+          # Check if user needs to be in docker group (might require re-login, but try current session)
+          echo "Checking Docker access..."
+          if ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} "docker ps" > /dev/null 2>&1; then
+            echo "✅ Docker is accessible"
+          else
+            echo "⚠️  Docker may require sudo or user group membership. Will use sudo if needed."
+          fi
+          echo ""
+
+      - name: Check if Docker images exist on VM
+        id: check-images
+        run: |
+          DEPLOY_PATH="${{ steps.prepare-vm-dir.outputs.deploy_path }}"
+          DEPLOY_PATH_EXPANDED=$(ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} "echo ${DEPLOY_PATH}")
+          
+          # Determine Docker command (with or without sudo)
+          if ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} "docker ps" > /dev/null 2>&1; then
+            DOCKER_CMD="docker"
+          else
+            DOCKER_CMD="sudo docker"
+          fi
+          
+          # Check if images exist
+          IMAGES_EXIST=true
+          if ! ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} "${DOCKER_CMD} image inspect infra-backend:latest" > /dev/null 2>&1; then
+            IMAGES_EXIST=false
+          fi
+          if ! ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} "${DOCKER_CMD} image inspect infra-frontend:latest" > /dev/null 2>&1; then
+            IMAGES_EXIST=false
+          fi
+          if ! ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} "${DOCKER_CMD} image inspect infra-airflow-webserver:latest" > /dev/null 2>&1; then
+            IMAGES_EXIST=false
+          fi
+          
+          echo "images_exist=${IMAGES_EXIST}" >> $GITHUB_OUTPUT
+          if [ "$IMAGES_EXIST" = "true" ]; then
+            echo "✅ Docker images already exist on VM, will skip building"
+          else
+            echo "⚠️  Docker images not found on VM, will build them"
+          fi
+
+      - name: Build Docker images on VM
+        # Only build if files changed for that service OR if images don't exist
+        if: steps.detect-changes.outputs.skip_build != 'true' && (steps.detect-changes.outputs.rebuild_backend == 'true' || steps.detect-changes.outputs.rebuild_frontend == 'true' || steps.detect-changes.outputs.rebuild_airflow == 'true' || steps.check-images.outputs.images_exist != 'true')
+        run: |
+          DEPLOY_PATH="${{ steps.prepare-vm-dir.outputs.deploy_path }}"
+          DEPLOY_PATH_EXPANDED=$(ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} "echo ${DEPLOY_PATH}")
+          
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Building Docker images on GCP VM..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          
+          # Get version tag from commit SHA (short)
+          IMAGE_VERSION="${GITHUB_SHA:0:7}"
+          IMAGE_TAG="v${IMAGE_VERSION}"
+          
+          echo "Image version tag: ${IMAGE_TAG}"
+          echo ""
+          
+          # Build images conditionally based on what changed
+          REBUILD_BACKEND="${{ steps.detect-changes.outputs.rebuild_backend }}"
+          REBUILD_FRONTEND="${{ steps.detect-changes.outputs.rebuild_frontend }}"
+          REBUILD_AIRFLOW="${{ steps.detect-changes.outputs.rebuild_airflow }}"
+          IMAGES_EXIST="${{ steps.check-images.outputs.images_exist }}"
+          
+          # Determine if we need sudo for docker commands
+          DOCKER_CMD="docker"
+          if ! ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} "docker ps" > /dev/null 2>&1; then
+            DOCKER_CMD="sudo docker"
+            echo "Using sudo for Docker commands"
+          fi
+          
+          # Only prune dangling images, NOT the build cache (this preserves layer cache for faster builds!)
+          echo "Cleaning up dangling images (preserving build cache)..."
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+            "${DOCKER_CMD} image prune -f || true"
+          echo ""
+          
+          # Build backend if needed (changed OR doesn't exist)
+          if [ "$REBUILD_BACKEND" = "true" ] || [ "$IMAGES_EXIST" != "true" ]; then
+            echo "🔨 Building backend image (using cache)..."
+            ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+              "cd ${DEPLOY_PATH_EXPANDED} && \
+               ${DOCKER_CMD} build --cache-from infra-backend:latest -t infra-backend:latest -t infra-backend:${IMAGE_TAG} -f backend/Dockerfile backend/"
+            echo "✅ Backend image built"
+          else
+            echo "⏭️  Skipping backend build (no changes detected)"
+          fi
+          
+          # Build frontend if needed (changed OR doesn't exist)
+          if [ "$REBUILD_FRONTEND" = "true" ] || [ "$IMAGES_EXIST" != "true" ]; then
+            echo "🔨 Building frontend image (using cache)..."
+            # Use domain instead of IP for production
+            API_URL="https://airdops.com"
+            AIRFLOW_URL="https://airdops.com/airflow"
+            VM_IP="${{ steps.get-vm-ip.outputs.vm_ip }}"
+            ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${VM_IP} \
+              "cd ${DEPLOY_PATH_EXPANDED} && \
+               ${DOCKER_CMD} build --cache-from infra-frontend:latest --build-arg NEXT_PUBLIC_API_URL=\"${API_URL}\" --build-arg NEXT_PUBLIC_API_BASE=\"${API_URL}\" --build-arg NEXT_PUBLIC_AIRFLOW_URL=\"${AIRFLOW_URL}\" -t infra-frontend:latest -t infra-frontend:${IMAGE_TAG} -f ui/Dockerfile ui/"
+            echo "✅ Frontend image built"
+          else
+            echo "⏭️  Skipping frontend build (no changes detected)"
+          fi
+          
+          # Build Airflow if needed (changed OR doesn't exist)
+          if [ "$REBUILD_AIRFLOW" = "true" ] || [ "$IMAGES_EXIST" != "true" ]; then
+            echo "🔨 Building Airflow images (using cache)..."
+            ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+              "cd ${DEPLOY_PATH_EXPANDED} && \
+               ${DOCKER_CMD} build --cache-from infra-airflow-webserver:latest -t infra-airflow-webserver:latest -t infra-airflow-webserver:${IMAGE_TAG} -f infra/airflow/Dockerfile infra/airflow/ && \
+               ${DOCKER_CMD} tag infra-airflow-webserver:latest infra-airflow-scheduler:latest && \
+               ${DOCKER_CMD} tag infra-airflow-webserver:${IMAGE_TAG} infra-airflow-scheduler:${IMAGE_TAG}"
+            echo "✅ Airflow images built"
+          else
+            echo "⏭️  Skipping Airflow build (no changes detected)"
+          fi
+
+      - name: Cleanup old Docker images
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Cleaning up old Docker images (keeping latest and one previous version)..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          
+          # Determine if we need sudo for docker commands
+          DOCKER_CMD="docker"
+          if ! ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} "docker ps" > /dev/null 2>&1; then
+            DOCKER_CMD="sudo docker"
+          fi
+          
+          # Function to cleanup old version tags for a specific image
+          cleanup_image_versions() {
+            local IMAGE_NAME=$1
+            echo "Cleaning up old versions of ${IMAGE_NAME}..."
+            
+            ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+              "bash -c '
+                # Get all version tags (v* pattern only), sorted by creation date (newest first)
+                # Explicitly exclude \"latest\" tag
+                TAGS=\$(${DOCKER_CMD} images ${IMAGE_NAME} --format \"{{.Tag}}\" | grep \"^v\" | sort -r)
+                
+                # Count total version tags (excluding latest)
+                TAG_COUNT=\$(echo \"\$TAGS\" | grep -v \"^$\" | wc -l)
+                
+                if [ \"\$TAG_COUNT\" -gt 2 ]; then
+                  # Keep first 2 version tags (most recent), delete the rest
+                  echo \"\$TAGS\" | tail -n +3 | while read tag; do
+                    if [ -n \"\$tag\" ] && [ \"\$tag\" != \"latest\" ]; then
+                      echo \"  Removing old tag: ${IMAGE_NAME}:\$tag\"
+                      # Use docker image rm with specific tag to avoid affecting other tags
+                      ${DOCKER_CMD} image rm \"${IMAGE_NAME}:\$tag\" 2>/dev/null || true
+                    fi
+                  done
+                  echo \"  Kept 2 most recent version tags (plus latest)\"
+                else
+                  echo \"  Only \$TAG_COUNT version tag(s) found, nothing to clean\"
+                fi
+              '"
+          }
+          
+          # Cleanup each service's old version tags (excluding qdrant)
+          cleanup_image_versions "infra-backend"
+          cleanup_image_versions "infra-frontend"
+          cleanup_image_versions "infra-airflow-webserver"
+          cleanup_image_versions "infra-airflow-scheduler"
+          
+          # Also remove dangling images and unused images older than 7 days (but keep qdrant)
+          echo ""
+          echo "Removing dangling and unused images (keeping qdrant)..."
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+            "${DOCKER_CMD} image prune -f --filter 'until=168h' || true"
+          
+          # Show disk usage after cleanup (non-fatal - may fail if Docker has corrupted snapshots)
+          echo ""
+          echo "Docker disk usage after cleanup:"
+          if ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+            "${DOCKER_CMD} system df" 2>/dev/null; then
+            echo "✅ Disk usage reported successfully"
+          else
+            echo "⚠️  Could not calculate disk usage (Docker snapshot issue - this is non-critical)"
+            echo "   Cleanup operations succeeded, but disk usage reporting failed due to corrupted snapshot."
+            echo "   This does not affect functionality and will resolve on next Docker system prune."
+          fi
+          
+          echo ""
+          echo "✅ Image cleanup complete"
+          
+          # Ensure latest tags exist after cleanup
+          echo ""
+          echo "Ensuring latest tags exist..."
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+            "bash -c '
+              for IMAGE in infra-backend infra-frontend infra-airflow-webserver infra-airflow-scheduler; do
+                if ! ${DOCKER_CMD} image inspect \"\${IMAGE}:latest\" > /dev/null 2>&1; then
+                  echo \"Creating \${IMAGE}:latest from most recent version...\"
+                  MOST_RECENT=\$(${DOCKER_CMD} images \${IMAGE} --format \"{{.Tag}}\" | grep \"^v\" | sort -r | head -n 1)
+                  if [ -n \"\$MOST_RECENT\" ]; then
+                    ${DOCKER_CMD} tag \"\${IMAGE}:\$MOST_RECENT\" \"\${IMAGE}:latest\"
+                    echo \"  ✅ Created \${IMAGE}:latest from \${IMAGE}:\$MOST_RECENT\"
+                  else
+                    echo \"  ⚠️  Warning: No version tags found for \${IMAGE}\"
+                  fi
+                else
+                  echo \"  ✅ \${IMAGE}:latest exists\"
+                fi
+              done
+            '"
+
+      - name: Deploy on VM
+        run: |
+          DEPLOY_PATH="${{ steps.prepare-vm-dir.outputs.deploy_path }}"
+          # Expand ~ to full path if needed (in case we used home directory fallback)
+          DEPLOY_PATH_EXPANDED=$(ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} "echo ${DEPLOY_PATH}")
+          
+          cat > /tmp/deploy_script.sh << EOF
+          set -e
+          DEPLOY_DIR="${DEPLOY_PATH_EXPANDED}"
+          cd "\${DEPLOY_DIR}"
+          
+          # Note: Docker Compose automatically loads .env file from the current directory
+          # No need to manually export environment variables
+          
+          # Determine Docker command (with or without sudo)
+          if docker ps > /dev/null 2>&1; then
+            DOCKER_CMD="docker"
+            USE_SUDO=false
+          else
+            DOCKER_CMD="sudo docker"
+            USE_SUDO=true
+          fi
+          
+          # Determine Docker Compose command (check for plugin first, then standalone)
+          # Use sh -c to properly handle multi-word commands
+          if \${DOCKER_CMD} compose version > /dev/null 2>&1; then
+            DOCKER_COMPOSE_CMD="\${DOCKER_CMD} compose"
+          elif command -v docker-compose > /dev/null 2>&1; then
+            DOCKER_COMPOSE_CMD="docker-compose"
+          elif [ "\${USE_SUDO}" = "true" ] && sudo command -v docker-compose > /dev/null 2>&1; then
+            DOCKER_COMPOSE_CMD="sudo docker-compose"
+          else
+            echo "Error: docker compose or docker-compose not found"
+            exit 1
+          fi
+          
+          # Ensure Docker network exists (idempotent)
+          \${DOCKER_CMD} network create primedata-network 2>/dev/null || echo "Network already exists"
+          
+          # Verify required images exist before starting
+          echo "Verifying required Docker images exist..."
+          REQUIRED_IMAGES=("infra-backend:latest" "infra-frontend:latest" "infra-airflow-webserver:latest" "infra-airflow-scheduler:latest")
+          MISSING_IMAGES=()
+          for img in "\${REQUIRED_IMAGES[@]}"; do
+            if ! \${DOCKER_CMD} image inspect "\$img" > /dev/null 2>&1; then
+              MISSING_IMAGES+=("\$img")
+            fi
+          done
+          
+          if [ \${#MISSING_IMAGES[@]} -gt 0 ]; then
+            echo "❌ Error: Missing required images: \${MISSING_IMAGES[*]}"
+            echo "Please ensure images are built before deployment."
+            exit 1
+          fi
+          
+          echo "✅ All required images exist"
+          
+          # Images are already built on this VM
+          # Just start services using the built images (don't try to pull from registry)
+          echo "Starting services with Docker images built on VM..."
+          # Use --pull never to prevent Docker Compose from trying to pull images
+          # If --pull is not supported, the command will fail, so we try without it as fallback
+          sh -c "\${DOCKER_COMPOSE_CMD} -f infra/docker-compose.prod.yml up -d --pull never --remove-orphans" || \
+          sh -c "\${DOCKER_COMPOSE_CMD} -f infra/docker-compose.prod.yml up -d --remove-orphans"
+          
+          sleep 10
+          
+          sh -c "\${DOCKER_COMPOSE_CMD} -f infra/docker-compose.prod.yml exec -T backend alembic upgrade head" || echo "Migration failed or already up to date"
+          
+          sh -c "\${DOCKER_COMPOSE_CMD} -f infra/docker-compose.prod.yml ps"
+          EOF
+          
+          scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+            /tmp/deploy_script.sh \
+            ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }}:/tmp/deploy_script.sh
+          
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+            ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+            "bash /tmp/deploy_script.sh"
+
+      - name: Generate SSL certificate for Qdrant subdomain
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Checking SSL certificate for qdrant.airdops.com..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          
+          # Determine Docker command
+          DOCKER_CMD="docker"
+          if ! ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} "docker ps" > /dev/null 2>&1; then
+            DOCKER_CMD="sudo docker"
+          fi
+          
+          # Check if certificate already exists
+          CERT_EXISTS=$(ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+            "test -f /etc/letsencrypt/live/qdrant.airdops.com/fullchain.pem && echo 'exists' || echo 'missing'")
+          
+          if [ "$CERT_EXISTS" = "exists" ]; then
+            echo "✅ SSL certificate for qdrant.airdops.com already exists (skipping generation)"
+          else
+            echo "⚠️  SSL certificate not found. Attempting to generate..."
+            echo "   Note: This requires DNS to be configured and nginx to be running with HTTP server block"
+            echo ""
+            
+            # Try to generate certificate (this will fail if DNS is not configured, but that's ok)
+            # Certbot will not overwrite existing certificates
+            ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+              "sudo certbot certonly --webroot -w /var/www/certbot -d qdrant.airdops.com --non-interactive --agree-tos --email admin@airdops.com || echo 'Certificate generation failed (DNS may not be configured yet)'" || true
+            
+            # Check again
+            CERT_EXISTS=$(ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+              "test -f /etc/letsencrypt/live/qdrant.airdops.com/fullchain.pem && echo 'exists' || echo 'missing'")
+            
+            if [ "$CERT_EXISTS" = "exists" ]; then
+              echo "✅ SSL certificate generated successfully"
+            else
+              echo "⚠️  SSL certificate generation skipped or failed"
+              echo "   You may need to generate it manually or configure DNS first"
+              echo "   Run manually: sudo certbot certonly --webroot -w /var/www/certbot -d qdrant.airdops.com"
+            fi
+          fi
+
+      - name: Reload Nginx configuration
+        if: steps.detect-changes.outputs.nginx_changed == 'true'
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Reloading Nginx configuration..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          
+          # Determine Docker command
+          DOCKER_CMD="docker"
+          if ! ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} "docker ps" > /dev/null 2>&1; then
+            DOCKER_CMD="sudo docker"
+          fi
+          
+          # Test nginx configuration
+          echo "Testing nginx configuration..."
+          if ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+            "${DOCKER_CMD} exec primedata-nginx nginx -t"; then
+            echo "✅ Nginx configuration is valid"
+            
+            # Reload nginx
+            echo "Reloading nginx..."
+            ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+              "${DOCKER_CMD} exec primedata-nginx nginx -s reload"
+            echo "✅ Nginx reloaded successfully"
+          else
+            echo "❌ Nginx configuration test failed"
+            echo "Configuration errors will be shown above"
+            exit 1
+          fi
+
+      - name: Health Check
+        run: |
+          sleep 5
+          curl -f http://${{ steps.get-vm-ip.outputs.vm_ip }}:8000/health || echo "Health check failed"
+          curl -f http://${{ steps.get-vm-ip.outputs.vm_ip }}:8080/health || echo "Airflow health check failed"
+
+

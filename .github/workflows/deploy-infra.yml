@@ -1,0 +1,616 @@
+name: Deploy Infrastructure
+
+on:
+  push:
+    branches:
+      - main
+      - db-fixes
+    paths:
+      - 'infra/terraform/**'
+      - '.github/workflows/deploy-infra.yml'
+  pull_request:
+    branches:
+      - main
+      - db-fixes
+    paths:
+      - 'infra/terraform/**'
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Terraform action (plan = preview changes, apply = create/update VM, destroy = delete VM)'
+        required: true
+        default: 'plan'
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
+      auto_approve:
+        description: 'Auto-approve apply/destroy (skip confirmation)'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  GCP_PROJECT_ID: project-f3c8a334-a3f2-4f66-a06
+  GCP_REGION: us-central1
+  GCP_ZONE: us-central1-c
+  TF_VERSION: 1.6.0
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/890841479962/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+          service_account: github-actions@project-f3c8a334-a3f2-4f66-a06.iam.gserviceaccount.com
+          create_credentials_file: true
+
+      - name: Verify GCP Permissions
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Verifying GitHub Actions service account permissions..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          
+          GITHUB_SA="github-actions@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com"
+          PROJECT_ID="${{ env.GCP_PROJECT_ID }}"
+          
+          echo "Service Account: ${GITHUB_SA}"
+          echo "Project: ${PROJECT_ID}"
+          echo ""
+          
+          # Try to get current roles, but don't fail if we can't read the policy
+          echo "Checking project-level IAM roles..."
+          CURRENT_ROLES=$(gcloud projects get-iam-policy ${PROJECT_ID} \
+            --flatten="bindings[].members" \
+            --filter="bindings.members:serviceAccount:${GITHUB_SA}" \
+            --format="value(bindings.role)" 2>/dev/null || echo "")
+          
+          if [ -z "$CURRENT_ROLES" ]; then
+            echo "  ⚠️  Could not retrieve roles (may need permissions to view or propagation delay)"
+            echo ""
+            echo "Since we can't verify permissions by reading the IAM policy,"
+            echo "we'll proceed and let Terraform operations fail with clear errors if permissions are missing."
+            echo ""
+            echo "If you just granted permissions, wait 1-2 minutes for propagation."
+            echo "Then re-run this workflow if it fails."
+            echo ""
+            # Don't exit - let Terraform try and fail with clear errors
+          else
+            echo "Current roles found:"
+            echo "$CURRENT_ROLES" | while read -r role; do
+              echo "  ✅ $role"
+            done
+            
+            echo ""
+            echo "Required roles for Terraform operations:"
+            echo ""
+            
+            # Check each required role
+            MISSING_ROLES=()
+            
+            if echo "$CURRENT_ROLES" | grep -q "roles/iam.serviceAccountAdmin"; then
+              echo "  ✅ roles/iam.serviceAccountAdmin (create service accounts)"
+            else
+              echo "  ❌ roles/iam.serviceAccountAdmin (MISSING - needed to create service accounts)"
+              MISSING_ROLES+=("roles/iam.serviceAccountAdmin")
+            fi
+            
+            if echo "$CURRENT_ROLES" | grep -q "roles/resourcemanager.projectIamAdmin"; then
+              echo "  ✅ roles/resourcemanager.projectIamAdmin (create IAM bindings)"
+            else
+              echo "  ❌ roles/resourcemanager.projectIamAdmin (MISSING - needed to create IAM bindings)"
+              MISSING_ROLES+=("roles/resourcemanager.projectIamAdmin")
+            fi
+            
+            if echo "$CURRENT_ROLES" | grep -q "roles/compute.admin"; then
+              echo "  ✅ roles/compute.admin (create VMs and firewall rules)"
+            else
+              echo "  ❌ roles/compute.admin (MISSING - needed to create VMs and firewall rules)"
+              MISSING_ROLES+=("roles/compute.admin")
+            fi
+            
+            if echo "$CURRENT_ROLES" | grep -q "roles/iam.serviceAccountTokenCreator"; then
+              echo "  ✅ roles/iam.serviceAccountTokenCreator (use service accounts)"
+            else
+              echo "  ⚠️  roles/iam.serviceAccountTokenCreator (may be needed)"
+            fi
+            
+            echo ""
+            
+            # If roles are missing, show instructions but don't fail
+            if [ ${#MISSING_ROLES[@]} -gt 0 ]; then
+              echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+              echo "⚠️  MISSING REQUIRED PERMISSIONS DETECTED"
+              echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+              echo ""
+              echo "The GitHub Actions service account appears to be missing required permissions."
+              echo "Please run these commands in GCP Cloud Shell:"
+              echo ""
+              echo "PROJECT_ID=\"${PROJECT_ID}\""
+              echo "GITHUB_SA=\"${GITHUB_SA}\""
+              echo ""
+              for role in "${MISSING_ROLES[@]}"; do
+                echo "gcloud projects add-iam-policy-binding \${PROJECT_ID} \\"
+                echo "  --member=\"serviceAccount:\${GITHUB_SA}\" \\"
+                echo "  --role=\"${role}\""
+                echo ""
+              done
+              echo "After granting permissions, wait 1-2 minutes for propagation, then re-run this workflow."
+              echo ""
+              echo "⚠️  Continuing anyway - Terraform will fail with clear errors if permissions are missing."
+              echo ""
+              # Don't exit - let Terraform try
+            else
+              echo "✅ All required permissions are present!"
+              echo ""
+            fi
+          fi
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        # Note: Project is already set via CLOUDSDK_CORE_PROJECT environment variable
+        # Skipping explicit project setting to avoid token refresh issues
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Verify Credentials and Permissions
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Verifying GCP credentials and permissions for Terraform..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          
+          GITHUB_SA="github-actions@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com"
+          
+          # Check credentials
+          if [ -n "$GOOGLE_APPLICATION_CREDENTIALS" ]; then
+            echo "✅ GOOGLE_APPLICATION_CREDENTIALS is set: $GOOGLE_APPLICATION_CREDENTIALS"
+            if [ -f "$GOOGLE_APPLICATION_CREDENTIALS" ]; then
+              echo "✅ Credentials file exists"
+            else
+              echo "❌ Credentials file does not exist!"
+            fi
+          else
+            echo "⚠️  GOOGLE_APPLICATION_CREDENTIALS is not set"
+          fi
+          
+          echo ""
+          echo "Testing authentication..."
+          gcloud auth list
+          
+          echo ""
+          echo "Testing service account IAM policy (Workload Identity binding)..."
+          SA_POLICY=$(gcloud iam service-accounts get-iam-policy ${GITHUB_SA} \
+            --project=${{ env.GCP_PROJECT_ID }} \
+            --flatten="bindings[].members" \
+            --filter="bindings.role:roles/iam.workloadIdentityUser" \
+            --format="value(bindings.members)" 2>/dev/null || echo "")
+          
+          if echo "$SA_POLICY" | grep -q "workloadIdentityPools"; then
+            echo "✅ Workload Identity principal can impersonate service account"
+          else
+            echo "❌ Workload Identity principal CANNOT impersonate service account!"
+            echo "   This is REQUIRED for Workload Identity Federation."
+            echo ""
+            echo "   The WIF principal needs roles/iam.workloadIdentityUser role on the service account."
+            echo "   Run: gcloud iam service-accounts add-iam-policy-binding ${GITHUB_SA} \\"
+            echo "     --project=${{ env.GCP_PROJECT_ID }} \\"
+            echo "     --role=roles/iam.workloadIdentityUser \\"
+            echo "     --member=\"principalSet://iam.googleapis.com/projects/890841479962/locations/global/workloadIdentityPools/github-pool/attribute.repository/neelam53yadav/aird\""
+          fi
+          
+          echo ""
+          echo "Testing basic GCP access..."
+          if gcloud projects describe ${{ env.GCP_PROJECT_ID }} &>/dev/null; then
+            echo "✅ Can access project"
+          else
+            echo "❌ Cannot access project"
+          fi
+          echo ""
+
+      - name: Terraform Init
+        working-directory: infra/terraform
+        run: terraform init
+
+      - name: Auto-Import Existing Resources
+        working-directory: infra/terraform
+        env:
+          PROJECT_ID: ${{ env.GCP_PROJECT_ID }}
+          ZONE: ${{ env.GCP_ZONE }}
+          ENVIRONMENT: beta
+          VM_NAME: primedata-beta
+        run: |
+          # Disable exit on error since we handle errors manually in this step
+          set +e
+          
+          SA_EMAIL="primedata-compute-sa-${ENVIRONMENT}@${PROJECT_ID}.iam.gserviceaccount.com"
+          
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Checking for existing resources and importing into Terraform state..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          
+          IMPORT_COUNT=0
+          SKIP_COUNT=0
+          ERROR_COUNT=0
+          
+          # Check if service account exists and import
+          if gcloud iam service-accounts describe ${SA_EMAIL} --project=${PROJECT_ID} &>/dev/null; then
+            echo "📋 Service Account exists: ${SA_EMAIL}"
+            if terraform import google_service_account.primedata_sa projects/${PROJECT_ID}/serviceAccounts/${SA_EMAIL} 2>&1; then
+              echo "  ✅ Imported successfully"
+              ((IMPORT_COUNT++))
+            else
+              IMPORT_ERROR=$?
+              if terraform state show google_service_account.primedata_sa &>/dev/null; then
+                echo "  ⚠️  Already in state (import skipped)"
+                ((SKIP_COUNT++))
+              else
+                echo "  ❌ Import failed (error code: ${IMPORT_ERROR})"
+                ((ERROR_COUNT++))
+              fi
+            fi
+          else
+            echo "📋 Service Account does not exist (will be created)"
+          fi
+          echo ""
+          
+          # Check and import firewall rules
+          if gcloud compute firewall-rules describe primedata-allow-http-${ENVIRONMENT} --project=${PROJECT_ID} &>/dev/null; then
+            echo "🔥 Firewall Rule exists: primedata-allow-http-${ENVIRONMENT}"
+            if terraform import google_compute_firewall.allow_http projects/${PROJECT_ID}/global/firewalls/primedata-allow-http-${ENVIRONMENT} 2>&1; then
+              echo "  ✅ Imported successfully"
+              ((IMPORT_COUNT++))
+            else
+              IMPORT_ERROR=$?
+              if terraform state show google_compute_firewall.allow_http &>/dev/null; then
+                echo "  ⚠️  Already in state (import skipped)"
+                ((SKIP_COUNT++))
+              else
+                echo "  ❌ Import failed (error code: ${IMPORT_ERROR})"
+                ((ERROR_COUNT++))
+              fi
+            fi
+          else
+            echo "🔥 Firewall Rule does not exist: primedata-allow-http-${ENVIRONMENT} (will be created)"
+          fi
+          echo ""
+          
+          if gcloud compute firewall-rules describe primedata-allow-https-${ENVIRONMENT} --project=${PROJECT_ID} &>/dev/null; then
+            echo "🔥 Firewall Rule exists: primedata-allow-https-${ENVIRONMENT}"
+            if terraform import google_compute_firewall.allow_https projects/${PROJECT_ID}/global/firewalls/primedata-allow-https-${ENVIRONMENT} 2>&1; then
+              echo "  ✅ Imported successfully"
+              ((IMPORT_COUNT++))
+            else
+              IMPORT_ERROR=$?
+              if terraform state show google_compute_firewall.allow_https &>/dev/null; then
+                echo "  ⚠️  Already in state (import skipped)"
+                ((SKIP_COUNT++))
+              else
+                echo "  ❌ Import failed (error code: ${IMPORT_ERROR})"
+                ((ERROR_COUNT++))
+              fi
+            fi
+          else
+            echo "🔥 Firewall Rule does not exist: primedata-allow-https-${ENVIRONMENT} (will be created)"
+          fi
+          echo ""
+          
+          if gcloud compute firewall-rules describe primedata-allow-ssh-${ENVIRONMENT} --project=${PROJECT_ID} &>/dev/null; then
+            echo "🔥 Firewall Rule exists: primedata-allow-ssh-${ENVIRONMENT}"
+            if terraform import google_compute_firewall.allow_ssh projects/${PROJECT_ID}/global/firewalls/primedata-allow-ssh-${ENVIRONMENT} 2>&1; then
+              echo "  ✅ Imported successfully"
+              ((IMPORT_COUNT++))
+            else
+              IMPORT_ERROR=$?
+              if terraform state show google_compute_firewall.allow_ssh &>/dev/null; then
+                echo "  ⚠️  Already in state (import skipped)"
+                ((SKIP_COUNT++))
+              else
+                echo "  ❌ Import failed (error code: ${IMPORT_ERROR})"
+                ((ERROR_COUNT++))
+              fi
+            fi
+          else
+            echo "🔥 Firewall Rule does not exist: primedata-allow-ssh-${ENVIRONMENT} (will be created)"
+          fi
+          echo ""
+          
+          # Check and import VM
+          if gcloud compute instances describe ${VM_NAME} --zone=${ZONE} --project=${PROJECT_ID} &>/dev/null; then
+            echo "🖥️  VM Instance exists: ${VM_NAME}"
+            if terraform import google_compute_instance.primedata_vm projects/${PROJECT_ID}/zones/${ZONE}/instances/${VM_NAME} 2>&1; then
+              echo "  ✅ Imported successfully"
+              ((IMPORT_COUNT++))
+            else
+              IMPORT_ERROR=$?
+              if terraform state show google_compute_instance.primedata_vm &>/dev/null; then
+                echo "  ⚠️  Already in state (import skipped)"
+                ((SKIP_COUNT++))
+              else
+                echo "  ❌ Import failed (error code: ${IMPORT_ERROR})"
+                ((ERROR_COUNT++))
+              fi
+            fi
+          else
+            echo "🖥️  VM Instance does not exist (will be created)"
+          fi
+          echo ""
+          
+          # Import IAM bindings (skip if service account doesn't exist yet)
+          # IAM bindings can't be imported if the service account doesn't exist
+          if gcloud iam service-accounts describe ${SA_EMAIL} --project=${PROJECT_ID} &>/dev/null; then
+            echo "🔐 Attempting to import IAM bindings..."
+            echo "  Note: IAM binding imports may fail due to permission requirements."
+            echo "  This is OK - Terraform will create them if they don't exist."
+            echo ""
+            
+            # Try to import, but don't fail the step if it errors
+            terraform import google_project_iam_member.storage_admin "${PROJECT_ID} roles/storage.admin serviceAccount:${SA_EMAIL}" 2>&1 | grep -E "(Import|Error|already)" || echo "  Storage admin binding: will be created if needed"
+            terraform import google_project_iam_member.cloudsql_client "${PROJECT_ID} roles/cloudsql.client serviceAccount:${SA_EMAIL}" 2>&1 | grep -E "(Import|Error|already)" || echo "  CloudSQL client binding: will be created if needed"
+            terraform import google_project_iam_member.compute_instance_admin "${PROJECT_ID} roles/compute.instanceAdmin.v1 serviceAccount:${SA_EMAIL}" 2>&1 | grep -E "(Import|Error|already)" || echo "  Compute admin binding: will be created if needed"
+          else
+            echo "🔐 Skipping IAM binding imports (service account doesn't exist yet)"
+          fi
+          echo ""
+          
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Import Summary:"
+          echo "  ✅ Successfully imported: ${IMPORT_COUNT}"
+          echo "  ⚠️  Already in state: ${SKIP_COUNT}"
+          echo "  ❌ Import errors: ${ERROR_COUNT}"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          
+          # Refresh state to ensure everything is synced
+          echo "Refreshing Terraform state..."
+          terraform refresh -no-color 2>&1 | head -20 || echo "Refresh completed (warnings are OK)"
+          
+          # Re-enable exit on error for subsequent steps
+          set -e
+
+      - name: Terraform Format Check
+        working-directory: infra/terraform
+        run: terraform fmt -check
+
+      - name: Terraform Validate
+        working-directory: infra/terraform
+        run: terraform validate
+
+      - name: Check if Resources Exist Before Plan
+        id: check-resources
+        working-directory: infra/terraform
+        env:
+          PROJECT_ID: ${{ env.GCP_PROJECT_ID }}
+          ZONE: ${{ env.GCP_ZONE }}
+          ENVIRONMENT: beta
+          VM_NAME: primedata-beta
+        run: |
+          SA_EMAIL="primedata-compute-sa-${ENVIRONMENT}@${PROJECT_ID}.iam.gserviceaccount.com"
+          
+          RESOURCES_EXIST=false
+          
+          # Check if any resources exist in GCP
+          if gcloud iam service-accounts describe ${SA_EMAIL} --project=${PROJECT_ID} &>/dev/null || \
+             gcloud compute firewall-rules describe primedata-allow-http-${ENVIRONMENT} --project=${PROJECT_ID} &>/dev/null || \
+             gcloud compute instances describe ${VM_NAME} --zone=${ZONE} --project=${PROJECT_ID} &>/dev/null; then
+            RESOURCES_EXIST=true
+          fi
+          
+          echo "resources_exist=${RESOURCES_EXIST}" >> $GITHUB_OUTPUT
+          echo "Resources exist in GCP: ${RESOURCES_EXIST}"
+
+      - name: Terraform Plan
+        id: plan
+        working-directory: infra/terraform
+        run: |
+          # Terraform is idempotent - it will skip resources that already exist
+          # If resources exist, plan will show "no changes" or only show differences
+          terraform plan -out=tfplan -no-color 2>&1 | tee /tmp/terraform-plan-output.txt
+        continue-on-error: true
+
+      - name: Terraform Plan Status
+        if: steps.plan.outcome == 'failure'
+        run: |
+          echo "=== Terraform Plan Failed ==="
+          echo ""
+          echo "Actual Terraform error output:"
+          cat /tmp/terraform-plan-output.txt || echo "Could not read plan output"
+          echo ""
+          
+          # Check if resources exist but weren't imported
+          if [ "${{ steps.check-resources.outputs.resources_exist }}" == "true" ]; then
+            echo "⚠️  WARNING: Resources exist in GCP but plan failed!"
+            echo ""
+            echo "This usually means:"
+            echo "1. Resources exist but weren't successfully imported into Terraform state"
+            echo "2. Terraform is trying to create resources that already exist"
+            echo ""
+            echo "Solution: The import step above should have handled this."
+            echo "If imports failed, check the import step output for errors."
+            echo ""
+            echo "Skipping apply to avoid permission errors..."
+            echo "::warning::Skipping apply - resources exist but imports may have failed"
+          else
+            echo "Common causes:"
+            echo "1. Authentication issues"
+            echo "2. Invalid configuration"
+            echo "3. Missing required APIs (enable them in GCP)"
+            exit 1
+          fi
+
+      - name: Ensure VM Startup Script
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
+        working-directory: infra/terraform
+        run: |
+          VM_NAME="primedata-beta"
+          ZONE="us-central1-c"
+          
+          # Check if VM exists and add startup script if missing
+          if gcloud compute instances describe ${VM_NAME} --zone=${ZONE} --project=${{ env.GCP_PROJECT_ID }} &>/dev/null; then
+            echo "Checking VM startup script..."
+            CURRENT_SCRIPT=$(gcloud compute instances describe ${VM_NAME} \
+              --zone=${ZONE} \
+              --project=${{ env.GCP_PROJECT_ID }} \
+              --format="value(metadata.items[key=startup-script].value)" 2>/dev/null || echo "")
+            
+            if [ -z "$CURRENT_SCRIPT" ] || [ "$CURRENT_SCRIPT" == "" ]; then
+              echo "Adding startup script to VM..."
+              if [ -f "scripts/startup.sh" ]; then
+                gcloud compute instances add-metadata ${VM_NAME} \
+                  --zone=${ZONE} \
+                  --project=${{ env.GCP_PROJECT_ID }} \
+                  --metadata-from-file=startup-script=scripts/startup.sh
+                echo "✅ Startup script added"
+              else
+                echo "⚠️  Warning: startup script file not found at scripts/startup.sh"
+              fi
+            else
+              echo "✅ Startup script already exists on VM"
+            fi
+          else
+            echo "VM does not exist yet, will be created by Terraform"
+          fi
+
+      - name: Terraform Apply
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply' && steps.plan.outcome == 'success'
+        working-directory: infra/terraform
+        run: |
+          # Check if plan shows resources would be created (and they already exist)
+          PLAN_OUTPUT=$(cat /tmp/terraform-plan-output.txt || echo "")
+          
+          if echo "$PLAN_OUTPUT" | grep -q "will be created" && [ "${{ steps.check-resources.outputs.resources_exist }}" == "true" ]; then
+            echo "⚠️  WARNING: Plan shows resources will be created, but they already exist in GCP!"
+            echo "This means imports may have failed. Checking what needs to be created..."
+            echo ""
+            
+            # Check each resource individually
+            if echo "$PLAN_OUTPUT" | grep -q "google_service_account.primedata_sa.*will be created"; then
+              if gcloud iam service-accounts describe primedata-compute-sa-beta@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com --project=${{ env.GCP_PROJECT_ID }} &>/dev/null; then
+                echo "❌ Service account exists but Terraform wants to create it - import failed!"
+                echo "Skipping apply to avoid permission errors."
+                exit 0
+              fi
+            fi
+            
+            if echo "$PLAN_OUTPUT" | grep -q "google_compute_firewall.*will be created"; then
+              if gcloud compute firewall-rules describe primedata-allow-http-beta --project=${{ env.GCP_PROJECT_ID }} &>/dev/null || \
+                 gcloud compute firewall-rules describe primedata-allow-https-beta --project=${{ env.GCP_PROJECT_ID }} &>/dev/null || \
+                 gcloud compute firewall-rules describe primedata-allow-ssh-beta --project=${{ env.GCP_PROJECT_ID }} &>/dev/null; then
+                echo "❌ Firewall rules exist but Terraform wants to create them - import failed!"
+                echo "Skipping apply to avoid permission errors."
+                exit 0
+              fi
+            fi
+            
+            if echo "$PLAN_OUTPUT" | grep -q "google_compute_instance.primedata_vm.*will be created"; then
+              if gcloud compute instances describe primedata-beta --zone=${{ env.GCP_ZONE }} --project=${{ env.GCP_PROJECT_ID }} &>/dev/null; then
+                echo "❌ VM exists but Terraform wants to create it - import failed!"
+                echo "Skipping apply to avoid permission errors."
+                exit 0
+              fi
+            fi
+          fi
+          
+          # If we get here, it's safe to apply
+          if [ "${{ github.event.inputs.auto_approve }}" == "true" ]; then
+            terraform apply -auto-approve tfplan
+          else
+            terraform apply tfplan
+          fi
+
+      - name: Ensure VM Startup Script (Auto)
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/db-fixes'
+        working-directory: infra/terraform
+        run: |
+          VM_NAME="primedata-beta"
+          ZONE="us-central1-c"
+          
+          # Check if VM exists and add startup script if missing
+          if gcloud compute instances describe ${VM_NAME} --zone=${ZONE} --project=${{ env.GCP_PROJECT_ID }} &>/dev/null; then
+            echo "Checking VM startup script..."
+            CURRENT_SCRIPT=$(gcloud compute instances describe ${VM_NAME} \
+              --zone=${ZONE} \
+              --project=${{ env.GCP_PROJECT_ID }} \
+              --format="value(metadata.items[key=startup-script].value)" 2>/dev/null || echo "")
+            
+            if [ -z "$CURRENT_SCRIPT" ] || [ "$CURRENT_SCRIPT" == "" ]; then
+              echo "Adding startup script to VM..."
+              if [ -f "scripts/startup.sh" ]; then
+                gcloud compute instances add-metadata ${VM_NAME} \
+                  --zone=${ZONE} \
+                  --project=${{ env.GCP_PROJECT_ID }} \
+                  --metadata-from-file=startup-script=scripts/startup.sh
+                echo "✅ Startup script added"
+              else
+                echo "⚠️  Warning: startup script file not found at scripts/startup.sh"
+              fi
+            else
+              echo "✅ Startup script already exists on VM"
+            fi
+          else
+            echo "VM does not exist yet, will be created by Terraform"
+          fi
+
+      - name: Terraform Apply (Auto on main/db-fixes)
+        if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/db-fixes') && steps.plan.outcome == 'success'
+        working-directory: infra/terraform
+        run: |
+          # Check if plan shows resources would be created (and they already exist)
+          PLAN_OUTPUT=$(cat /tmp/terraform-plan-output.txt || echo "")
+          
+          if echo "$PLAN_OUTPUT" | grep -q "will be created" && [ "${{ steps.check-resources.outputs.resources_exist }}" == "true" ]; then
+            echo "⚠️  WARNING: Plan shows resources will be created, but they already exist in GCP!"
+            echo "Checking which resources need to be created..."
+            echo ""
+            
+            # Check each resource individually
+            if echo "$PLAN_OUTPUT" | grep -q "google_service_account.primedata_sa.*will be created"; then
+              if gcloud iam service-accounts describe primedata-compute-sa-beta@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com --project=${{ env.GCP_PROJECT_ID }} &>/dev/null; then
+                echo "❌ Service account exists but Terraform wants to create it - import failed!"
+                echo "Skipping apply to avoid permission errors."
+                exit 0
+              fi
+            fi
+            
+            if echo "$PLAN_OUTPUT" | grep -q "google_compute_firewall.*will be created"; then
+              if gcloud compute firewall-rules describe primedata-allow-http-beta --project=${{ env.GCP_PROJECT_ID }} &>/dev/null || \
+                 gcloud compute firewall-rules describe primedata-allow-https-beta --project=${{ env.GCP_PROJECT_ID }} &>/dev/null || \
+                 gcloud compute firewall-rules describe primedata-allow-ssh-beta --project=${{ env.GCP_PROJECT_ID }} &>/dev/null; then
+                echo "❌ Firewall rules exist but Terraform wants to create them - import failed!"
+                echo "Skipping apply to avoid permission errors."
+                exit 0
+              fi
+            fi
+            
+            if echo "$PLAN_OUTPUT" | grep -q "google_compute_instance.primedata_vm.*will be created"; then
+              if gcloud compute instances describe primedata-beta --zone=${{ env.GCP_ZONE }} --project=${{ env.GCP_PROJECT_ID }} &>/dev/null; then
+                echo "❌ VM exists but Terraform wants to create it - import failed!"
+                echo "Skipping apply to avoid permission errors."
+                exit 0
+              fi
+            fi
+          fi
+          
+          # If we get here, it's safe to apply
+          terraform apply -auto-approve tfplan
+
+      - name: Terraform Output
+        if: steps.plan.outcome == 'success'
+        working-directory: infra/terraform
+        run: terraform output -json
+

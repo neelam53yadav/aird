@@ -1,12 +1,16 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Users, UserPlus, Shield, Mail, MoreVertical, Trash2, Edit } from 'lucide-react'
+import { Users, UserPlus, Shield, Mail, MoreVertical, Trash2, Edit, Search, CheckCircle, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Modal, ConfirmModal } from '@/components/ui/modal'
+import { ErrorState } from '@/components/ui/error-state'
+import { ListSkeleton } from '@/components/ui/skeleton'
+import { StatusBadge } from '@/components/ui/status-badge'
 import AppLayout from '@/components/layout/AppLayout'
 import { apiClient } from '@/lib/api-client'
 import { useSession } from 'next-auth/react'
-
 interface TeamMember {
   id: string
   user_id: string
@@ -20,76 +24,112 @@ export default function TeamPage() {
   const { data: session } = useSession()
   const [members, setMembers] = useState<TeamMember[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRole, setInviteRole] = useState<'admin' | 'editor' | 'viewer'>('viewer')
+  const [inviting, setInviting] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [memberToDelete, setMemberToDelete] = useState<TeamMember | null>(null)
-
-  // Get workspace ID from session or use default for testing
-  const workspaceId = session?.user?.workspace_ids?.[0] || '550e8400-e29b-41d4-a716-446655440001'
+  const [removing, setRemoving] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null)
 
   useEffect(() => {
-    loadTeamMembers()
-  }, [])
+    const getWorkspaceId = async () => {
+      // Try to get from session first
+      const sessionWorkspaceId = session?.user?.workspace_ids?.[0]
+      if (sessionWorkspaceId) {
+        setWorkspaceId(sessionWorkspaceId)
+        return
+      }
+
+      // If not in session, fetch from API
+      try {
+        const workspacesResponse = await apiClient.getWorkspaces()
+        if (workspacesResponse.data && workspacesResponse.data.length > 0) {
+          setWorkspaceId(workspacesResponse.data[0].id)
+        } else {
+          setError('No workspace found. Please create a workspace first.')
+        }
+      } catch (err) {
+        console.error('Failed to fetch workspaces:', err)
+        setError('Failed to load workspace information')
+      }
+    }
+
+    if (session) {
+      getWorkspaceId()
+    }
+  }, [session])
+
+  useEffect(() => {
+    if (workspaceId) {
+      loadTeamMembers()
+    }
+  }, [workspaceId])
 
   const loadTeamMembers = async () => {
+    if (!workspaceId) {
+      setError('No workspace available')
+      setLoading(false)
+      return
+    }
+    
     try {
       setLoading(true)
-      // For now, we'll use mock data since the API endpoint doesn't exist yet
-      // In a real implementation, this would be: await apiClient.get(`/api/v1/workspaces/${workspaceId}/members`)
-      const mockMembers: TeamMember[] = [
-        {
-          id: '1',
-          user_id: 'user-1',
-          email: 'john.doe@company.com',
-          name: 'John Doe',
-          role: 'owner',
-          created_at: '2024-01-15T10:00:00Z'
-        },
-        {
-          id: '2',
-          user_id: 'user-2',
-          email: 'jane.smith@company.com',
-          name: 'Jane Smith',
-          role: 'admin',
-          created_at: '2024-01-20T14:30:00Z'
-        },
-        {
-          id: '3',
-          user_id: 'user-3',
-          email: 'bob.wilson@company.com',
-          name: 'Bob Wilson',
-          role: 'editor',
-          created_at: '2024-02-01T09:15:00Z'
-        }
-      ]
-      setMembers(mockMembers)
-    } catch (err) {
+      setError(null)
+      const response = await apiClient.getWorkspaceMembers(workspaceId)
+      
+      if (response.error) {
+        setError(response.error)
+        setMessage({ type: 'error', text: `Failed to load team members: ${response.error}` })
+      } else if (response.data) {
+        setMembers(response.data as TeamMember[])
+      }
+    } catch (err: unknown) {
       console.error('Failed to load team members:', err)
+      setError('Failed to load team members')
+      setMessage({ type: 'error', text: 'Failed to load team members' })
     } finally {
       setLoading(false)
     }
   }
 
   const handleInviteMember = async () => {
-    if (!inviteEmail || !inviteRole) return
+    if (!inviteEmail || !inviteRole) {
+      setMessage({ type: 'error', text: 'Please provide email and role' })
+      setTimeout(() => setMessage(null), 5000)
+      return
+    }
+    
+    if (!workspaceId) {
+      setMessage({ type: 'error', text: 'No workspace available' })
+      setTimeout(() => setMessage(null), 5000)
+      return
+    }
     
     try {
-      // In a real implementation, this would be:
-      // await apiClient.post(`/api/v1/workspaces/${workspaceId}/members`, {
-      //   email: inviteEmail,
-      //   role: inviteRole
-      // })
+      setInviting(true)
+      const response = await apiClient.inviteWorkspaceMember(workspaceId, inviteEmail, inviteRole)
       
-      console.log('Inviting member:', { email: inviteEmail, role: inviteRole })
-      setShowInviteModal(false)
-      setInviteEmail('')
-      setInviteRole('viewer')
-      // Reload members after successful invite
-      loadTeamMembers()
-    } catch (err) {
+      if (response.error) {
+        setMessage({ type: 'error', text: `Failed to invite member: ${response.error}` })
+      } else {
+        setMessage({ type: 'success', text: `Invitation sent to ${inviteEmail}` })
+        setShowInviteModal(false)
+        setInviteEmail('')
+        setInviteRole('viewer')
+        loadTeamMembers()
+      }
+      setTimeout(() => setMessage(null), 5000)
+    } catch (err: unknown) {
       console.error('Failed to invite member:', err)
+      setMessage({ type: 'error', text: 'Failed to invite member' })
+      setTimeout(() => setMessage(null), 5000)
+    } finally {
+      setInviting(false)
     }
   }
 
@@ -101,16 +141,31 @@ export default function TeamPage() {
   const confirmRemoveMember = async () => {
     if (!memberToDelete) return
     
+    if (!workspaceId) {
+      setMessage({ type: 'error', text: 'No workspace available' })
+      setTimeout(() => setMessage(null), 5000)
+      return
+    }
+    
     try {
-      // In a real implementation, this would be:
-      // await apiClient.delete(`/api/v1/workspaces/${workspaceId}/members/${memberToDelete.id}`)
+      setRemoving(true)
+      const response = await apiClient.removeWorkspaceMember(workspaceId, memberToDelete.id)
       
-      console.log('Removing member:', memberToDelete.id)
-      setMembers(members.filter(m => m.id !== memberToDelete.id))
-      setShowDeleteModal(false)
-      setMemberToDelete(null)
-    } catch (err) {
+      if (response.error) {
+        setMessage({ type: 'error', text: `Failed to remove member: ${response.error}` })
+      } else {
+        setMessage({ type: 'success', text: `${memberToDelete.name} has been removed from the workspace` })
+        setMembers(members.filter(m => m.id !== memberToDelete.id))
+        setShowDeleteModal(false)
+        setMemberToDelete(null)
+      }
+      setTimeout(() => setMessage(null), 5000)
+    } catch (err: unknown) {
       console.error('Failed to remove member:', err)
+      setMessage({ type: 'error', text: 'Failed to remove member' })
+      setTimeout(() => setMessage(null), 5000)
+    } finally {
+      setRemoving(false)
     }
   }
 
@@ -121,11 +176,11 @@ export default function TeamPage() {
 
   const getRoleBadgeColor = (role: string) => {
     switch (role) {
-      case 'owner': return 'bg-purple-100 text-purple-800'
-      case 'admin': return 'bg-red-100 text-red-800'
-      case 'editor': return 'bg-blue-100 text-blue-800'
-      case 'viewer': return 'bg-gray-100 text-gray-800'
-      default: return 'bg-gray-100 text-gray-800'
+      case 'owner': return 'bg-gradient-to-r from-purple-500 to-pink-600 text-white'
+      case 'admin': return 'bg-gradient-to-r from-red-500 to-rose-600 text-white'
+      case 'editor': return 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white'
+      case 'viewer': return 'bg-gradient-to-r from-gray-500 to-slate-600 text-white'
+      default: return 'bg-gradient-to-r from-gray-500 to-slate-600 text-white'
     }
   }
 
@@ -139,205 +194,276 @@ export default function TeamPage() {
     }
   }
 
+  // Filter members based on search query
+  const filteredMembers = members.filter(member =>
+    member.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    member.email.toLowerCase().includes(searchQuery.toLowerCase())
+  )
+
   if (loading) {
     return (
       <AppLayout>
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <div className="p-6 bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-50/30 min-h-screen">
+          <div className="max-w-7xl mx-auto">
+            <div className="mb-8">
+              <div className="h-10 bg-gray-200 rounded-xl w-1/3 mb-2 animate-pulse"></div>
+              <div className="h-6 bg-gray-200 rounded w-1/2 animate-pulse"></div>
+            </div>
+            <ListSkeleton items={5} />
+          </div>
         </div>
+      </AppLayout>
+    )
+  }
+
+  if (error) {
+    return (
+      <AppLayout>
+        <ErrorState
+          title="Failed to load team members"
+          message={error}
+          onRetry={loadTeamMembers}
+          variant="error"
+        />
       </AppLayout>
     )
   }
 
   return (
     <AppLayout>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Team Management</h1>
-          <p className="text-gray-600 mt-2">Manage team members and their access to workspaces</p>
-        </div>
-
-        {/* Header with Invite Button */}
-        <div className="flex justify-between items-center mb-6">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">Team Members</h2>
-            <p className="text-sm text-gray-600">{members.length} member{members.length !== 1 ? 's' : ''}</p>
+      <div className="p-6 bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-50/30 min-h-screen">
+        <div className="max-w-7xl mx-auto">
+          {/* Header */}
+          <div className="mb-8">
+            <h1 className="text-4xl font-bold text-gray-900 mb-2 tracking-tight">Team Management</h1>
+            <p className="text-lg text-gray-600">Manage team members and their access to workspaces</p>
           </div>
-          <Button onClick={() => setShowInviteModal(true)}>
-            <UserPlus className="h-4 w-4 mr-2" />
-            Invite Member
-          </Button>
-        </div>
 
-        {/* Team Members List */}
-        <div className="bg-white shadow rounded-lg">
-          <div className="divide-y divide-gray-200">
-            {members.map((member) => (
-              <div key={member.id} className="px-6 py-4 flex items-center justify-between">
-                <div className="flex items-center space-x-4">
-                  <div className="flex-shrink-0">
-                    <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center">
-                      <Users className="h-5 w-5 text-gray-500" />
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex items-center space-x-2">
-                      <h3 className="text-sm font-medium text-gray-900">{member.name}</h3>
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getRoleBadgeColor(member.role)}`}>
-                        {getRoleIcon(member.role)}
-                        <span className="ml-1 capitalize">{member.role}</span>
-                      </span>
-                    </div>
-                    <p className="text-sm text-gray-500">{member.email}</p>
-                    <p className="text-xs text-gray-400">
-                      Joined {new Date(member.created_at).toLocaleDateString()}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-2">
-                  {member.role !== 'owner' && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleRemoveMember(member)}
-                      className="text-red-600 hover:text-red-700"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
+          {/* Message Display */}
+          {message && (
+            <div className={`mb-6 p-4 rounded-xl border-2 ${
+              message.type === 'success' 
+                ? 'bg-gradient-to-r from-green-50 to-emerald-50 text-green-800 border-green-200' 
+                : 'bg-gradient-to-r from-red-50 to-rose-50 text-red-800 border-red-200'
+            }`}>
+              <div className="flex items-center">
+                {message.type === 'success' ? (
+                  <CheckCircle className="h-5 w-5 text-green-600 mr-2" />
+                ) : (
+                  <XCircle className="h-5 w-5 text-red-600 mr-2" />
+                )}
+                <p className="font-medium">{message.text}</p>
               </div>
-            ))}
-          </div>
-        </div>
+            </div>
+          )}
 
-        {/* Role Permissions Info */}
-        <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-6">
-          <h3 className="text-lg font-semibold text-blue-900 mb-4">Role Permissions</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white rounded-lg p-4">
-              <div className="flex items-center space-x-2 mb-2">
-                <Shield className="h-5 w-5 text-purple-600" />
-                <span className="font-medium text-gray-900">Owner</span>
-              </div>
-              <p className="text-sm text-gray-600">Full access to all features, billing, and team management</p>
+          {/* Header with Invite Button and Search */}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900">Team Members</h2>
+              <p className="text-sm text-gray-600">{members.length} member{members.length !== 1 ? 's' : ''}</p>
             </div>
-            <div className="bg-white rounded-lg p-4">
-              <div className="flex items-center space-x-2 mb-2">
-                <Shield className="h-5 w-5 text-red-600" />
-                <span className="font-medium text-gray-900">Admin</span>
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              <div className="relative flex-1 sm:flex-initial sm:w-64">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  type="text"
+                  placeholder="Search members..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 border-2"
+                />
               </div>
-              <p className="text-sm text-gray-600">Manage products, data sources, and team members</p>
-            </div>
-            <div className="bg-white rounded-lg p-4">
-              <div className="flex items-center space-x-2 mb-2">
-                <Edit className="h-5 w-5 text-blue-600" />
-                <span className="font-medium text-gray-900">Editor</span>
-              </div>
-              <p className="text-sm text-gray-600">Create and edit products and data sources</p>
-            </div>
-            <div className="bg-white rounded-lg p-4">
-              <div className="flex items-center space-x-2 mb-2">
-                <Users className="h-5 w-5 text-gray-600" />
-                <span className="font-medium text-gray-900">Viewer</span>
-              </div>
-              <p className="text-sm text-gray-600">View products, data sources, and analytics</p>
+              <Button 
+                onClick={() => setShowInviteModal(true)}
+                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg whitespace-nowrap"
+              >
+                <UserPlus className="h-4 w-4 mr-2" />
+                Invite Member
+              </Button>
             </div>
           </div>
-        </div>
 
-        {/* Invite Modal */}
-        {showInviteModal && (
-          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 w-full max-w-md">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Invite Team Member</h3>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
-                  <input
-                    type="email"
-                    value={inviteEmail}
-                    onChange={(e) => setInviteEmail(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="colleague@company.com"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-                  <select
-                    value={inviteRole}
-                    onChange={(e) => setInviteRole(e.target.value as 'admin' | 'editor' | 'viewer')}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          {/* Team Members List */}
+          <div className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden">
+            {filteredMembers.length === 0 ? (
+              <div className="p-12 text-center">
+                <Users className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-600 font-medium">
+                  {searchQuery ? 'No members found matching your search' : 'No team members yet'}
+                </p>
+                {!searchQuery && (
+                  <Button
+                    onClick={() => setShowInviteModal(true)}
+                    className="mt-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
                   >
-                    <option value="viewer">Viewer</option>
-                    <option value="editor">Editor</option>
-                    <option value="admin">Admin</option>
-                  </select>
-                </div>
+                    <UserPlus className="h-4 w-4 mr-2" />
+                    Invite Your First Member
+                  </Button>
+                )}
               </div>
-              <div className="flex justify-end space-x-3 mt-6">
-                <Button variant="outline" onClick={() => setShowInviteModal(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={handleInviteMember}>
-                  Send Invite
-                </Button>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {filteredMembers.map((member) => (
+                  <div key={member.id} className="px-6 py-4 hover:bg-blue-50/30 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-4 flex-1">
+                        <div className="flex-shrink-0">
+                          <div className="h-12 w-12 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center ring-2 ring-gray-200">
+                            <span className="text-white font-semibold text-lg">
+                              {member.name.charAt(0).toUpperCase()}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center space-x-3 mb-1">
+                            <h3 className="text-base font-semibold text-gray-900">{member.name}</h3>
+                            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${getRoleBadgeColor(member.role)}`}>
+                              {getRoleIcon(member.role)}
+                              <span className="ml-1 capitalize">{member.role}</span>
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-600 truncate">{member.email}</p>
+                          <p className="text-xs text-gray-400 mt-1">
+                            Joined {new Date(member.created_at).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        {member.role !== 'owner' && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleRemoveMember(member)}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Role Permissions Info */}
+          <div className="mt-8 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl p-6">
+            <h3 className="text-lg font-semibold text-blue-900 mb-4">Role Permissions</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-200">
+                <div className="flex items-center space-x-2 mb-2">
+                  <div className="bg-gradient-to-br from-purple-500 to-pink-600 rounded-lg p-2">
+                    <Shield className="h-5 w-5 text-white" />
+                  </div>
+                  <span className="font-semibold text-gray-900">Owner</span>
+                </div>
+                <p className="text-sm text-gray-600">Full access to all features, billing, and team management</p>
+              </div>
+              <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-200">
+                <div className="flex items-center space-x-2 mb-2">
+                  <div className="bg-gradient-to-br from-red-500 to-rose-600 rounded-lg p-2">
+                    <Shield className="h-5 w-5 text-white" />
+                  </div>
+                  <span className="font-semibold text-gray-900">Admin</span>
+                </div>
+                <p className="text-sm text-gray-600">Manage products, data sources, and team members</p>
+              </div>
+              <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-200">
+                <div className="flex items-center space-x-2 mb-2">
+                  <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg p-2">
+                    <Edit className="h-5 w-5 text-white" />
+                  </div>
+                  <span className="font-semibold text-gray-900">Editor</span>
+                </div>
+                <p className="text-sm text-gray-600">Create and edit products and data sources</p>
+              </div>
+              <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-200">
+                <div className="flex items-center space-x-2 mb-2">
+                  <div className="bg-gradient-to-br from-gray-500 to-slate-600 rounded-lg p-2">
+                    <Users className="h-5 w-5 text-white" />
+                  </div>
+                  <span className="font-semibold text-gray-900">Viewer</span>
+                </div>
+                <p className="text-sm text-gray-600">View products, data sources, and analytics</p>
               </div>
             </div>
           </div>
-        )}
 
-        {/* Delete Confirmation Modal */}
-        {showDeleteModal && memberToDelete && (
-          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 w-full max-w-md">
-              <div className="flex items-center space-x-3 mb-4">
-                <div className="flex-shrink-0">
-                  <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center">
-                    <Trash2 className="h-5 w-5 text-red-600" />
-                  </div>
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900">Remove Team Member</h3>
-                  <p className="text-sm text-gray-600">This action cannot be undone</p>
-                </div>
+          {/* Invite Modal */}
+          <Modal
+            isOpen={showInviteModal}
+            onClose={() => {
+              setShowInviteModal(false)
+              setInviteEmail('')
+              setInviteRole('viewer')
+            }}
+            title="Invite Team Member"
+            size="md"
+          >
+            <div className="space-y-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
+                <Input
+                  type="email"
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  placeholder="colleague@company.com"
+                  className="border-2"
+                />
               </div>
-              
-              <div className="bg-gray-50 rounded-lg p-4 mb-6">
-                <div className="flex items-center space-x-3">
-                  <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center">
-                    <Users className="h-4 w-4 text-gray-500" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">{memberToDelete.name}</p>
-                    <p className="text-xs text-gray-500">{memberToDelete.email}</p>
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getRoleBadgeColor(memberToDelete.role)}`}>
-                      {getRoleIcon(memberToDelete.role)}
-                      <span className="ml-1 capitalize">{memberToDelete.role}</span>
-                    </span>
-                  </div>
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
+                <select
+                  value={inviteRole}
+                  onChange={(e) => setInviteRole(e.target.value as 'admin' | 'editor' | 'viewer')}
+                  className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white"
+                >
+                  <option value="viewer">Viewer - View only access</option>
+                  <option value="editor">Editor - Create and edit access</option>
+                  <option value="admin">Admin - Full management access</option>
+                </select>
               </div>
-
-              <p className="text-sm text-gray-600 mb-6">
-                Are you sure you want to remove <strong>{memberToDelete.name}</strong> from the team? 
-                They will lose access to this workspace and all its data.
-              </p>
-
-              <div className="flex justify-end space-x-3">
-                <Button variant="outline" onClick={cancelRemoveMember}>
+              <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setShowInviteModal(false)
+                    setInviteEmail('')
+                    setInviteRole('viewer')
+                  }}
+                  className="border-2 hover:border-gray-300 hover:bg-gray-50"
+                >
                   Cancel
                 </Button>
                 <Button 
-                  onClick={confirmRemoveMember}
-                  className="bg-red-600 hover:bg-red-700 text-white"
+                  onClick={handleInviteMember}
+                  disabled={inviting || !inviteEmail}
+                  className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg"
                 >
-                  Remove Member
+                  {inviting ? 'Sending...' : 'Send Invite'}
                 </Button>
               </div>
             </div>
-          </div>
-        )}
+          </Modal>
+
+          {/* Delete Confirmation Modal */}
+          <ConfirmModal
+            isOpen={showDeleteModal}
+            onClose={cancelRemoveMember}
+            onConfirm={confirmRemoveMember}
+            title="Remove Team Member"
+            message={
+              memberToDelete
+                ? `Are you sure you want to remove ${memberToDelete.name} from the team? They will lose access to this workspace and all its data.`
+                : ''
+            }
+            confirmText={removing ? 'Removing...' : 'Remove Member'}
+            cancelText="Cancel"
+            variant="danger"
+          />
+        </div>
       </div>
     </AppLayout>
   )

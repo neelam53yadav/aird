@@ -12,6 +12,8 @@ eggs/
 .eggs/
 lib/
 lib64/
+# Exception: ui/lib/ contains TypeScript source files needed for frontend build
+!ui/lib/
 parts/
 sdist/
 var/
@@ -27,6 +29,7 @@ venv/
 ENV/
 env/
 .env
+pyvenv.cfg
 
 # IDE
 .vscode/
@@ -34,6 +37,9 @@ env/
 *.swp
 *.swo
 *~
+
+# Editor config
+.editorconfig
 
 # OS
 .DS_Store

@@ -6,14 +6,20 @@ Ports AIRD scoring logic with support for primary scorer (scoring_utils) and fal
 
 import json
 import math
-import regex as re
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict, List, Optional
+
+import regex as re
 from loguru import logger
+
+# Import AI-Ready metric services
+from primedata.services.chunk_coherence import calculate_chunk_coherence
+from primedata.services.noise_detection import calculate_noise_ratio
 
 # Try to import primary scorer
 try:
-    from primedata.services.scoring_utils import score_file_data, load_weights
+    from primedata.services.scoring_utils import load_weights, score_file_data
+
     _PRIMARY_SCORER = True
     logger.info("Primary scorer (scoring_utils) available")
 except ImportError:
@@ -184,68 +190,173 @@ def get_scoring_weights(config_path: Optional[str] = None) -> Dict[str, float]:
                 return load_weights(config_path)
             # Try default path
             from primedata.ingestion_pipeline.aird_stages.config import get_aird_config
+
             config = get_aird_config()
             if config.scoring_weights_path:
                 return load_weights(config.scoring_weights_path)
         except Exception as e:
             logger.warning(f"Failed to load weights from config: {e}, using fallback")
-    
+
     return _fallback_weights()
 
 
 def score_record(record: Dict[str, Any], weights: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
     """
     Score a single record (chunk).
-    
+
     Args:
         record: Chunk record with text, metadata, etc.
         weights: Optional scoring weights (uses defaults if not provided)
-        
+
     Returns:
         Dict with all 13 metrics + AI_Trust_Score (0-100 scale)
     """
     if weights is None:
         weights = get_scoring_weights()
-    
+
     if _PRIMARY_SCORER and score_file_data:
         try:
             return score_file_data(record, weights)
         except Exception as e:
             logger.warning(f"Primary scorer failed: {e}, falling back to heuristic scorer")
-    
+
     return _fallback_score_record(record, weights)
 
 
 def aggregate_metrics(metrics: List[Dict[str, Any]]) -> Dict[str, float]:
     """
     Aggregate metrics across multiple chunks by averaging.
-    
+
     Args:
         metrics: List of metric dictionaries (one per chunk)
-        
+
     Returns:
         Aggregated metrics dictionary (Readiness Fingerprint)
     """
     if not metrics:
         return {}
-    
+
     sums: Dict[str, float] = {}
     counts: Dict[str, int] = {}
-    
+
     for m in metrics:
         for k, v in m.items():
             if isinstance(v, (int, float)) and k != "file":  # Exclude non-numeric and file tag
                 sums[k] = sums.get(k, 0.0) + float(v)
                 counts[k] = counts.get(k, 0) + 1
-    
+
     agg: Dict[str, float] = {}
     for k, total in sums.items():
         c = counts.get(k, 0)
         if c > 0:
             agg[k] = round(total / c, 4)
-    
+
     return agg
 
 
+def score_record_with_ai_ready_metrics(
+    record: Dict[str, Any],
+    weights: Optional[Dict[str, float]] = None,
+    playbook: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """
+    Score a record with AI-Ready metrics included.
+    
+    This extends the existing score_record function with:
+    - Chunk Coherence Score
+    - Noise Ratio (converted to Noise_Free_Score)
+    - Chunk Boundary Quality (calculated at aggregate level)
+    - Duplicate Rate (calculated separately at aggregate level)
+    
+    Args:
+        record: Chunk record with text, metadata, etc.
+        weights: Optional scoring weights (uses defaults if not provided)
+        playbook: Optional playbook configuration for noise patterns and coherence settings
+        
+    Returns:
+        Dict with all metrics including AI-Ready metrics (0-100 scale)
+    """
+    # Get base metrics from existing scorer
+    base_metrics = score_record(record, weights)
+    
+    # Extract chunk text and domain_type
+    chunk_text = (record.get("text") or "").strip()
+    domain_type = record.get("domain_type") or record.get("metadata", {}).get("domain_type")
+    
+    # 1. Calculate Chunk Coherence with domain-adaptive thresholds
+    coherence_config = playbook.get("coherence", {}) if playbook else {}
+    
+    # Get domain-specific threshold if available, otherwise use default
+    domain_thresholds = coherence_config.get("domain_min_thresholds", {})
+    default_threshold = coherence_config.get("min_coherence_threshold", 0.6)
+    
+    if domain_type and domain_type.lower() in domain_thresholds:
+        min_coherence_threshold = domain_thresholds[domain_type.lower()]
+    elif domain_type and domain_type.lower() in ["regulatory", "finance_banking"]:
+        # Regulatory/finance content may have lower coherence due to cross-references
+        min_coherence_threshold = coherence_config.get("regulatory_min_threshold", 0.5)
+    else:
+        min_coherence_threshold = default_threshold
+    
+    coherence_result = calculate_chunk_coherence(
+        chunk_text=chunk_text,
+        method=coherence_config.get("method", "embedding_similarity"),
+        sentence_window=coherence_config.get("sentence_window", 3),
+        min_coherence_threshold=min_coherence_threshold
+    )
+    base_metrics["Chunk_Coherence"] = coherence_result["coherence_score"]
+    
+    # 2. Calculate Noise Ratio (inverted to score: lower noise = higher score)
+    noise_patterns = playbook.get("noise_patterns") if playbook else None
+    noise_result = calculate_noise_ratio(chunk_text, noise_patterns)
+    # Convert noise ratio to score (0-100, where 0% noise = 100 score)
+    noise_score = max(0.0, 100.0 - noise_result["noise_ratio"])
+    base_metrics["Noise_Free_Score"] = round(noise_score, 2)
+    
+    # 3. Chunk Boundary Quality (from existing preprocessing stats)
+    # This is calculated at aggregate level, but we can add a per-chunk indicator
+    # For now, we'll calculate it at aggregate level in the scoring stage
+    
+    return base_metrics
 
 
+def aggregate_metrics_with_ai_ready(
+    metrics: List[Dict[str, Any]],
+    preprocessing_stats: Optional[Dict[str, Any]] = None
+) -> Dict[str, float]:
+    """
+    Aggregate metrics including AI-Ready metrics.
+    
+    Args:
+        metrics: List of metric dictionaries (one per chunk)
+        preprocessing_stats: Preprocessing statistics including mid_sentence_boundary_rate
+        
+    Returns:
+        Aggregated metrics dictionary with AI-Ready metrics included
+    """
+    # Get base aggregated metrics
+    agg = aggregate_metrics(metrics)
+    
+    # Add AI-Ready aggregate metrics
+    
+    # 1. Average Chunk Coherence
+    coherence_scores = [m.get("Chunk_Coherence", 0) for m in metrics if "Chunk_Coherence" in m]
+    if coherence_scores:
+        agg["Avg_Chunk_Coherence"] = round(sum(coherence_scores) / len(coherence_scores), 2)
+    
+    # 2. Average Noise-Free Score
+    noise_scores = [m.get("Noise_Free_Score", 100) for m in metrics if "Noise_Free_Score" in m]
+    if noise_scores:
+        agg["Avg_Noise_Free_Score"] = round(sum(noise_scores) / len(noise_scores), 2)
+    
+    # 3. Chunk Boundary Quality (from preprocessing stats)
+    if preprocessing_stats:
+        mid_sentence_rate = preprocessing_stats.get("mid_sentence_boundary_rate", 0.0)
+        # Convert to score: 0% mid-sentence breaks = 100 score
+        boundary_quality = max(0.0, 100.0 - (mid_sentence_rate * 100))
+        agg["Chunk_Boundary_Quality"] = round(boundary_quality, 2)
+    
+    # 4. Duplicate Rate (calculated separately, but included here for completeness)
+    # This would be calculated during preprocessing/fingerprint stage
+    
+    return agg

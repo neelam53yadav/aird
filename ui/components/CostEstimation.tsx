@@ -119,8 +119,8 @@ export function CostEstimation({ showTitle = true }: CostEstimationProps) {
             Preprocessing Playbook (Optional)
           </label>
           <PlaybookSelector
-            selectedPlaybook={playbookId}
-            onSelectPlaybook={setPlaybookId}
+            value={playbookId}
+            onChange={setPlaybookId}
           />
           <p className="mt-1 text-sm text-gray-500">
             Select a playbook to use for cost estimation, or leave blank for auto-detection.
@@ -197,7 +197,7 @@ export function CostEstimation({ showTitle = true }: CostEstimationProps) {
                         <div key={key}>
                           <dt className="text-xs text-gray-500">{key}</dt>
                           <dd className="text-sm font-medium text-gray-900">
-                            {formatCurrency(value)}
+                            {formatCurrency(typeof value === 'number' ? value : 0)}
                           </dd>
                         </div>
                       ))}

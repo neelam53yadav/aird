@@ -6,27 +6,28 @@ Provides CRUD operations for Access Control Lists.
 
 from typing import List, Optional
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, status, Request
-from pydantic import BaseModel
-from sqlalchemy.orm import Session
-from loguru import logger
 
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from loguru import logger
+from primedata.core.scope import allowed_workspaces, ensure_product_access
 from primedata.core.security import get_current_user
-from primedata.core.scope import ensure_product_access
 from primedata.db.database import get_db
 from primedata.db.models import ACL, ACLAccessType
+from primedata.services.acl import create_acl as create_acl_service
+from primedata.services.acl import delete_acls as delete_acls_service
 from primedata.services.acl import (
-    create_acl as create_acl_service,
-    get_acls_for_user,
     get_acls_for_product,
-    delete_acls as delete_acls_service,
+    get_acls_for_user,
 )
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/api/v1/acl", tags=["access control"])
 
 
 class ACLCreateRequest(BaseModel):
     """Request model for creating an ACL entry."""
+
     user_id: UUID
     product_id: UUID
     access_type: ACLAccessType
@@ -37,6 +38,7 @@ class ACLCreateRequest(BaseModel):
 
 class ACLResponse(BaseModel):
     """Response model for ACL entry."""
+
     id: UUID
     user_id: UUID
     product_id: UUID
@@ -59,17 +61,14 @@ async def create_acl(
 ):
     """
     Create an ACL entry.
-    
+
     Requires access to the product being ACL'd.
     """
     # Ensure user has access to the product
     product = ensure_product_access(db, request, entry.product_id)
     if not product:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Product not found or access denied"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found or access denied")
+
     # Create ACL
     acl = create_acl_service(
         db=db,
@@ -80,9 +79,9 @@ async def create_acl(
         doc_scope=entry.doc_scope,
         field_scope=entry.field_scope,
     )
-    
+
     logger.info(f"Created ACL: id={acl.id}, user={entry.user_id}, product={entry.product_id}")
-    
+
     return ACLResponse(
         id=acl.id,
         user_id=acl.user_id,
@@ -97,35 +96,38 @@ async def create_acl(
 
 @router.get("/", response_model=List[ACLResponse])
 async def list_acls(
+    request: Request,
     user_id: Optional[UUID] = None,
     product_id: Optional[UUID] = None,
-    request: Request = None,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     """
     List ACL entries, optionally filtered by user_id or product_id.
-    
+
     If product_id is provided, ensures user has access to that product.
     """
     # If product_id is provided, ensure access
     if product_id:
         product = ensure_product_access(db, request, product_id)
         if not product:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Product not found or access denied"
-            )
-    
-    # Get ACLs
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found or access denied")
+
+    # Get ACLs with workspace filtering for security
     if user_id:
         acls = get_acls_for_user(db, user_id, product_id)
     elif product_id:
         acls = get_acls_for_product(db, product_id, None)
     else:
-        # List all ACLs (admin only - in practice, you might want to restrict this)
-        acls = db.query(ACL).all()
-    
+        # List ACLs only for products in user's accessible workspaces
+        # This prevents users from seeing ACLs for products they don't have access to
+        from primedata.db.models import Product
+
+        allowed_workspace_ids = allowed_workspaces(request, db)
+        # Get product IDs from accessible workspaces
+        accessible_products = db.query(Product.id).filter(Product.workspace_id.in_(allowed_workspace_ids)).subquery()
+        acls = db.query(ACL).filter(ACL.product_id.in_(accessible_products)).all()
+
     return [
         ACLResponse(
             id=acl.id,
@@ -143,32 +145,25 @@ async def list_acls(
 
 @router.delete("/", status_code=status.HTTP_200_OK)
 async def delete_acls(
+    request: Request,
     acl_id: Optional[UUID] = None,
     user_id: Optional[UUID] = None,
     product_id: Optional[UUID] = None,
-    request: Request = None,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     """
     Delete ACL entries matching the given criteria.
-    
+
     If product_id is provided, ensures user has access to that product.
     """
     # If product_id is provided, ensure access
     if product_id:
         product = ensure_product_access(db, request, product_id)
         if not product:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Product not found or access denied"
-            )
-    
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found or access denied")
+
     # Delete ACLs
     count = delete_acls_service(db, acl_id, user_id, product_id)
-    
+
     return {"deleted": count}
-
-
-
-

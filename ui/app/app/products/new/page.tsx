@@ -3,8 +3,9 @@
 import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
+import { useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
-import { ArrowLeft, Package } from 'lucide-react'
+import { ArrowLeft, Package, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -16,6 +17,7 @@ import { useToast } from '@/components/ui/toast'
 export default function NewProductPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
+  const queryClient = useQueryClient()
   const { addToast } = useToast()
   const [name, setName] = useState('')
   const [playbookId, setPlaybookId] = useState<string | undefined>(undefined)
@@ -47,25 +49,7 @@ export default function NewProductPage() {
           return
         }
         
-        // If no workspaces from API, try to get from existing products
-        const productsResponse = await apiClient.getProducts()
-        if (productsResponse.data && productsResponse.data.length > 0) {
-          // Use the workspace from the first product as default
-          setWorkspaceId(productsResponse.data[0].workspace_id)
-          setLoadingWorkspace(false)
-          return
-        }
-        
-        // If still no workspace, try to create one (for production mode)
-        const DISABLE_AUTH = process.env.NEXT_PUBLIC_DISABLE_AUTH === 'true' || process.env.NODE_ENV === 'development'
-        if (DISABLE_AUTH) {
-          // Dev mode: use hardcoded workspace ID (backend will auto-create)
-          setWorkspaceId('550e8400-e29b-41d4-a716-446655440001')
-          setLoadingWorkspace(false)
-          return
-        }
-        
-        // Production mode: create workspace if it doesn't exist
+        // If no workspaces, create a new one
         try {
           const createResponse = await apiClient.createWorkspace()
           if (createResponse.data && createResponse.data.id) {
@@ -82,12 +66,8 @@ export default function NewProductPage() {
         setError('No workspace found. Please contact support.')
         setLoadingWorkspace(false)
       } catch (err) {
-        console.error('Failed to get workspace:', err)
-        // Don't show error - try to proceed with default workspace
-        const DISABLE_AUTH = process.env.NEXT_PUBLIC_DISABLE_AUTH === 'true' || process.env.NODE_ENV === 'development'
-        if (DISABLE_AUTH) {
-          setWorkspaceId('550e8400-e29b-41d4-a716-446655440001')
-        }
+        console.error('Error fetching workspace:', err)
+        setError('Failed to load workspace. Please refresh the page.')
         setLoadingWorkspace(false)
       }
     }
@@ -138,9 +118,9 @@ export default function NewProductPage() {
       const chunkingConfig = chunkingMode === 'manual' ? {
         mode: 'manual',
         manual_settings: {
-          chunking_strategy: chunkingStrategy,
-          chunk_size: chunkSize,
-          chunk_overlap: chunkOverlap,
+          chunking_strategy: chunkingStrategy, // Preserve: 'semantic', 'fixed_size', or 'sentence'
+          chunk_size: typeof chunkSize === 'number' ? chunkSize : parseInt(String(chunkSize || 1000), 10),
+          chunk_overlap: typeof chunkOverlap === 'number' ? chunkOverlap : parseInt(String(chunkOverlap || 200), 10),
           min_chunk_size: 100,
           max_chunk_size: 2000
         }
@@ -152,6 +132,8 @@ export default function NewProductPage() {
           confidence_threshold: 0.7
         }
       }
+      
+      console.log('Creating product with chunking config:', chunkingConfig)
       
       const response = await apiClient.createProductWithPlaybook(
         workspaceId,
@@ -167,6 +149,11 @@ export default function NewProductPage() {
           message: `Failed to create product: ${response.error}`,
         })
       } else {
+        // Invalidate products cache to refresh the list
+        queryClient.invalidateQueries({ queryKey: ['products'] })
+        // Also emit event for immediate update (if products page is open)
+        window.dispatchEvent(new CustomEvent('productCreated'))
+        
         addToast({
           type: 'success',
           message: `Product "${name.trim()}" created successfully${playbookId ? ` with playbook ${playbookId}` : ''}`,
@@ -176,7 +163,12 @@ export default function NewProductPage() {
         router.push(`/app/products/${product?.id}`)
       }
     } catch (err) {
-      setError('Failed to create product')
+      const errorMessage = err instanceof Error ? err.message : 'Failed to create product'
+      setError(errorMessage)
+      addToast({
+        type: 'error',
+        message: `Failed to create product: ${errorMessage}`,
+      })
     } finally {
       setLoading(false)
     }
@@ -202,34 +194,34 @@ export default function NewProductPage() {
 
   return (
     <AppLayout>
-      <div className="p-6">
-        {/* Breadcrumb Navigation */}
+      <div className="p-6 bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-50/30 min-h-screen">
+        {/* Enhanced Breadcrumb Navigation */}
         <div className="flex items-center mb-6">
-          <Link href="/app/products" className="flex items-center text-sm text-gray-500 hover:text-gray-700 transition-colors">
+          <Link href="/app/products" className="flex items-center text-sm text-gray-500 hover:text-gray-700 transition-colors font-medium">
             <ArrowLeft className="h-4 w-4 mr-1" />
             Products
           </Link>
           <span className="mx-2 text-gray-400">/</span>
-          <span className="text-sm font-medium text-gray-900">Create New</span>
+          <span className="text-sm font-semibold text-gray-900">Create New</span>
         </div>
 
-        {/* Page Header */}
+        {/* Enhanced Page Header */}
         <div className="mb-8">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Create New Product</h1>
-            <p className="text-gray-600 mt-1">Set up a new data product in your workspace</p>
+            <h1 className="text-4xl font-bold text-gray-900 mb-2 tracking-tight">Create New Product</h1>
+            <p className="text-lg text-gray-600">Set up a new data product in your workspace</p>
           </div>
         </div>
 
-        {/* Content */}
+        {/* Enhanced Content */}
         <div className="max-w-2xl">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
-          <div className="flex items-center mb-6">
-            <div className="bg-blue-100 rounded-lg p-3 mr-4">
-              <Package className="h-6 w-6 text-blue-600" />
+        <div className="bg-white rounded-xl shadow-md border border-gray-100 p-8">
+          <div className="flex items-center mb-8">
+            <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl p-3 mr-4 shadow-sm">
+              <Package className="h-6 w-6 text-white" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">Product Details</h2>
+              <h2 className="text-xl font-semibold text-gray-900">Product Details</h2>
               <p className="text-sm text-gray-600">Give your product a name to get started</p>
             </div>
           </div>
@@ -370,13 +362,28 @@ export default function NewProductPage() {
                       <Label htmlFor="chunk-size">Chunk Size (tokens)</Label>
                       <Input
                         id="chunk-size"
-                        type="number"
-                        value={chunkSize}
-                        onChange={(e) => setChunkSize(parseInt(e.target.value) || 1000)}
-                        min={100}
-                        max={3000}
+                        type="text"
+                        inputMode="numeric"
+                        value={chunkSize || ''}
+                        onChange={(e) => {
+                          const cleaned = e.target.value.replace(/[^0-9]/g, '')
+                          if (cleaned === '') {
+                            setChunkSize('' as any)
+                          } else {
+                            const numValue = parseInt(cleaned, 10)
+                            if (!isNaN(numValue) && numValue >= 0) {
+                              setChunkSize(numValue)
+                            }
+                          }
+                        }}
+                        onBlur={(e) => {
+                          if (e.target.value === '' || parseInt(e.target.value) < 100) {
+                            setChunkSize(1000)
+                          }
+                        }}
                         className="mt-1"
                         disabled={loading}
+                        placeholder="1000"
                       />
                       <p className="mt-1 text-sm text-gray-500">
                         Recommended: 800-1200 for most documents
@@ -387,9 +394,25 @@ export default function NewProductPage() {
                       <Label htmlFor="chunk-overlap">Overlap (tokens)</Label>
                       <Input
                         id="chunk-overlap"
-                        type="number"
-                        value={chunkOverlap}
-                        onChange={(e) => setChunkOverlap(parseInt(e.target.value) || 200)}
+                        type="text"
+                        inputMode="numeric"
+                        value={chunkOverlap || ''}
+                        onChange={(e) => {
+                          const cleaned = e.target.value.replace(/[^0-9]/g, '')
+                          if (cleaned === '') {
+                            setChunkOverlap('' as any)
+                          } else {
+                            const numValue = parseInt(cleaned, 10)
+                            if (!isNaN(numValue) && numValue >= 0) {
+                              setChunkOverlap(numValue)
+                            }
+                          }
+                        }}
+                        onBlur={(e) => {
+                          if (e.target.value === '' || parseInt(e.target.value) < 0) {
+                            setChunkOverlap(200)
+                          }
+                        }}
                         min={0}
                         max={500}
                         className="mt-1"
@@ -405,19 +428,30 @@ export default function NewProductPage() {
             </div>
 
             {error && (
-              <div className="bg-red-50 border border-red-200 rounded-md p-4">
-                <p className="text-sm text-red-600">{error}</p>
+              <div className="bg-red-50 border-2 border-red-200 rounded-xl p-4 shadow-sm">
+                <p className="text-sm font-medium text-red-600">{error}</p>
               </div>
             )}
 
-            <div className="flex justify-end space-x-3">
+            <div className="flex justify-end space-x-3 pt-6 border-t border-gray-200">
               <Link href="/app/products">
-                <Button type="button" variant="outline">
+                <Button type="button" variant="outline" className="border-2 hover:border-gray-300 hover:bg-gray-50">
                   Cancel
                 </Button>
               </Link>
-              <Button type="submit" disabled={loading || !name.trim() || !workspaceId}>
-                {loading ? 'Creating...' : 'Create Product'}
+              <Button 
+                type="submit" 
+                disabled={loading || !name.trim() || !workspaceId}
+                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg disabled:opacity-50"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  'Create Product'
+                )}
               </Button>
             </div>
           </form>

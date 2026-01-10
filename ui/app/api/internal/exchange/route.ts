@@ -1,83 +1,79 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getToken } from "next-auth/jwt"
+import { getApiUrl } from "@/lib/config"
 
 export async function POST(request: NextRequest) {
   try {
-    // Get raw NextAuth JWT
-    const token = await getToken({ 
+    // Use same secret as NextAuth config (with fallback for consistency)
+    const secret = process.env.NEXTAUTH_SECRET || "fallback-secret-for-testing"
+    
+    // Get NextAuth JWT token (decoded) to access stored backend token
+    const decodedToken = await getToken({ 
       req: request, 
-      secret: process.env.NEXTAUTH_SECRET,
-      raw: true 
+      secret: secret,
     })
 
-    if (!token) {
+    if (!decodedToken) {
       return NextResponse.json(
         { error: "No authentication token found" },
         { status: 401 }
       )
     }
 
-    // Debug: Log token info (first 100 chars only for security)
-    console.log("=".repeat(60))
-    console.log("🔐 TOKEN EXCHANGE DEBUG INFO")
-    console.log("=".repeat(60))
-    console.log("Token retrieved from NextAuth:")
-    console.log(`  - Token type: ${typeof token}`)
-    console.log(`  - Token length: ${token.length}`)
-    console.log(`  - Token parts: ${token.split('.').length}`)
-    console.log(`  - Token preview: ${token.substring(0, 100)}...`)
-    console.log("")
-    console.log("NEXTAUTH_SECRET (Frontend):")
-    console.log(`  - Length: ${process.env.NEXTAUTH_SECRET?.length || 'NOT SET'} characters`)
-    console.log(`  - First 10 chars: ${process.env.NEXTAUTH_SECRET?.substring(0, 10) || 'NOT SET'}...`)
-    console.log(`  - Last 10 chars: ...${process.env.NEXTAUTH_SECRET?.substring(process.env.NEXTAUTH_SECRET.length - 10) || 'NOT SET'}`)
-    console.log("=".repeat(60))
-    
-    // Decode header to check token type
-    try {
-      const headerPart = token.split('.')[0]
-      const headerJson = Buffer.from(headerPart, 'base64url').toString('utf-8')
-      const header = JSON.parse(headerJson)
-      console.log(`- Token header:`, header)
-      console.log(`- Algorithm: ${header.alg}, Encryption: ${header.enc || 'none'}`)
-      
-      // Log token structure
-      const parts = token.split('.')
-      console.log(`- Part 0 (header) length: ${parts[0]?.length || 0}`)
-      console.log(`- Part 1 (key) length: ${parts[1]?.length || 0} (empty for dir algorithm)`)
-      console.log(`- Part 2 (IV) length: ${parts[2]?.length || 0}`)
-      console.log(`- Part 3 (ciphertext) length: ${parts[3]?.length || 0}`)
-      console.log(`- Part 4 (tag) length: ${parts[4]?.length || 0}`)
-      console.log(`- Total parts: ${parts.length} (should be 5 for JWE)`)
-    } catch (e) {
-      console.warn("Could not decode token header:", e)
+    // ALWAYS get a fresh token from backend, don't use cached token
+    // This ensures we get a token signed with current keys (important when keys change)
+    const cookies = request.cookies
+    const nextAuthToken = cookies.get('next-auth.session-token')?.value || 
+                         cookies.get('__Secure-next-auth.session-token')?.value ||
+                         cookies.get('authjs.session-token')?.value ||
+                         cookies.get('__Secure-authjs.session-token')?.value
+
+    if (!nextAuthToken) {
+      return NextResponse.json(
+        { error: "NextAuth session token not found" },
+        { status: 401 }
+      )
     }
 
-    // Exchange token with backend
-    const apiBase = "http://127.0.0.1:8000"
-    const response = await fetch(`${apiBase}/api/v1/auth/session/exchange`, {
+    // Always call backend to get a fresh token (signed with current keys)
+    const apiUrl = getApiUrl()
+    const exchangeResponse = await fetch(`${apiUrl}/api/v1/auth/session/exchange`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ token: token }),
+      body: JSON.stringify({
+        token: nextAuthToken, // Send NextAuth JWT to backend
+      }),
     })
 
-    if (!response.ok) {
+    if (!exchangeResponse.ok) {
+      const errorData = await exchangeResponse.json().catch(() => ({ detail: "Exchange failed" }))
       return NextResponse.json(
-        { error: "Failed to exchange token" },
-        { status: response.status }
+        { error: errorData.detail || "Backend token exchange failed" },
+        { status: exchangeResponse.status || 500 }
       )
     }
 
-    const data = await response.json()
+    const exchangeData = await exchangeResponse.json()
+    const backendToken = exchangeData.access_token
 
-    // Set httpOnly cookie with access token
-    const nextResponse = NextResponse.json({ ok: true })
-    
+    if (!backendToken) {
+      return NextResponse.json(
+        { error: "Backend access token not found in session" },
+        { status: 401 }
+      )
+    }
+
+    // Set cookie server-side (backup, but may not be readable by JS)
     const isProduction = process.env.NODE_ENV === "production"
-    nextResponse.cookies.set("primedata_api_token", data.access_token, {
-      httpOnly: true,
+    const nextResponse = NextResponse.json({ 
+      ok: true,
+      token: backendToken  // Return token so client can set cookie client-side
+    })
+    
+    nextResponse.cookies.set("primedata_api_token", backendToken, {
+      httpOnly: false, // Allow JS to read for cross-origin requests
       secure: isProduction,
       sameSite: "lax",
       maxAge: 3600, // 1 hour
@@ -86,7 +82,6 @@ export async function POST(request: NextRequest) {
 
     return nextResponse
   } catch (error) {
-    console.error("Token exchange error:", error)
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

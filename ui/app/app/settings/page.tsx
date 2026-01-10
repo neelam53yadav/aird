@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Settings, User, Bell, Shield, Database, Key, Save, Eye, EyeOff } from 'lucide-react'
+import { Settings, User, Bell, Shield, Database, Key, Save, Eye, EyeOff, CheckCircle, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import AppLayout from '@/components/layout/AppLayout'
 import { useSession } from 'next-auth/react'
@@ -32,7 +32,10 @@ export default function SettingsPage() {
     
     // API settings
     apiKey: 'pk_live_1234567890abcdef',
+    openaiApiKey: '',
+    openaiApiKeyConfigured: false,
     webhookUrl: '',
+    workspaceId: '',
     
     // Workspace settings
     workspaceName: 'My Workspace',
@@ -40,8 +43,32 @@ export default function SettingsPage() {
     dateFormat: 'MM/DD/YYYY'
   })
 
-  // Fetch user profile data on component mount
+  // Fetch workspace settings and user profile data on component mount
   useEffect(() => {
+    const loadWorkspaceSettings = async () => {
+      try {
+        // First get workspaces to get the workspace ID
+        const workspacesResponse = await apiClient.getWorkspaces()
+        if (workspacesResponse.data && workspacesResponse.data.length > 0) {
+          const workspaceId = workspacesResponse.data[0].id // Use first workspace
+          setSettings(prev => ({ ...prev, workspaceId, workspaceName: workspacesResponse.data[0].name }))
+          
+          // Load workspace settings
+          const settingsResponse = await apiClient.getWorkspaceSettings(workspaceId)
+          if (settingsResponse.data) {
+            setSettings(prev => ({
+              ...prev,
+              openaiApiKeyConfigured: settingsResponse.data.openai_api_key_configured || false,
+              // Load the masked key to display in the input field
+              openaiApiKey: settingsResponse.data.openai_api_key || '',
+            }))
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load workspace settings:', error)
+      }
+    }
+
     const fetchUserProfile = async () => {
       try {
         setLoading(true)
@@ -81,7 +108,11 @@ export default function SettingsPage() {
     }
 
     if (session) {
-      fetchUserProfile()
+      // Load both workspace settings and user profile
+      Promise.all([loadWorkspaceSettings(), fetchUserProfile()]).catch((error) => {
+        console.error('Failed to load settings:', error)
+        setLoading(false)
+      })
     } else {
       setLoading(false)
     }
@@ -94,7 +125,7 @@ export default function SettingsPage() {
       
       if (section === 'profile') {
         // Save profile changes to database
-        const response = await apiClient.put('/api/v1/user/profile', {
+        const response = await apiClient.updateUserProfile({
           first_name: settings.firstName,
           last_name: settings.lastName,
           timezone: settings.timezone
@@ -103,6 +134,38 @@ export default function SettingsPage() {
         // If we get here, the API call was successful
         setSaveMessage({type: 'success', text: 'Profile updated successfully!'})
         // Clear message after 3 seconds
+        setTimeout(() => setSaveMessage(null), 3000)
+      } else if (section === 'api' && settings.workspaceId) {
+        // Save API settings (OpenAI key) to workspace settings
+        // Only send the key if it's been changed (not the masked value)
+        const apiKeyToSave = settings.openaiApiKey?.trim() || ''
+        const isMaskedKey = apiKeyToSave.startsWith('sk-...') || apiKeyToSave.startsWith('sk-****')
+        
+        // Build request body
+        // If the key is a masked placeholder or empty, don't send it to preserve the existing key
+        // Only send if it's a new/updated key (starts with sk- but not sk-...)
+        let requestBody: { openai_api_key?: string } = {}
+        if (apiKeyToSave && !isMaskedKey) {
+          // New or updated key - send it
+          requestBody.openai_api_key = apiKeyToSave
+        }
+        // Otherwise, don't include openai_api_key in request (preserves existing key)
+        // This prevents accidentally clearing the key when the input shows the masked value
+        
+        const response = await apiClient.updateWorkspaceSettings(settings.workspaceId, requestBody)
+        
+        if (response.error) {
+          setSaveMessage({type: 'error', text: response.error || 'Failed to save API settings'})
+        } else {
+          setSaveMessage({type: 'success', text: 'API settings saved successfully!'})
+          // Update configured status and masked key
+          setSettings(prev => ({ 
+            ...prev, 
+            openaiApiKeyConfigured: response.data?.openai_api_key_configured || false,
+            // Reload the masked key after saving
+            openaiApiKey: response.data?.openai_api_key || ''
+          }))
+        }
         setTimeout(() => setSaveMessage(null), 3000)
       } else {
         // For other sections, use existing mock behavior
@@ -130,8 +193,30 @@ export default function SettingsPage() {
   if (loading) {
     return (
       <AppLayout>
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <div className="p-6 bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-50/30 min-h-screen">
+          <div className="max-w-7xl mx-auto">
+            <div className="mb-8">
+              <div className="h-10 bg-gray-200 rounded-xl w-1/3 mb-2 animate-pulse"></div>
+              <div className="h-6 bg-gray-200 rounded w-1/2 animate-pulse"></div>
+            </div>
+            <div className="flex gap-8">
+              <div className="w-64 space-y-2">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="h-10 bg-gray-200 rounded-lg animate-pulse"></div>
+                ))}
+              </div>
+              <div className="flex-1">
+                <div className="bg-white rounded-xl shadow-md p-6 space-y-6">
+                  {[...Array(4)].map((_, i) => (
+                    <div key={i} className="space-y-2">
+                      <div className="h-4 bg-gray-200 rounded w-32 animate-pulse"></div>
+                      <div className="h-10 bg-gray-200 rounded-md animate-pulse"></div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </AppLayout>
     )
@@ -139,73 +224,76 @@ export default function SettingsPage() {
 
   return (
     <AppLayout>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Settings</h1>
-          <p className="text-gray-600 mt-2">Configure your account and system preferences</p>
-        </div>
-
-        <div className="flex flex-col lg:flex-row gap-8">
-          {/* Sidebar Navigation */}
-          <div className="lg:w-64">
-            <nav className="space-y-1">
-              {tabs.map((tab) => {
-                const Icon = tab.icon
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md ${
-                      activeTab === tab.id
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                    }`}
-                  >
-                    <Icon className="h-4 w-4 mr-3" />
-                    {tab.name}
-                  </button>
-                )
-              })}
-            </nav>
+      <div className="p-6 bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-50/30 min-h-screen">
+        <div className="max-w-7xl mx-auto">
+          <div className="mb-8">
+            <h1 className="text-4xl font-bold text-gray-900 mb-2 tracking-tight">Settings</h1>
+            <p className="text-lg text-gray-600">Configure your account and system preferences</p>
           </div>
+
+          <div className="flex flex-col lg:flex-row gap-8">
+            {/* Enhanced Sidebar Navigation */}
+            <div className="lg:w-64">
+              <nav className="space-y-2 bg-white rounded-xl shadow-md border border-gray-200 p-2">
+                {tabs.map((tab) => {
+                  const Icon = tab.icon
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id)}
+                      className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-all duration-200 ${
+                        activeTab === tab.id
+                          ? 'bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 border-l-4 border-blue-600 shadow-sm'
+                          : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                      }`}
+                    >
+                      <Icon className={`h-5 w-5 mr-3 ${
+                        activeTab === tab.id ? 'text-blue-600' : 'text-gray-400'
+                      }`} />
+                      {tab.name}
+                    </button>
+                  )
+                })}
+              </nav>
+            </div>
 
           {/* Main Content */}
           <div className="flex-1">
             {/* Profile Settings */}
             {activeTab === 'profile' && (
-              <div className="bg-white shadow rounded-lg">
-                <div className="px-6 py-4 border-b border-gray-200">
+              <div className="bg-white rounded-xl shadow-md border border-gray-200">
+                <div className="px-6 py-4 border-b-2 border-gray-100 bg-gradient-to-r from-gray-50 to-blue-50/30">
                   <h3 className="text-lg font-semibold text-gray-900">Profile Information</h3>
                   <p className="text-sm text-gray-600">Update your personal information</p>
                 </div>
                 <div className="p-6 space-y-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">First Name</label>
                       <input
                         type="text"
                         value={settings.firstName}
                         onChange={(e) => setSettings({...settings, firstName: e.target.value})}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Last Name</label>
                       <input
                         type="text"
                         value={settings.lastName}
                         onChange={(e) => setSettings({...settings, lastName: e.target.value})}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
                       />
                     </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
                     <input
                       type="email"
                       value={settings.email}
                       disabled
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-500 cursor-not-allowed"
+                      className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg bg-gray-50 text-gray-500 cursor-not-allowed"
                     />
                     <p className="text-xs text-gray-500 mt-1">
                       Email address is tied to your login account and cannot be changed here. 
@@ -213,11 +301,11 @@ export default function SettingsPage() {
                     </p>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Timezone</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Timezone</label>
                     <select
                       value={settings.timezone}
                       onChange={(e) => setSettings({...settings, timezone: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white"
                     >
                       <option value="UTC">UTC</option>
                       <option value="America/New_York">Eastern Time</option>
@@ -228,19 +316,27 @@ export default function SettingsPage() {
                   </div>
                   {/* Save Message */}
                   {saveMessage && (
-                    <div className={`p-3 rounded-md ${
+                    <div className={`p-4 rounded-xl border-2 ${
                       saveMessage.type === 'success' 
-                        ? 'bg-green-50 text-green-800 border border-green-200' 
-                        : 'bg-red-50 text-red-800 border border-red-200'
+                        ? 'bg-gradient-to-r from-green-50 to-emerald-50 text-green-800 border-green-200' 
+                        : 'bg-gradient-to-r from-red-50 to-rose-50 text-red-800 border-red-200'
                     }`}>
-                      {saveMessage.text}
+                      <div className="flex items-center">
+                        {saveMessage.type === 'success' ? (
+                          <CheckCircle className="h-5 w-5 text-green-600 mr-2" />
+                        ) : (
+                          <XCircle className="h-5 w-5 text-red-600 mr-2" />
+                        )}
+                        <p className="font-medium">{saveMessage.text}</p>
+                      </div>
                     </div>
                   )}
                   
-                  <div className="flex justify-end">
+                  <div className="flex justify-end pt-4 border-t border-gray-200">
                     <Button 
                       onClick={() => handleSave('profile')}
                       disabled={saving}
+                      className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg"
                     >
                       <Save className="h-4 w-4 mr-2" />
                       {saving ? 'Saving...' : 'Save Changes'}
@@ -252,8 +348,8 @@ export default function SettingsPage() {
 
             {/* Notification Settings */}
             {activeTab === 'notifications' && (
-              <div className="bg-white shadow rounded-lg">
-                <div className="px-6 py-4 border-b border-gray-200">
+              <div className="bg-white rounded-xl shadow-md border border-gray-200">
+                <div className="px-6 py-4 border-b-2 border-gray-100 bg-gradient-to-r from-gray-50 to-blue-50/30">
                   <h3 className="text-lg font-semibold text-gray-900">Notification Preferences</h3>
                   <p className="text-sm text-gray-600">Choose how you want to be notified</p>
                 </div>
@@ -307,10 +403,11 @@ export default function SettingsPage() {
                       </label>
                     </div>
                   </div>
-                  <div className="flex justify-end">
+                  <div className="flex justify-end pt-4 border-t border-gray-200">
                     <Button 
                       onClick={() => handleSave('notifications')}
                       disabled={saving}
+                      className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg"
                     >
                       <Save className="h-4 w-4 mr-2" />
                       {saving ? 'Saving...' : 'Save Changes'}
@@ -322,8 +419,8 @@ export default function SettingsPage() {
 
             {/* Security Settings */}
             {activeTab === 'security' && (
-              <div className="bg-white shadow rounded-lg">
-                <div className="px-6 py-4 border-b border-gray-200">
+              <div className="bg-white rounded-xl shadow-md border border-gray-200">
+                <div className="px-6 py-4 border-b-2 border-gray-100 bg-gradient-to-r from-gray-50 to-blue-50/30">
                   <h3 className="text-lg font-semibold text-gray-900">Security Settings</h3>
                   <p className="text-sm text-gray-600">Manage your account security</p>
                 </div>
@@ -346,11 +443,11 @@ export default function SettingsPage() {
                     </div>
                     
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Session Timeout</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Session Timeout</label>
                       <select
                         value={settings.sessionTimeout}
                         onChange={(e) => setSettings({...settings, sessionTimeout: e.target.value})}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white"
                       >
                         <option value="1">1 hour</option>
                         <option value="8">8 hours</option>
@@ -359,10 +456,11 @@ export default function SettingsPage() {
                       </select>
                     </div>
                   </div>
-                  <div className="flex justify-end">
+                  <div className="flex justify-end pt-4 border-t border-gray-200">
                     <Button 
                       onClick={() => handleSave('security')}
                       disabled={saving}
+                      className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg"
                     >
                       <Save className="h-4 w-4 mr-2" />
                       {saving ? 'Saving...' : 'Save Changes'}
@@ -374,51 +472,69 @@ export default function SettingsPage() {
 
             {/* API Settings */}
             {activeTab === 'api' && (
-              <div className="bg-white shadow rounded-lg">
-                <div className="px-6 py-4 border-b border-gray-200">
+              <div className="bg-white rounded-xl shadow-md border border-gray-200">
+                <div className="px-6 py-4 border-b-2 border-gray-100 bg-gradient-to-r from-gray-50 to-blue-50/30">
                   <h3 className="text-lg font-semibold text-gray-900">API & Integrations</h3>
                   <p className="text-sm text-gray-600">Manage your API keys and webhooks</p>
                 </div>
                 <div className="p-6 space-y-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">API Key</label>
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type={showApiKey ? "text" : "password"}
-                        value={settings.apiKey}
-                        readOnly
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md bg-gray-50"
-                      />
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setShowApiKey(!showApiKey)}
+                  {/* OpenAI API Key Section */}
+                  <div className="border-b border-gray-200 pb-6">
+                    <h4 className="text-md font-medium text-gray-900 mb-2">OpenAI API Key</h4>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Configure your OpenAI API key to use OpenAI embedding models (text-embedding-ada-002, text-embedding-3-small, text-embedding-3-large).
+                      Get your API key from{' '}
+                      <a 
+                        href="https://platform.openai.com/api-keys" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:text-blue-800 underline"
                       >
-                        {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </Button>
-                      <Button variant="outline" size="sm">
-                        Regenerate
-                      </Button>
+                        OpenAI Platform
+                      </a>
+                    </p>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">OpenAI API Key</label>
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type={showApiKey ? "text" : "password"}
+                          value={settings.openaiApiKey || ''}
+                          onChange={(e) => setSettings({...settings, openaiApiKey: e.target.value})}
+                          placeholder={settings.openaiApiKeyConfigured ? "sk-...****" : "sk-your-api-key-here"}
+                          className="flex-1 px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                        />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowApiKey(!showApiKey)}
+                        >
+                          {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </Button>
+                      </div>
+                      {settings.openaiApiKeyConfigured && !showApiKey && (
+                        <p className="text-xs text-green-600 mt-1">✓ OpenAI API key is configured</p>
+                      )}
+                      <p className="text-xs text-gray-500 mt-1">Keep your API key secure and never share it publicly</p>
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">Keep your API key secure and never share it publicly</p>
                   </div>
-                  
+
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Webhook URL</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Webhook URL</label>
                     <input
                       type="url"
                       value={settings.webhookUrl}
                       onChange={(e) => setSettings({...settings, webhookUrl: e.target.value})}
                       placeholder="https://your-domain.com/webhook"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
                     />
                     <p className="text-xs text-gray-500 mt-1">Receive real-time notifications about your data pipelines</p>
                   </div>
                   
-                  <div className="flex justify-end">
+                  <div className="flex justify-end pt-4 border-t border-gray-200">
                     <Button 
                       onClick={() => handleSave('api')}
                       disabled={saving}
+                      className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg"
                     >
                       <Save className="h-4 w-4 mr-2" />
                       {saving ? 'Saving...' : 'Save Changes'}
@@ -430,29 +546,29 @@ export default function SettingsPage() {
 
             {/* Workspace Settings */}
             {activeTab === 'workspace' && (
-              <div className="bg-white shadow rounded-lg">
-                <div className="px-6 py-4 border-b border-gray-200">
+              <div className="bg-white rounded-xl shadow-md border border-gray-200">
+                <div className="px-6 py-4 border-b-2 border-gray-100 bg-gradient-to-r from-gray-50 to-blue-50/30">
                   <h3 className="text-lg font-semibold text-gray-900">Workspace Settings</h3>
                   <p className="text-sm text-gray-600">Configure your workspace preferences</p>
                 </div>
                 <div className="p-6 space-y-6">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Workspace Name</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Workspace Name</label>
                     <input
                       type="text"
                       value={settings.workspaceName}
                       onChange={(e) => setSettings({...settings, workspaceName: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
                     />
                   </div>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Default Language</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Default Language</label>
                       <select
                         value={settings.defaultLanguage}
                         onChange={(e) => setSettings({...settings, defaultLanguage: e.target.value})}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white"
                       >
                         <option value="en">English</option>
                         <option value="es">Spanish</option>
@@ -462,11 +578,11 @@ export default function SettingsPage() {
                     </div>
                     
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Date Format</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Date Format</label>
                       <select
                         value={settings.dateFormat}
                         onChange={(e) => setSettings({...settings, dateFormat: e.target.value})}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white"
                       >
                         <option value="MM/DD/YYYY">MM/DD/YYYY</option>
                         <option value="DD/MM/YYYY">DD/MM/YYYY</option>
@@ -475,10 +591,11 @@ export default function SettingsPage() {
                     </div>
                   </div>
                   
-                  <div className="flex justify-end">
+                  <div className="flex justify-end pt-4 border-t border-gray-200">
                     <Button 
                       onClick={() => handleSave('workspace')}
                       disabled={saving}
+                      className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg"
                     >
                       <Save className="h-4 w-4 mr-2" />
                       {saving ? 'Saving...' : 'Save Changes'}
@@ -487,6 +604,7 @@ export default function SettingsPage() {
                 </div>
               </div>
             )}
+          </div>
           </div>
         </div>
       </div>

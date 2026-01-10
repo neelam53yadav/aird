@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { CheckCircle, XCircle, AlertTriangle, Loader2, AlertCircle, Lightbulb, BookOpen, TrendingUp } from 'lucide-react'
+import { CheckCircle, XCircle, AlertTriangle, Loader2, AlertCircle, Lightbulb, BookOpen, TrendingUp, Sparkles } from 'lucide-react'
 import { apiClient, ProductInsightsResponse } from '@/lib/api-client'
 import { useToast } from './ui/toast'
+import { Button } from '@/components/ui/button'
 
 interface AITrustScoreDisplayProps {
   productId: string
@@ -25,6 +26,12 @@ const METRIC_NAMES: Record<string, string> = {
   Diversity: 'Diversity',
   Audience_Accessibility: 'Audience Accessibility',
   KnowledgeBase_Ready: 'Knowledge Base Ready',
+  // New AI-Ready metrics
+  Chunk_Coherence: 'Chunk Coherence',
+  Noise_Free_Score: 'Noise-Free Score',
+  Chunk_Boundary_Quality: 'Chunk Boundary Quality',
+  Avg_Chunk_Coherence: 'Avg Chunk Coherence',
+  Avg_Noise_Free_Score: 'Avg Noise-Free Score',
 }
 
 const METRIC_DESCRIPTIONS: Record<string, string> = {
@@ -41,12 +48,19 @@ const METRIC_DESCRIPTIONS: Record<string, string> = {
   Diversity: 'Content diversity/variety',
   Audience_Accessibility: 'How accessible content is to audience',
   KnowledgeBase_Ready: 'Ready for knowledge base use',
+  // New AI-Ready metric descriptions
+  Chunk_Coherence: 'Semantic cohesion within chunks',
+  Noise_Free_Score: 'Percentage of content free from boilerplate/navigation noise',
+  Chunk_Boundary_Quality: 'Quality of chunk boundaries (fewer mid-sentence breaks)',
+  Avg_Chunk_Coherence: 'Average coherence across all chunks',
+  Avg_Noise_Free_Score: 'Average noise-free score across all chunks',
 }
 
 export function AITrustScoreDisplay({ productId, showTitle = true }: AITrustScoreDisplayProps) {
   const [insights, setInsights] = useState<ProductInsightsResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [applyingRecommendation, setApplyingRecommendation] = useState<string | null>(null)
   const { addToast } = useToast()
 
   useEffect(() => {
@@ -76,6 +90,71 @@ export function AITrustScoreDisplay({ productId, showTitle = true }: AITrustScor
       })
     } finally {
       setLoading(false)
+    }
+  }
+
+  const getActionLabel = (action: string): string => {
+    switch (action) {
+      case 'increase_chunk_overlap':
+        return 'Increase Overlap'
+      case 'switch_playbook':
+        return 'Switch Playbook'
+      case 'enhance_normalization':
+        return 'Enhance Normalization'
+      case 'extract_metadata':
+        return 'Extract Metadata'
+      case 'apply_all_recommendations':
+        return 'Apply All'
+      default:
+        return 'Apply'
+    }
+  }
+
+  const handleApplyRecommendation = async (recommendation: any, index: number) => {
+    const recommendationKey = `${recommendation.type}-${index}`
+    setApplyingRecommendation(recommendationKey)
+    
+    try {
+      const response = await apiClient.applyRecommendation(
+        productId,
+        recommendation.action,
+        recommendation.config || {}
+      )
+      
+      if (response.error) {
+        addToast({
+          type: 'error',
+          message: `Failed to apply recommendation: ${response.error}`,
+        })
+      } else if (response.data) {
+        const result = response.data
+        addToast({
+          type: 'success',
+          message: result.message || 'Recommendation applied successfully!',
+        })
+        
+        // Reload insights to show updated recommendations
+        setTimeout(() => {
+          loadInsights()
+        }, 1000)
+        
+        // Show message about pipeline rerun if needed
+        if (result.requires_pipeline_rerun) {
+          setTimeout(() => {
+            addToast({
+              type: 'info',
+              message: 'Please re-run the pipeline to see the full effects of this change.',
+            })
+          }, 2000)
+        }
+      }
+    } catch (err) {
+      addToast({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Failed to apply recommendation',
+      })
+    } finally {
+      setApplyingRecommendation(null)
     }
   }
 
@@ -255,7 +334,7 @@ export function AITrustScoreDisplay({ productId, showTitle = true }: AITrustScor
               <div className="mt-2">
                 <p className="text-sm font-medium mb-1">Violations:</p>
                 <ul className="list-disc list-inside text-sm space-y-1">
-                  {policy.violations.map((violation, idx) => (
+                  {(policy.violations || []).map((violation: string, idx: number) => (
                     <li key={idx}>{violation}</li>
                   ))}
                 </ul>
@@ -265,7 +344,7 @@ export function AITrustScoreDisplay({ productId, showTitle = true }: AITrustScor
               <div className="mt-2">
                 <p className="text-sm font-medium mb-1">Warnings:</p>
                 <ul className="list-disc list-inside text-sm space-y-1">
-                  {policy.warnings.map((warning, idx) => (
+                  {(policy.warnings || []).map((warning: string, idx: number) => (
                     <li key={idx}>{warning}</li>
                   ))}
                 </ul>
@@ -319,27 +398,76 @@ export function AITrustScoreDisplay({ productId, showTitle = true }: AITrustScor
       </div>
 
       {/* Optimizer Suggestions */}
-      {optimizer && (optimizer.suggestions || optimizer.playbook_recommendations) && (
+      {optimizer && (optimizer.suggestions || optimizer.playbook_recommendations || (optimizer.actionable_recommendations && optimizer.actionable_recommendations.length > 0)) && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h3 className="text-md font-semibold text-gray-900 mb-4 flex items-center gap-2">
             <Lightbulb className="h-5 w-5 text-yellow-600" />
             Optimization Suggestions
           </h3>
+          
+          {/* Actionable Recommendations */}
+          {optimizer.actionable_recommendations && optimizer.actionable_recommendations.length > 0 && (
+            <div className="mb-6">
+              <p className="text-sm font-medium text-gray-700 mb-3">Recommendations:</p>
+              <div className="space-y-3">
+                {optimizer.actionable_recommendations.map((rec: any, idx: number) => {
+                  const isApplying = applyingRecommendation === `${rec.type}-${idx}`
+                  const actionLabel = getActionLabel(rec.action)
+                  
+                  return (
+                    <div key={idx} className="border border-gray-200 rounded-lg p-4 bg-gray-50 hover:bg-gray-100 transition-colors">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Sparkles className="h-4 w-4 text-blue-600" />
+                            <p className="text-sm text-gray-700">{rec.message}</p>
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-shrink-0"
+                          onClick={() => handleApplyRecommendation(rec, idx)}
+                          disabled={isApplying}
+                        >
+                          {isApplying ? (
+                            <>
+                              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                              Applying...
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="h-3 w-3 mr-1" />
+                              {actionLabel}
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+          
+          {/* General Suggestions (non-actionable) */}
           {optimizer.suggestions && optimizer.suggestions.length > 0 && (
             <div className="mb-4">
-              <p className="text-sm font-medium text-gray-700 mb-2">Recommendations:</p>
+              <p className="text-sm font-medium text-gray-700 mb-2">General Suggestions:</p>
               <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
-                {optimizer.suggestions.map((suggestion, idx) => (
+                {(optimizer.suggestions || []).map((suggestion: string, idx: number) => (
                   <li key={idx}>{suggestion}</li>
                 ))}
               </ul>
             </div>
           )}
+          
+          {/* Playbook Recommendations */}
           {optimizer.playbook_recommendations && optimizer.playbook_recommendations.length > 0 && (
             <div>
               <p className="text-sm font-medium text-gray-700 mb-2">Playbook Recommendations:</p>
               <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
-                {optimizer.playbook_recommendations.map((rec, idx) => (
+                {(optimizer.playbook_recommendations || []).map((rec: string, idx: number) => (
                   <li key={idx}>{rec}</li>
                 ))}
               </ul>

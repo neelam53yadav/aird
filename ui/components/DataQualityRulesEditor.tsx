@@ -96,7 +96,7 @@ export function DataQualityRulesEditor({
         break
     }
     
-    setRules(prev => {
+    setRules((prev: any) => {
       const rulesData = prev.rules || prev
       return {
         ...prev,
@@ -109,7 +109,7 @@ export function DataQualityRulesEditor({
   }
   
   const updateRule = (ruleType: string, index: number, field: string, value: any) => {
-    setRules(prev => {
+    setRules((prev: any) => {
       const rulesData = prev.rules || prev
       return {
         ...prev,
@@ -124,7 +124,7 @@ export function DataQualityRulesEditor({
   }
   
   const removeRule = (ruleType: string, index: number) => {
-    setRules(prev => {
+    setRules((prev: any) => {
       const rulesData = prev.rules || prev
       return {
         ...prev,

@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Database, Globe, HardDrive, FileText, Folder, Share } from 'lucide-react'
+import { ArrowLeft, Database, Globe, HardDrive, FileText, Folder, Share, Cloud } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -80,8 +80,43 @@ const DATA_SOURCE_TYPES = [
     description: 'Import files from local directory',
     icon: Folder,
     configFields: [
-      { name: 'path', label: 'Folder Path', type: 'text', required: true },
+      { name: 'path', label: 'Folder Path', type: 'text', required: false, placeholder: 'Optional - leave empty for upload mode' },
       { name: 'file_types', label: 'File Types (comma-separated)', type: 'text', required: false },
+    ]
+  },
+  {
+    id: 'aws_s3',
+    name: 'AWS S3',
+    description: 'Connect to AWS S3 buckets',
+    icon: Cloud,
+    configFields: [
+      { name: 'bucket_name', label: 'Bucket Name', type: 'text', required: true },
+      { name: 'access_key_id', label: 'AWS Access Key ID', type: 'text', required: true },
+      { name: 'secret_access_key', label: 'AWS Secret Access Key', type: 'password', required: true },
+      { name: 'region', label: 'Region', type: 'text', required: false, placeholder: 'us-east-1' },
+      { name: 'prefix', label: 'Prefix/Path', type: 'text', required: false },
+    ]
+  },
+  {
+    id: 'azure_blob',
+    name: 'Azure Blob Storage',
+    description: 'Connect to Azure Blob Storage containers',
+    icon: Cloud,
+    configFields: [
+      { name: 'storage_account_name', label: 'Storage Account Name', type: 'text', required: true },
+      { name: 'container_name', label: 'Container Name', type: 'text', required: true },
+      { name: 'account_key', label: 'Account Key', type: 'password', required: true },
+      { name: 'prefix', label: 'Prefix/Path', type: 'text', required: false },
+    ]
+  },
+  {
+    id: 'google_drive',
+    name: 'Google Drive',
+    description: 'Connect to Google Drive folders',
+    icon: Folder,
+    configFields: [
+      { name: 'folder_id', label: 'Folder ID', type: 'text', required: false, placeholder: 'Leave empty for root' },
+      { name: 'credentials', label: 'OAuth Credentials (JSON)', type: 'textarea', required: true, placeholder: 'Paste OAuth credentials JSON here' },
     ]
   },
   {
@@ -249,55 +284,31 @@ export default function EditDataSourcePage() {
     setError(null)
 
     try {
-      // Basic validation based on data source type
-      if (dataSource.type === 'folder') {
-        const folderPath = config.path
-        if (!folderPath) {
-          setTestResult({ success: false, message: 'Folder path is required' })
-          return
-        }
-        if (folderPath.length < 3) {
-          setTestResult({ success: false, message: 'Please enter a valid folder path' })
-          return
-        }
+      // Call backend API to test connection
+      const response = await apiClient.testConnection(datasourceId)
+      
+      if (response.error) {
         setTestResult({ 
-          success: true, 
-          message: `Folder path format looks valid: ${folderPath}` 
+          success: false, 
+          message: response.error || 'Failed to test connection' 
         })
-      } else if (dataSource.type === 'web') {
-        const url = config.url
-        if (!url) {
-          setTestResult({ success: false, message: 'URL is required' })
-          return
-        }
-        if (!url.startsWith('http://') && !url.startsWith('https://')) {
-          setTestResult({ success: false, message: 'URL must start with http:// or https://' })
-          return
-        }
+      } else if (response.data) {
+        const result = response.data as { ok: boolean; message: string }
         setTestResult({ 
-          success: true, 
-          message: `URL format looks valid: ${url}` 
-        })
-      } else if (dataSource.type === 'db') {
-        const { host, port, database } = config
-        if (!host || !port || !database) {
-          setTestResult({ success: false, message: 'Host, port, and database are required' })
-          return
-        }
-        setTestResult({ 
-          success: true, 
-          message: `Database configuration looks valid: ${host}:${port}/${database}` 
+          success: result.ok, 
+          message: result.message 
         })
       } else {
         setTestResult({ 
-          success: true, 
-          message: 'Configuration appears valid' 
+          success: false, 
+          message: 'No response from server' 
         })
       }
-    } catch (err) {
+    } catch (err: any) {
+      console.error('Test connection error:', err)
       setTestResult({ 
         success: false, 
-        message: 'Failed to validate configuration. Please check your inputs.' 
+        message: err?.message || 'Failed to test connection. Please check your inputs and try again.' 
       })
     } finally {
       setTesting(false)
@@ -491,8 +502,8 @@ export default function EditDataSourcePage() {
                 {fieldErrors[field.name] && (
                   <p className="text-sm text-red-600 mt-1">{fieldErrors[field.name]}</p>
                 )}
-                {field.description && (
-                  <p className="mt-2 text-sm text-gray-500">{field.description}</p>
+                {(field as any).description && (
+                  <p className="mt-2 text-sm text-gray-500">{(field as any).description}</p>
                 )}
               </div>
             ))}

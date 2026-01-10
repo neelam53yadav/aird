@@ -29,7 +29,11 @@ export default function AccountPage() {
     if (status === "authenticated") {
       // Exchange NextAuth token for backend token
       exchangeToken()
-        .then(() => {
+        .then((result) => {
+          if (!result.success) {
+            setLoading(false)
+            return undefined as any // Return undefined to match fetch return type
+          }
           // Fetch user profile
           return fetch("/api/v1/users/me", {
             headers: {
@@ -40,11 +44,15 @@ export default function AccountPage() {
             },
           })
         })
-        .then(res => res.json())
-        .then(data => {
+        .then((res?: Response) => {
+          if (!res) return undefined
+          return res.json()
+        })
+        .then((data: any) => {
+          if (!data) return
           setUser(data)
           // Fetch workspaces
-          return fetch("/api/v1/workspaces", {
+          return fetch("/api/v1/workspaces/", {
             headers: {
               "Authorization": `Bearer ${document.cookie
                 .split("; ")
@@ -53,12 +61,16 @@ export default function AccountPage() {
             },
           })
         })
-        .then(res => res.json())
-        .then(data => {
+        .then((res?: Response) => {
+          if (!res) return undefined
+          return res.json()
+        })
+        .then((data: any) => {
+          if (!data) return
           setWorkspaces(data)
           setLoading(false)
         })
-        .catch(error => {
+        .catch((error: unknown) => {
           console.error("Error fetching user data:", error)
           setLoading(false)
         })

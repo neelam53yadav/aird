@@ -133,20 +133,27 @@ export default function DataSourcesPage() {
 
   return (
     <AppLayout>
-      <div className="p-6">
+      <div className="p-6 bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-50/30 min-h-screen">
         {/* Header */}
         <div className="mb-8">
           <div className="flex justify-between items-center">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Data Sources</h1>
-              <p className="text-gray-600">Manage all your data sources across products</p>
+              <h1 className="text-4xl font-bold text-gray-900 mb-2 tracking-tight">Data Sources</h1>
+              <p className="text-lg text-gray-600">Manage all your data sources across products</p>
             </div>
             <div className="flex space-x-3">
-              <Button variant="outline">
+              <Button 
+                variant="outline" 
+                className="border-2 hover:border-blue-300 hover:bg-blue-50"
+                onClick={() => router.push('/app/products')}
+              >
                 <Database className="h-4 w-4 mr-2" />
                 Import Data Source
               </Button>
-              <Button>
+              <Button 
+                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg"
+                onClick={() => router.push('/app/products')}
+              >
                 <Plus className="h-4 w-4 mr-2" />
                 Add Data Source
               </Button>
@@ -154,56 +161,56 @@ export default function DataSourcesPage() {
           </div>
         </div>
 
-        {/* Stats */}
+        {/* Enhanced Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white p-6 rounded-lg shadow-sm border">
+          <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5">
             <div className="flex items-center">
-              <div className="bg-blue-100 rounded-lg p-3 mr-4">
-                <Database className="h-6 w-6 text-blue-600" />
+              <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl p-3 mr-4 shadow-sm">
+                <Database className="h-6 w-6 text-white" />
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-600">Total Sources</p>
-                <p className="text-2xl font-bold text-gray-900">{dataSources.length}</p>
+                <p className="text-sm font-medium text-gray-600 mb-1">Total Sources</p>
+                <p className="text-3xl font-bold text-gray-900">{dataSources.length}</p>
               </div>
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-lg shadow-sm border">
+          <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5">
             <div className="flex items-center">
-              <div className="bg-green-100 rounded-lg p-3 mr-4">
-                <Globe className="h-6 w-6 text-green-600" />
+              <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl p-3 mr-4 shadow-sm">
+                <Globe className="h-6 w-6 text-white" />
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-600">Web Sources</p>
-                <p className="text-2xl font-bold text-gray-900">
+                <p className="text-sm font-medium text-gray-600 mb-1">Web Sources</p>
+                <p className="text-3xl font-bold text-gray-900">
                   {dataSources.filter(ds => ds.type === 'web').length}
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-lg shadow-sm border">
+          <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5">
             <div className="flex items-center">
-              <div className="bg-purple-100 rounded-lg p-3 mr-4">
-                <Server className="h-6 w-6 text-purple-600" />
+              <div className="bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl p-3 mr-4 shadow-sm">
+                <Server className="h-6 w-6 text-white" />
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-600">Database Sources</p>
-                <p className="text-2xl font-bold text-gray-900">
+                <p className="text-sm font-medium text-gray-600 mb-1">Database Sources</p>
+                <p className="text-3xl font-bold text-gray-900">
                   {dataSources.filter(ds => ds.type === 'db').length}
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-lg shadow-sm border">
+          <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5">
             <div className="flex items-center">
-              <div className="bg-orange-100 rounded-lg p-3 mr-4">
-                <Folder className="h-6 w-6 text-orange-600" />
+              <div className="bg-gradient-to-br from-orange-500 to-amber-600 rounded-xl p-3 mr-4 shadow-sm">
+                <Folder className="h-6 w-6 text-white" />
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-600">File Sources</p>
-                <p className="text-2xl font-bold text-gray-900">
+                <p className="text-sm font-medium text-gray-600 mb-1">File Sources</p>
+                <p className="text-3xl font-bold text-gray-900">
                   {dataSources.filter(ds => ds.type === 'folder').length}
                 </p>
               </div>
@@ -212,18 +219,20 @@ export default function DataSourcesPage() {
         </div>
 
         {/* Data Sources List */}
-        <div className="bg-white rounded-lg shadow-sm border">
+        <div className="bg-white rounded-xl shadow-md border border-gray-100">
           <div className="p-6 border-b border-gray-200">
             <h3 className="text-lg font-semibold text-gray-900">All Data Sources</h3>
           </div>
           <div className="p-6">
             {dataSources.length === 0 ? (
               <div className="text-center py-12">
-                <Database className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h4 className="text-lg font-medium text-gray-900 mb-2">No data sources yet</h4>
-                <p className="text-gray-600 mb-6">Get started by adding your first data source to a product.</p>
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4">
+                  <Database className="h-10 w-10 text-blue-600" />
+                </div>
+                <h4 className="text-xl font-semibold text-gray-900 mb-2">No data sources yet</h4>
+                <p className="text-gray-600 mb-6 max-w-md mx-auto">Get started by adding your first data source to a product.</p>
                 <Link href="/app/products">
-                  <Button>
+                  <Button className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg">
                     <Plus className="h-4 w-4 mr-2" />
                     Go to Products
                   </Button>
@@ -232,31 +241,31 @@ export default function DataSourcesPage() {
             ) : (
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {dataSources.map((dataSource) => (
-                  <div key={dataSource.id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
-                    <div className="flex items-start mb-3">
-                      <div className="bg-gray-100 rounded-lg p-2 mr-3 flex-shrink-0">
+                  <div key={dataSource.id} className="border-2 border-gray-200 rounded-xl p-5 hover:bg-blue-50/50 hover:border-blue-300 transition-all duration-200 hover:shadow-md group">
+                    <div className="flex items-start mb-4">
+                      <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl p-2.5 mr-3 flex-shrink-0 shadow-sm group-hover:scale-110 transition-transform">
                         {getDataSourceTypeIcon(dataSource.type)}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <h4 className="font-medium text-gray-900 text-sm">
+                        <h4 className="font-semibold text-gray-900 text-sm mb-1 group-hover:text-blue-600 transition-colors">
                           {getDataSourceTypeName(dataSource.type)}
                         </h4>
-                        <p className="text-xs text-gray-600 truncate">
+                        <p className="text-xs text-gray-600 truncate mb-1">
                           Product: {getProductName(dataSource.product_id)}
                         </p>
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-xs text-gray-500">
                           Created {new Date(dataSource.created_at).toLocaleDateString()}
                         </p>
                       </div>
                     </div>
                     
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center">
-                        <div className="w-2 h-2 bg-green-400 rounded-full mr-1"></div>
-                        <span className="text-xs text-green-600">Active</span>
+                    <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                      <div className="flex items-center bg-green-50 px-2 py-1 rounded-md border border-green-200">
+                        <div className="w-2 h-2 bg-green-500 rounded-full mr-1.5 animate-pulse"></div>
+                        <span className="text-xs font-medium text-green-700">Active</span>
                       </div>
                       <Link href={`/app/products/${dataSource.product_id}`}>
-                        <Button variant="outline" size="sm">
+                        <Button variant="outline" size="sm" className="border-2 hover:border-blue-300 hover:bg-blue-50">
                           View Product
                         </Button>
                       </Link>

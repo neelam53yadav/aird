@@ -1,11 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Package, Database, Settings, Play, Pause, Search, TrendingUp, BarChart3, AlertTriangle, GitBranch, FileText, Download, FileSpreadsheet, Upload, Loader2, ArrowDownToLine, CheckCircle2 } from 'lucide-react'
+import { ArrowLeft, Package, Database, Settings, Settings2, Play, Pause, Search, TrendingUp, BarChart3, AlertTriangle, GitBranch, FileText, Download, FileSpreadsheet, Upload, Loader2, ArrowDownToLine, CheckCircle2, Home, Shield, Layers, Lock, FileCheck, FileJson, FileCode, FileSpreadsheet as FileCsv, RefreshCw, X, Eye, Cpu } from 'lucide-react'
+import { StatusBadge } from '@/components/ui/status-badge'
+import { TableSkeleton, CardSkeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { ConfirmModal, ResultModal } from '@/components/ui/modal'
 import AppLayout from '@/components/layout/AppLayout'
@@ -14,9 +16,9 @@ import { DataQualityBanner } from '@/components/DataQualityBanner'
 import { DataQualityViolationsDrawer } from '@/components/DataQualityViolationsDrawer'
 import { DataQualityRulesEditor } from '@/components/DataQualityRulesEditor'
 import { AITrustScoreDisplay } from '@/components/AITrustScoreDisplay'
-import { ChunkMetadataDisplay } from '@/components/ChunkMetadataDisplay'
-import { ACLManagement } from '@/components/ACLManagement'
 import { useToast } from '@/components/ui/toast'
+import PipelineDetailsModal from '@/components/PipelineDetailsModal'
+import { ComingSoonBadge } from '@/components/ui/coming-soon-badge'
 
 interface Product {
   id: string
@@ -41,6 +43,7 @@ interface Product {
   }
   trust_score?: number  // M2
   policy_status?: string  // M2: 'passed' | 'failed' | 'warnings' | 'unknown'
+  chunking_strategy?: string  // From latest successful pipeline run
   created_at: string
   updated_at?: string
 }
@@ -81,20 +84,33 @@ export default function ProductDetailPage() {
   const [dataSources, setDataSources] = useState<DataSource[]>([])
   // MLflow metrics state removed - MLflow integration disabled
   const [loading, setLoading] = useState(true)
+  const [loadingData, setLoadingData] = useState({
+    product: true,
+    dataSources: true,
+    artifacts: false,
+    pipelineRuns: false,
+  })
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'overview' | 'ai-trust-score' | 'chunk-metadata' | 'acl' | 'datasources' | 'data-quality' | 'exports'>('overview')
   const [testingConnection, setTestingConnection] = useState<string | null>(null)
   const [ingestingDataSource, setIngestingDataSource] = useState<string | null>(null)
   const [ingestionResults, setIngestionResults] = useState<Record<string, any>>({})
-  const [rawArtifacts, setRawArtifacts] = useState<any[]>([])
+  const [pipelineArtifacts, setPipelineArtifacts] = useState<any[]>([])
   const [loadingArtifacts, setLoadingArtifacts] = useState(false)
   const [pipelineRuns, setPipelineRuns] = useState<PipelineRun[]>([])
   const [loadingPipelineRuns, setLoadingPipelineRuns] = useState(false)
+  const [pipelineRunsPage, setPipelineRunsPage] = useState(0)
+  const [pipelineRunsTotal, setPipelineRunsTotal] = useState(0)
+  const PIPELINE_RUNS_PER_PAGE = 5
   const [runningPipeline, setRunningPipeline] = useState(false)
   const [pipelineConflict, setPipelineConflict] = useState<any>(null)
   const [promotingVersion, setPromotingVersion] = useState<number | null>(null)
+  const [selectedRunForDetails, setSelectedRunForDetails] = useState<PipelineRun | null>(null)
   const [downloadingValidationSummary, setDownloadingValidationSummary] = useState(false)
   const [downloadingTrustReport, setDownloadingTrustReport] = useState(false)
+  const [viewingArtifact, setViewingArtifact] = useState<any | null>(null)
+  const [artifactContent, setArtifactContent] = useState<string | null>(null)
+  const [loadingArtifactContent, setLoadingArtifactContent] = useState(false)
   
   // Data quality states
   const [dataQualityViolations, setDataQualityViolations] = useState<any[]>([])
@@ -116,8 +132,10 @@ export default function ProductDetailPage() {
     type: 'success' | 'error' | 'warning' | 'info'
     title: string
     message: string
+    details?: string
   } | null>(null)
 
+  // Fix 1 & 2: Parallelize initial API calls
   useEffect(() => {
     if (status === 'unauthenticated') {
       router.push('/')
@@ -125,40 +143,72 @@ export default function ProductDetailPage() {
     }
 
     if (status === 'authenticated' && productId) {
-      loadProduct()
+      // Load product and data sources in parallel
+      Promise.all([
+        loadProduct(),
       loadDataSources()
-      // MLflow metrics loading removed - MLflow integration disabled
+      ]).catch(err => {
+        console.error('Failed to load initial data:', err)
+      })
     }
   }, [status, router, productId])
 
-  // Load raw artifacts when product changes
+  // Fix 1 & 2: Parallelize product-dependent calls when product loads
   useEffect(() => {
-    if (product && product.current_version > 0) {
-      loadRawArtifacts()
+    if (!product) return
+
+    // Load critical data in parallel (artifacts and pipeline runs)
+    const promises: Promise<void>[] = []
+    
+    if (product.current_version > 0) {
+      promises.push(loadPipelineArtifacts())
     }
+    promises.push(loadPipelineRuns())
+    
+    Promise.all(promises).catch(err => {
+      console.error('Failed to load product-dependent data:', err)
+    })
+
+    // Fix 4: Lazy load non-critical data - only load when needed (in tab change handler)
   }, [product])
 
-  useEffect(() => {
-    if (product) {
-      loadPipelineRuns()
-      loadDataQualityViolations()
-      loadDataQualityRules()
-      loadExports()
-    }
-  }, [product])
-
-  // Auto-refresh pipeline runs every 10 seconds
+  // Fix 7: Optimize auto-refresh - only refresh when pipeline is running
   useEffect(() => {
     if (!product) return
     
+    // Check if there are any running pipelines
+    const hasRunningPipelines = pipelineRuns.some(run => 
+      run.status === 'running' || run.status === 'queued'
+    )
+    
+    if (!hasRunningPipelines) return // Don't auto-refresh if nothing is running
+    
     const interval = setInterval(() => {
       loadPipelineRuns()
-    }, 10000)
+    }, 15000) // Increased from 10s to 15s to reduce load
     
     return () => clearInterval(interval)
-  }, [product])
+  }, [product, pipelineRuns])
+
+  // Fix 4: Lazy load data when switching to relevant tabs
+  useEffect(() => {
+    if (!product) return
+
+    // Load data quality violations only when data-quality tab is active
+    if (activeTab === 'data-quality' && dataQualityViolations.length === 0 && !loadingViolations) {
+      loadDataQualityViolations()
+      loadDataQualityRules()
+    }
+
+    // Load exports only when exports tab is active
+    if (activeTab === 'exports' && exports.length === 0 && !loadingExports) {
+      loadExports()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, product?.id])
 
   const loadProduct = async () => {
+    setLoadingData(prev => ({ ...prev, product: true }))
     try {
       const response = await apiClient.getProduct(productId)
       
@@ -171,12 +221,14 @@ export default function ProductDetailPage() {
       setError('Failed to load product')
     } finally {
       setLoading(false)
+      setLoadingData(prev => ({ ...prev, product: false }))
     }
   }
 
   // MLflow metrics loading removed - MLflow integration disabled
 
   const loadDataSources = async () => {
+    setLoadingData(prev => ({ ...prev, dataSources: true }))
     try {
       const response = await apiClient.getDataSources(productId)
       
@@ -187,6 +239,8 @@ export default function ProductDetailPage() {
       }
     } catch (err) {
       console.error('Failed to load data sources:', err)
+    } finally {
+      setLoadingData(prev => ({ ...prev, dataSources: false }))
     }
   }
 
@@ -350,19 +404,91 @@ export default function ProductDetailPage() {
   }
 
 
-  const loadRawArtifacts = async () => {
+  const loadPipelineArtifacts = async () => {
     if (!product) return
     
     setLoadingArtifacts(true)
+    setLoadingData(prev => ({ ...prev, artifacts: true }))
     try {
-      const response = await apiClient.getRawArtifacts(product.id, product.current_version)
+      const response = await apiClient.getPipelineArtifacts(product.id, product.current_version)
       if (response.data) {
-        setRawArtifacts(response.data.artifacts || [])
+        setPipelineArtifacts(response.data.artifacts || [])
       }
     } catch (err) {
-      console.error('Failed to load raw artifacts:', err)
+      console.error('Failed to load pipeline artifacts:', err)
     } finally {
       setLoadingArtifacts(false)
+      setLoadingData(prev => ({ ...prev, artifacts: false }))
+    }
+  }
+
+  const handleViewArtifact = async (artifact: any) => {
+    setViewingArtifact(artifact)
+    setLoadingArtifactContent(true)
+    setArtifactContent(null)
+
+    try {
+      if (artifact.artifact_type?.toLowerCase() === 'vector') {
+        // For vectors, show info message - no downloadable content
+        setArtifactContent('Vector artifacts are stored in Qdrant. Use the RAG Playground to query them.')
+        setLoadingArtifactContent(false)
+        return
+      }
+
+      if (!artifact.id) {
+        addToast({
+          type: 'error',
+          message: 'Artifact ID is missing',
+        })
+        setArtifactContent('Artifact ID is missing. Please contact support.')
+        setLoadingArtifactContent(false)
+        return
+      }
+
+      // Use backend proxy endpoint to avoid CORS issues
+      // Use relative path - Next.js will proxy to the backend
+      const proxyUrl = `/api/v1/pipeline/artifacts/${artifact.id}/content`
+      
+      const fetchResponse = await fetch(proxyUrl, {
+        method: 'GET',
+        headers: {
+          'Accept': '*/*',
+        },
+        credentials: 'include', // Include cookies for authentication
+      })
+
+      if (!fetchResponse.ok) {
+        const errorText = await fetchResponse.text()
+        throw new Error(`Failed to fetch artifact: ${fetchResponse.status} ${fetchResponse.statusText} - ${errorText}`)
+      }
+
+      const contentType = fetchResponse.headers.get('content-type') || ''
+      
+      if (contentType.includes('application/json') || artifact.artifact_type?.toLowerCase() === 'json') {
+        const json = await fetchResponse.json()
+        setArtifactContent(JSON.stringify(json, null, 2))
+      } else if (contentType.includes('text/csv') || artifact.artifact_type?.toLowerCase() === 'csv') {
+        const text = await fetchResponse.text()
+        setArtifactContent(text)
+      } else if (contentType.includes('application/pdf') || artifact.artifact_type?.toLowerCase() === 'pdf') {
+        // For PDF, show message and provide download link
+        setArtifactContent('PDF files cannot be displayed in the viewer. Please use the download button to view the file.')
+      } else {
+        // For JSONL or other text formats
+        const text = await fetchResponse.text()
+        setArtifactContent(text)
+      }
+    } catch (err) {
+      console.error('Failed to load artifact content:', err)
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load artifact content'
+      addToast({
+        type: 'error',
+        message: errorMessage,
+      })
+      // Set error content to show in modal
+      setArtifactContent(`Error loading artifact: ${errorMessage}`)
+    } finally {
+      setLoadingArtifactContent(false)
     }
   }
 
@@ -370,15 +496,26 @@ export default function ProductDetailPage() {
     if (!product) return
     
     setLoadingPipelineRuns(true)
+    setLoadingData(prev => ({ ...prev, pipelineRuns: true }))
     try {
-      const response = await apiClient.getPipelineRuns(product.id, 10)
+      // Always load only the first 5 runs (no pagination on overview page)
+      const response = await apiClient.getPipelineRuns(product.id, 5, 0)
       if (response.data) {
-        setPipelineRuns(response.data || [])
+        // Handle both old format (array) and new format (object with runs, total, etc.)
+        if (Array.isArray(response.data)) {
+          setPipelineRuns(response.data.slice(0, 5)) // Ensure only 5
+          setPipelineRunsTotal(response.data.length)
+        } else {
+          setPipelineRuns((response.data.runs || []).slice(0, 5)) // Ensure only 5
+          setPipelineRunsTotal(response.data.total || 0)
+        }
+        setPipelineRunsPage(0) // Always reset to page 0
       }
     } catch (err) {
       console.error('Failed to load pipeline runs:', err)
     } finally {
       setLoadingPipelineRuns(false)
+      setLoadingData(prev => ({ ...prev, pipelineRuns: false }))
     }
   }
 
@@ -470,9 +607,13 @@ export default function ProductDetailPage() {
       const response = await apiClient.triggerPipeline(product.id, version, forceRun)
       
       if (response.error) {
-        // Check if it's a conflict error
-        if (response.status === 409 && response.errorData && typeof response.errorData === 'object' && response.errorData.message) {
-          setPipelineConflict(response.errorData)
+        // Check if it's a conflict error (409)
+        if (response.status === 409) {
+          // Handle both structured errorData and plain error messages
+          const conflictData = response.errorData && typeof response.errorData === 'object' 
+            ? response.errorData 
+            : { message: response.error || 'A pipeline run is already in progress' }
+          setPipelineConflict(conflictData)
           setShowPipelineModal(false)
           return
         }
@@ -740,31 +881,32 @@ export default function ProductDetailPage() {
 
   return (
     <AppLayout>
-      <div className="p-6">
-        {/* Breadcrumb Navigation */}
+      <div className="p-6 bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-50/30 min-h-screen">
+        {/* Enhanced Breadcrumb Navigation */}
         <div className="flex items-center mb-6">
-          <Link href="/app/products" className="flex items-center text-sm text-gray-500 hover:text-gray-700 transition-colors">
+          <Link href="/app/products" className="flex items-center text-sm text-gray-500 hover:text-gray-700 transition-colors font-medium">
             <ArrowLeft className="h-4 w-4 mr-1" />
             Products
           </Link>
           <span className="mx-2 text-gray-400">/</span>
-          <span className="text-sm font-medium text-gray-900">{product.name}</span>
+          <span className="text-sm font-semibold text-gray-900">{product.name}</span>
         </div>
 
-        {/* Page Header */}
-        <div className="mb-8">
+        {/* Enhanced Page Header */}
+        <div className="mb-8 bg-white rounded-xl shadow-md border border-gray-100 p-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center">
-              <div className="bg-blue-100 rounded-lg p-2 mr-4">
-                <Package className="h-6 w-6 text-blue-600" />
+              <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl p-3 mr-4 shadow-sm">
+                <Package className="h-6 w-6 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">{product.name}</h1>
-                <div className="flex items-center mt-1">
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(product.status)}`}>
-                    {product.status}
-                  </span>
-                  <span className="ml-3 text-sm text-gray-500">v{product.current_version}</span>
+                <h1 className="text-3xl font-bold text-gray-900 mb-2">{product.name}</h1>
+                <div className="flex items-center gap-3">
+                  <StatusBadge status={product.status as any} />
+                  <div className="flex items-center text-sm text-gray-500 bg-gray-50 px-2 py-1 rounded-md">
+                    <GitBranch className="h-3 w-3 mr-1" />
+                    <span>v{product.current_version}</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -773,6 +915,7 @@ export default function ProductDetailPage() {
                 variant="outline" 
                 size="sm"
                 onClick={() => router.push(`/app/products/${productId}/edit`)}
+                className="border-2 hover:border-blue-300 hover:bg-blue-50"
               >
                 <Settings className="h-4 w-4 mr-2" />
                 Settings
@@ -781,9 +924,10 @@ export default function ProductDetailPage() {
                 size="sm"
                 onClick={() => setShowPipelineModal(true)}
                 disabled={runningPipeline || dataSources.length === 0}
+                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg"
               >
                 <Play className="h-4 w-4 mr-2" />
-                Run
+                Run Pipeline
               </Button>
             </div>
           </div>
@@ -799,36 +943,37 @@ export default function ProductDetailPage() {
           </div>
         )}
 
-        {/* Tabs */}
-        <div className="mb-8">
-          <nav className="flex space-x-8">
+        {/* Enhanced Tabs */}
+        <div className="mb-8 border-b border-gray-200">
+          <nav className="flex space-x-1 overflow-x-auto">
             <button
               onClick={() => setActiveTab('overview')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              className={`flex items-center gap-2 py-4 px-4 border-b-2 font-medium text-sm transition-all whitespace-nowrap ${
                 activeTab === 'overview'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'border-blue-600 text-blue-600 bg-blue-50/50'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
               }`}
             >
+              <Home className="h-4 w-4" />
               Overview
             </button>
             <button
               onClick={() => setActiveTab('ai-trust-score')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              className={`flex items-center gap-2 py-4 px-4 border-b-2 font-medium text-sm transition-all whitespace-nowrap ${
                 activeTab === 'ai-trust-score'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'border-blue-600 text-blue-600 bg-blue-50/50'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
               }`}
             >
+              <Shield className="h-4 w-4" />
               AI Trust Score
               {product?.trust_score !== undefined && (() => {
-                // Handle both 0-1 and 0-100 formats
                 const trustScore = product.trust_score || 0
                 const percentage = trustScore > 1 ? trustScore : trustScore * 100
                 const normalizedScore = trustScore > 1 ? trustScore / 100 : trustScore
                 
                 return (
-                  <span className={`ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                  <span className={`ml-1 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
                     normalizedScore >= 0.8 ? 'bg-green-100 text-green-800' :
                     normalizedScore >= 0.6 ? 'bg-yellow-100 text-yellow-800' :
                     'bg-red-100 text-red-800'
@@ -840,56 +985,65 @@ export default function ProductDetailPage() {
             </button>
             <button
               onClick={() => setActiveTab('chunk-metadata')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              className={`flex items-center gap-2 py-4 px-4 border-b-2 font-medium text-sm transition-all whitespace-nowrap ${
                 activeTab === 'chunk-metadata'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'border-blue-600 text-blue-600 bg-blue-50/50'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
               }`}
             >
+              <Layers className="h-4 w-4" />
               Chunk Metadata
             </button>
             <button
               onClick={() => setActiveTab('acl')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              className={`flex items-center gap-2 py-4 px-4 border-b-2 font-medium text-sm transition-all whitespace-nowrap ${
                 activeTab === 'acl'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'border-blue-600 text-blue-600 bg-blue-50/50'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
               }`}
             >
+              <Lock className="h-4 w-4" />
               Access Control
             </button>
             <button
               onClick={() => setActiveTab('datasources')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              className={`flex items-center gap-2 py-4 px-4 border-b-2 font-medium text-sm transition-all whitespace-nowrap ${
                 activeTab === 'datasources'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'border-blue-600 text-blue-600 bg-blue-50/50'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
               }`}
             >
-              Data Sources ({dataSources.length})
+              <Database className="h-4 w-4" />
+              Data Sources
+              <span className="ml-1 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-700">
+                {dataSources.length}
+              </span>
             </button>
             <button
               onClick={() => setActiveTab('data-quality')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              className={`flex items-center gap-2 py-4 px-4 border-b-2 font-medium text-sm transition-all whitespace-nowrap ${
                 activeTab === 'data-quality'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'border-blue-600 text-blue-600 bg-blue-50/50'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
               }`}
             >
-              Data Quality {dataQualityViolations.length > 0 && (
-                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+              <FileCheck className="h-4 w-4" />
+              Data Quality
+              {dataQualityViolations.length > 0 && (
+                <span className="ml-1 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800">
                   {dataQualityViolations.length}
                 </span>
               )}
             </button>
             <button
               onClick={() => setActiveTab('exports')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              className={`flex items-center gap-2 py-4 px-4 border-b-2 font-medium text-sm transition-all whitespace-nowrap ${
                 activeTab === 'exports'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'border-blue-600 text-blue-600 bg-blue-50/50'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
               }`}
             >
+              <Download className="h-4 w-4" />
               Exports
             </button>
           </nav>
@@ -904,46 +1058,43 @@ export default function ProductDetailPage() {
         )}
 
         {activeTab === 'chunk-metadata' && (
-          <div className="space-y-6">
-            <ChunkMetadataDisplay 
-              productId={productId} 
-              productVersion={product?.current_version}
-            />
-          </div>
+          <ComingSoonBadge
+            title="Chunk Metadata"
+            description="View and manage detailed metadata for all chunks, including embeddings, scores, and processing information."
+            icon={Layers}
+          />
+        )}
+
+        {activeTab === 'acl' && (
+          <ComingSoonBadge
+            title="Access Control"
+            description="Manage user permissions and access control lists (ACLs) for this product, including read, write, and admin roles."
+            icon={Lock}
+          />
         )}
 
         {activeTab === 'overview' && (
           <div className="space-y-6">
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Product Information</h2>
               <dl className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
                 <div>
-                  <dt className="text-sm font-medium text-gray-500">Product ID</dt>
-                  <dd className="mt-1 text-sm text-gray-900 font-mono">{product.id}</dd>
-                </div>
-                <div>
                   <dt className="text-sm font-medium text-gray-500">Status</dt>
                   <dd className="mt-1">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(product.status)}`}>
-                      {product.status}
-                    </span>
+                    <StatusBadge status={product.status as any} />
                   </dd>
-                </div>
-                <div>
-                  <dt className="text-sm font-medium text-gray-500">Current Version</dt>
-                  <dd className="mt-1 text-sm text-gray-900">{product.current_version}</dd>
                 </div>
                 <div>
                   <dt className="text-sm font-medium text-gray-500">Created</dt>
                   <dd className="mt-1 text-sm text-gray-900">
-                    {new Date(product.created_at).toLocaleDateString()}
+                    {new Date(product.created_at).toLocaleString()}
                   </dd>
                 </div>
                 {product.updated_at && (
                   <div>
                     <dt className="text-sm font-medium text-gray-500">Last Updated</dt>
                     <dd className="mt-1 text-sm text-gray-900">
-                      {new Date(product.updated_at).toLocaleDateString()}
+                      {new Date(product.updated_at).toLocaleString()}
                     </dd>
                   </div>
                 )}
@@ -960,7 +1111,7 @@ export default function ProductDetailPage() {
                   
                   return playbookId ? (
                     <div>
-                      <dt className="text-sm font-medium text-gray-500">Preprocessing Playbook</dt>
+                      <dt className="text-sm font-medium text-gray-500">Playbook</dt>
                       <dd className="mt-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
@@ -1031,6 +1182,72 @@ export default function ProductDetailPage() {
                     </dd>
                   </div>
                 )}
+                {/* Content Type from chunking config */}
+                {(() => {
+                  const chunkingConfig = (product as any).chunking_config
+                  const resolvedSettings = chunkingConfig?.resolved_settings
+                  const contentType = resolvedSettings?.content_type || chunkingConfig?.auto_settings?.content_type
+                  
+                  if (!contentType) return null
+                  
+                  return (
+                    <div>
+                      <dt className="text-sm font-medium text-gray-500">Content Type</dt>
+                      <dd className="mt-1">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 capitalize">
+                          {contentType}
+                        </span>
+                      </dd>
+                    </div>
+                  )
+                })()}
+                {/* Chunking Strategy from latest successful pipeline run */}
+                {(() => {
+                  const chunkingStrategy = (product as any).chunking_strategy
+                  
+                  if (!chunkingStrategy) return null
+                  
+                  // Format the strategy name (replace underscores with spaces and capitalize)
+                  const formattedStrategy = chunkingStrategy
+                    .replace(/_/g, ' ')
+                    .split(' ')
+                    .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
+                    .join(' ')
+                  
+                  return (
+                    <div>
+                      <dt className="text-sm font-medium text-gray-500">Chunking Strategy</dt>
+                      <dd className="mt-1">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                          {formattedStrategy}
+                        </span>
+                      </dd>
+                    </div>
+                  )
+                })()}
+                {/* Embedding Model from embedding config */}
+                {(() => {
+                  const embeddingConfig = (product as any).embedding_config
+                  const modelName = embeddingConfig?.embedder_name
+                  
+                  if (!modelName) return null
+                  
+                  return (
+                    <div>
+                      <dt className="text-sm font-medium text-gray-500">Embedding Model</dt>
+                      <dd className="mt-1">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+                          {modelName}
+                        </span>
+                        {embeddingConfig?.embedding_dimension && (
+                          <span className="ml-2 text-xs text-gray-500">
+                            ({embeddingConfig.embedding_dimension}D)
+                          </span>
+                        )}
+                      </dd>
+                    </div>
+                  )
+                })()}
               </dl>
             </div>
 
@@ -1076,14 +1293,14 @@ export default function ProductDetailPage() {
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
                 <Link href={`/app/products/${product.id}/datasources/new`}>
-                  <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer">
+                  <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer h-full flex flex-col">
                     <Database className="h-8 w-8 text-blue-600 mb-2" />
                     <h3 className="font-medium text-gray-900">Add Data Source</h3>
                     <p className="text-sm text-gray-600">Connect a new data source to this product</p>
                   </div>
                 </Link>
                 <div 
-                  className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer"
+                  className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer h-full flex flex-col"
                   onClick={() => setShowPipelineModal(true)}
                 >
                   <Play className="h-8 w-8 text-green-600 mb-2" />
@@ -1091,35 +1308,35 @@ export default function ProductDetailPage() {
                   <p className="text-sm text-gray-600">Execute the data processing pipeline</p>
                 </div>
                 <Link href={`/app/products/${productId}/playground`}>
-                  <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer">
+                  <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer h-full flex flex-col">
                     <Search className="h-8 w-8 text-purple-600 mb-2" />
                     <h3 className="font-medium text-gray-900">RAG Playground</h3>
                     <p className="text-sm text-gray-600">Search and explore your indexed data</p>
                   </div>
                 </Link>
-                <Link href={`/app/products/${productId}/ai-readiness`}>
-                  <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer">
-                    <TrendingUp className="h-8 w-8 text-orange-600 mb-2" />
-                    <h3 className="font-medium text-gray-900">AI Readiness</h3>
-                    <p className="text-sm text-gray-600">Assess and improve data quality</p>
-                  </div>
-                </Link>
-                <Link href={`/app/products/${productId}/pipeline-metrics`}>
-                  <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer">
-                    <BarChart3 className="h-8 w-8 text-blue-600 mb-2" />
-                    <h3 className="font-medium text-gray-900">Pipeline Metrics</h3>
-                    <p className="text-sm text-gray-600">View detailed metrics for each version</p>
-                  </div>
-                </Link>
+                <ComingSoonBadge
+                  title="AI Readiness"
+                  description="Assess and improve data quality"
+                  icon={TrendingUp}
+                  variant="compact"
+                  className="h-full"
+                />
+                <ComingSoonBadge
+                  title="Pipeline Metrics"
+                  description="View detailed metrics for each version"
+                  icon={BarChart3}
+                  variant="compact"
+                  className="h-full"
+                />
                 <Link href={`/app/products/${productId}/pipeline-runs`}>
-                  <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer">
+                  <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer h-full flex flex-col">
                     <GitBranch className="h-8 w-8 text-indigo-600 mb-2" />
-                    <h3 className="font-medium text-gray-900">Pipeline Runs</h3>
+                    <h3 className="font-medium text-gray-900">Recent Pipeline Runs</h3>
                     <p className="text-sm text-gray-600">Monitor and manage pipeline executions</p>
                   </div>
                 </Link>
                 <div 
-                  className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer"
+                  className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer h-full flex flex-col"
                   onClick={() => router.push(`/app/products/${productId}/edit`)}
                 >
                   <Settings className="h-8 w-8 text-gray-600 mb-2" />
@@ -1129,58 +1346,6 @@ export default function ProductDetailPage() {
               </div>
             </div>
 
-            {/* Reports & Artifacts Section (M3) */}
-            {product.current_version > 0 && (
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <h2 className="text-lg font-semibold text-gray-900 mb-4">Reports & Artifacts</h2>
-                <p className="text-sm text-gray-600 mb-4">
-                  Download AI readiness reports and validation summaries generated from pipeline runs.
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <Button
-                    variant="outline"
-                    onClick={handleDownloadValidationSummary}
-                    disabled={downloadingValidationSummary || product.current_version === 0}
-                    className="flex items-center justify-center gap-2"
-                  >
-                    {downloadingValidationSummary ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
-                        Downloading...
-                      </>
-                    ) : (
-                      <>
-                        <FileSpreadsheet className="h-4 w-4" />
-                        Download Validation Summary (CSV)
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={handleDownloadTrustReport}
-                    disabled={downloadingTrustReport || product.current_version === 0}
-                    className="flex items-center justify-center gap-2"
-                  >
-                    {downloadingTrustReport ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
-                        Downloading...
-                      </>
-                    ) : (
-                      <>
-                        <FileText className="h-4 w-4" />
-                        Download Trust Report (PDF)
-                      </>
-                    )}
-                  </Button>
-                </div>
-                {product.current_version === 0 && (
-                  <p className="text-sm text-gray-500 mt-3">
-                    Run a pipeline to generate reports and artifacts.
-                  </p>
-                )}
-              </div>
-            )}
 
             {/* Pipeline Section */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -1214,87 +1379,83 @@ export default function ProductDetailPage() {
               ) : (
                 <div className="space-y-4">
                   <p className="text-sm text-gray-600">
-                    Run the complete data processing pipeline to ingest, clean, chunk, embed, and index your data.
+                    Run the complete data processing pipeline to ingest, clean, score with AI-Ready metrics, generate fingerprint, chunk, embed, and index your data.
                   </p>
                   
                   {/* Recent Runs Table */}
                   <div>
-                    <h3 className="text-md font-medium text-gray-900 mb-3">Recent Runs</h3>
-                    {loadingPipelineRuns ? (
-                      <div className="text-center py-4">
-                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto mb-2"></div>
-                        <p className="text-gray-600">Loading runs...</p>
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-md font-medium text-gray-900">Recent Runs</h3>
+                      {pipelineRunsTotal > 5 && (
+                        <Link 
+                          href={`/app/products/${productId}/pipeline-runs`}
+                          className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                        >
+                          View All ({pipelineRunsTotal})
+                        </Link>
+                      )}
                       </div>
+                    {loadingPipelineRuns ? (
+                      <TableSkeleton rows={3} cols={5} />
                     ) : pipelineRuns.length === 0 ? (
                       <div className="text-center py-4">
                         <p className="text-gray-500">No pipeline runs yet</p>
                       </div>
                     ) : (
-                      <div className="overflow-x-auto">
+                      <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
                         <table className="min-w-full divide-y divide-gray-200">
-                          <thead className="bg-gray-50">
+                          <thead className="bg-gradient-to-r from-gray-50 to-blue-50">
                             <tr>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                                 Version
                               </th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                                 Status
                               </th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                                 Started
                               </th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                                 Duration
                               </th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                                 Actions
                               </th>
                             </tr>
                           </thead>
                           <tbody className="bg-white divide-y divide-gray-200">
                             {pipelineRuns.map((run) => (
-                              <tr key={run.id} className="hover:bg-gray-50">
-                                <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                              <tr key={run.id} className="hover:bg-blue-50/50 transition-colors">
+                                <td className="px-6 py-4 whitespace-nowrap">
                                   <div className="flex items-center space-x-2">
-                                    <span>v{run.version}</span>
+                                    <span className="text-sm font-semibold text-gray-900">v{run.version}</span>
                                     {product?.promoted_version === run.version && (
-                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gradient-to-r from-purple-500 to-pink-600 text-white shadow-sm">
                                         🚀 PROD
                                       </span>
                                     )}
                                   </div>
                                 </td>
-                                <td className="px-4 py-4 whitespace-nowrap text-sm">
-                                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                    run.status === 'succeeded' ? 'bg-green-100 text-green-800' :
-                                    run.status === 'running' ? 'bg-blue-100 text-blue-800' :
-                                    run.status === 'failed' ? 'bg-red-100 text-red-800' :
-                                    'bg-yellow-100 text-yellow-800'
-                                  }`}>
-                                    {run.status}
-                                  </span>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <StatusBadge status={run.status as any} size="sm" />
                                 </td>
-                                <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                                   {run.started_at ? new Date(run.started_at).toLocaleString() : '-'}
                                 </td>
-                                <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                                   {run.started_at && run.finished_at ? 
                                     `${Math.round((new Date(run.finished_at).getTime() - new Date(run.started_at).getTime()) / 1000)}s` :
                                     run.started_at ? 'Running...' : '-'
                                   }
                                 </td>
-                                <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
+                                <td className="px-6 py-4 whitespace-nowrap text-sm">
                                   <div className="flex space-x-2">
-                                    {run.dag_run_id && (
-                                      <a
-                                        href={`http://localhost:8080/dags/primedata_simple/grid?dag_run_id=${run.dag_run_id}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-blue-600 hover:text-blue-900"
-                                      >
-                                        View in Airflow
-                                      </a>
-                                    )}
+                                    <Link
+                                      href={`/app/products/${productId}/pipeline-runs`}
+                                      className="text-blue-600 hover:text-blue-900 text-sm font-medium"
+                                    >
+                                      View Details
+                                    </Link>
                                     {run.status === 'succeeded' && (
                                       <button
                                         onClick={() => handlePromoteVersion(run.version)}
@@ -1321,6 +1482,7 @@ export default function ProductDetailPage() {
                             ))}
                           </tbody>
                         </table>
+                        {/* No pagination - only show recent 5 runs */}
                       </div>
                     )}
                   </div>
@@ -1328,38 +1490,30 @@ export default function ProductDetailPage() {
               )}
             </div>
 
-            {/* Raw Artifacts Table */}
+            {/* Pipeline Artifacts Section */}
             {product.current_version > 0 && (
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-lg font-semibold text-gray-900">Raw Artifacts</h2>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={loadRawArtifacts}
-                    disabled={loadingArtifacts}
-                  >
-                    {loadingArtifacts ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600 mr-2"></div>
-                        Loading...
-                      </>
-                    ) : (
-                      'Refresh'
-                    )}
-                  </Button>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                      <Package className="h-5 w-5 text-blue-600" />
+                      Pipeline Artifacts
+                    </h2>
+                    <p className="text-sm text-gray-600 mt-1">
+                      View and manage all artifacts generated during pipeline execution
+                    </p>
+                  </div>
                 </div>
                 
-                {loadingArtifacts ? (
-                  <div className="text-center py-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                    <p className="text-gray-600">Loading artifacts...</p>
+                {loadingData.artifacts ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
                   </div>
-                ) : rawArtifacts.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Database className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">No artifacts yet</h3>
-                    <p className="text-gray-600">Run the pipeline to ingest data from all data sources and see artifacts here.</p>
+                ) : pipelineArtifacts.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-600">No artifacts available for this version</p>
+                    <p className="text-sm text-gray-500 mt-2">Artifacts will appear here after pipeline execution</p>
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
@@ -1367,16 +1521,13 @@ export default function ProductDetailPage() {
                       <thead className="bg-gray-50">
                         <tr>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Name
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Size
+                            Artifact Name
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Type
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Last Modified
+                            Size
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Actions
@@ -1384,50 +1535,85 @@ export default function ProductDetailPage() {
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
-                        {rawArtifacts.map((artifact, index) => (
-                          <tr key={index} className="hover:bg-gray-50">
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                              {artifact.name}
+                        {pipelineArtifacts.map((artifact: any, index: number) => {
+                          const formatFileSize = (bytes: number) => {
+                            if (bytes < 1024) return `${bytes} B`
+                            if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+                            if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+                            return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
+                          }
+
+                          const getArtifactIcon = (type: string) => {
+                            switch (type?.toLowerCase()) {
+                              case 'json':
+                              case 'jsonl':
+                                return <FileJson className="h-4 w-4 text-yellow-600" />
+                              case 'csv':
+                                return <FileSpreadsheet className="h-4 w-4 text-green-600" />
+                              case 'pdf':
+                                return <FileText className="h-4 w-4 text-red-600" />
+                              case 'vector':
+                                return <Layers className="h-4 w-4 text-purple-600" />
+                              default:
+                                return <FileText className="h-4 w-4 text-gray-600" />
+                            }
+                          }
+
+                          return (
+                            <tr key={artifact.id || index} className="hover:bg-gray-50">
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="flex items-center gap-2">
+                                  {getArtifactIcon(artifact.artifact_type)}
+                                  <span className="text-sm font-medium text-gray-900">
+                                    {artifact.display_name || artifact.artifact_name?.replace(/_/g, ' ') || 'Unknown Artifact'}
+                                  </span>
+                                </div>
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {(artifact.size / 1024).toFixed(1)} KB
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
+                                  {artifact.artifact_type?.toUpperCase() || 'UNKNOWN'}
+                                </span>
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {artifact.content_type ? (
-                                artifact.content_type === 'application/pdf' ? 'PDF' :
-                                artifact.content_type === 'text/plain' ? 'Text' :
-                                artifact.content_type === 'text/html' ? 'HTML' :
-                                artifact.content_type === 'application/json' ? 'JSON' :
-                                artifact.content_type === 'text/csv' ? 'CSV' :
-                                artifact.content_type === 'image/png' ? 'PNG Image' :
-                                artifact.content_type === 'image/jpeg' ? 'JPEG Image' :
-                                artifact.content_type.startsWith('image/') ? 'Image' :
-                                artifact.content_type.startsWith('text/') ? 'Text' :
-                                artifact.content_type.startsWith('application/') ? 'Document' :
-                                artifact.content_type
-                              ) : 'Unknown'}
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span className="text-sm text-gray-600">
+                                  {artifact.file_size ? formatFileSize(artifact.file_size) : 'N/A'}
+                                </span>
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {new Date(artifact.last_modified).toLocaleDateString()}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              <a
-                                href={artifact.url}
+                              <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleViewArtifact(artifact)}
+                                    className="p-2"
+                                    title="View artifact"
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                  {artifact.download_url && (
+                                    <a
+                                      href={artifact.download_url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-blue-600 hover:text-blue-900"
+                                      download
+                                      className="inline-flex items-center justify-center p-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                                      title="Download artifact"
                               >
-                                Download
+                                      <Download className="h-4 w-4" />
                               </a>
+                                  )}
+                                </div>
                             </td>
                           </tr>
-                        ))}
+                          )
+                        })}
                       </tbody>
                     </table>
                   </div>
                 )}
               </div>
             )}
+
           </div>
         )}
 
@@ -1444,12 +1630,14 @@ export default function ProductDetailPage() {
             </div>
 
             {dataSources.length === 0 ? (
-              <div className="text-center py-12 bg-white rounded-lg shadow-sm border border-gray-200">
-                <Database className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No data sources yet</h3>
+              <div className="text-center py-12 bg-white rounded-xl shadow-md border border-gray-100">
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4">
+                  <Database className="h-10 w-10 text-blue-600" />
+                </div>
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">No data sources yet</h3>
                 <p className="text-gray-600 mb-6">Connect your first data source to get started.</p>
                 <Link href={`/app/products/${product.id}/datasources/new`}>
-                  <Button>
+                  <Button className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg">
                     <Database className="h-4 w-4 mr-2" />
                     Add Data Source
                   </Button>
@@ -1460,28 +1648,30 @@ export default function ProductDetailPage() {
                 {dataSources.map((datasource) => {
                   const displayInfo = getDataSourceDisplayInfo(datasource)
                   return (
-                    <div key={datasource.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                      <div className="flex items-start mb-3">
-                        <span className="text-2xl mr-3 flex-shrink-0">{getDataSourceTypeIcon(datasource.type)}</span>
+                    <div key={datasource.id} className="bg-white rounded-xl shadow-md border-2 border-gray-100 p-6 hover:shadow-lg hover:border-blue-300 transition-all duration-200 group">
+                      <div className="flex items-start mb-4">
+                        <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl p-2.5 mr-3 flex-shrink-0 shadow-sm group-hover:scale-110 transition-transform">
+                          <span className="text-xl">{getDataSourceTypeIcon(datasource.type)}</span>
+                        </div>
                         <div className="min-w-0 flex-1">
-                          <h3 className="font-medium text-gray-900 text-sm">{displayInfo.title}</h3>
-                          <p className="text-xs text-gray-600 truncate" title={displayInfo.fullSubtitle}>
+                          <h3 className="font-semibold text-gray-900 text-sm mb-1 group-hover:text-blue-600 transition-colors">{displayInfo.title}</h3>
+                          <p className="text-xs text-gray-600 truncate mb-1" title={displayInfo.fullSubtitle}>
                             {displayInfo.subtitle}
                           </p>
-                          <p className="text-xs text-gray-500 mt-1 truncate" title={displayInfo.details}>
+                          <p className="text-xs text-gray-500 truncate" title={displayInfo.details}>
                             {displayInfo.details}
                           </p>
                         </div>
                       </div>
                       
-                      <div className="mb-4">
+                      <div className="mb-4 pb-4 border-b border-gray-100">
                         <div className="flex items-center justify-between mb-2">
                           <p className="text-xs text-gray-500">
                             Created {new Date(datasource.created_at).toLocaleDateString()}
                           </p>
-                          <div className="flex items-center">
-                            <div className="w-2 h-2 bg-green-400 rounded-full mr-1"></div>
-                            <span className="text-xs text-green-600">Active</span>
+                          <div className="flex items-center bg-green-50 px-2 py-1 rounded-md border border-green-200">
+                            <div className="w-2 h-2 bg-green-500 rounded-full mr-1.5 animate-pulse"></div>
+                            <span className="text-xs font-medium text-green-700">Active</span>
                           </div>
                         </div>
                         {datasource.last_cursor && (
@@ -1496,14 +1686,14 @@ export default function ProductDetailPage() {
                           <Button 
                             variant="outline" 
                             size="sm" 
-                            className="flex-1 text-xs"
+                            className="flex-1 text-xs border-2 hover:border-blue-300 hover:bg-blue-50"
                             onClick={() => handleEditDataSource(datasource.id)}
                           >
                             Edit
                           </Button>
                           <Button 
                             size="sm" 
-                            className="flex-1 text-xs"
+                            className="flex-1 text-xs bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-sm hover:shadow-md"
                             onClick={() => handleTestConnection(datasource.id)}
                             disabled={testingConnection === datasource.id}
                           >
@@ -1519,13 +1709,15 @@ export default function ProductDetailPage() {
                           <Button 
                             variant="outline" 
                             size="sm" 
-                            className="flex-1 text-xs text-red-600 border-red-300 hover:bg-red-50"
+                            className="flex-1 text-xs text-red-600 border-2 border-red-300 hover:bg-red-50 hover:border-red-400"
                             onClick={() => handleDeleteDataSource(datasource.id)}
                           >
                             Delete
                           </Button>
                         </div>
                         
+                        {/* Only show "Run Initial Ingest" for datasource types that need it (not folder/local) */}
+                        {datasource.type !== 'folder' && (
                         <div className="mt-3">
                           <Button
                             variant="outline"
@@ -1564,6 +1756,7 @@ export default function ProductDetailPage() {
                             </div>
                           )}
                         </div>
+                        )}
                         
                       </div>
                     </div>
@@ -1615,6 +1808,9 @@ export default function ProductDetailPage() {
               <ul className="text-sm text-gray-600 mb-6 space-y-1">
                 <li>• Automatically ingest data from all data sources</li>
                 <li>• Clean and preprocess the data</li>
+                <li>• Score chunks with AI-Ready metrics (coherence, noise detection, boundary quality)</li>
+                <li>• Generate readiness fingerprint</li>
+                <li>• Evaluate policy compliance</li>
                 <li>• Chunk documents for processing</li>
                 <li>• Generate embeddings</li>
                 <li>• Index to Qdrant for search</li>
@@ -1823,101 +2019,11 @@ export default function ProductDetailPage() {
         )}
 
         {activeTab === 'exports' && (
-          <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h2 className="text-lg font-semibold text-gray-900">Export Bundles</h2>
-              <Button
-                onClick={() => setShowCreateExportModal(true)}
-                disabled={!product || product.current_version === 0}
-              >
-                <Package className="h-4 w-4 mr-2" />
-                Create Export
-              </Button>
-            </div>
-
-            {!product || product.current_version === 0 ? (
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
-                <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No data available for export</h3>
-                <p className="text-gray-600">Run the pipeline to process data before creating exports.</p>
-              </div>
-            ) : (
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <h3 className="text-md font-medium text-gray-900 mb-4">Available Exports</h3>
-                {loadingExports ? (
-                  <div className="text-center py-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-                    <p className="text-gray-600 mt-2">Loading exports...</p>
-                  </div>
-                ) : exports.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">No exports yet</h3>
-                    <p className="text-gray-600 mb-4">Create your first export bundle to download processed data.</p>
-                    <Button onClick={() => setShowCreateExportModal(true)}>
-                      <Package className="h-4 w-4 mr-2" />
-                      Create Export
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Bundle Name
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Version
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Size
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Created
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Actions
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {exports.map((exportBundle) => (
-                          <tr key={exportBundle.id}>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm font-medium text-gray-900">
-                                {exportBundle.bundle_name}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                v{exportBundle.version}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {formatFileSize(exportBundle.size_bytes)}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {new Date(exportBundle.created_at).toLocaleDateString()}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                              <a
-                                href={exportBundle.download_url}
-                                download={exportBundle.bundle_name}
-                                className="text-blue-600 hover:text-blue-900"
-                              >
-                                Download
-                              </a>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          <ComingSoonBadge
+            title="Exports"
+            description="Create and download export bundles containing processed data, embeddings, and metadata for offline use or backup."
+            icon={Download}
+          />
         )}
       </div>
 
@@ -1989,7 +2095,8 @@ export default function ProductDetailPage() {
                 </Button>
                 <Button
                   onClick={() => {
-                    const selectedVersion = document.querySelector('input[name="export-version"]:checked')?.value
+                    const selectedInput = document.querySelector('input[name="export-version"]:checked') as HTMLInputElement | null
+                    const selectedVersion = selectedInput?.value
                     if (selectedVersion === 'prod') {
                       handleCreateExport('prod')
                     } else {
@@ -2010,6 +2117,100 @@ export default function ProductDetailPage() {
                     </>
                   )}
                 </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pipeline Details Modal */}
+      {selectedRunForDetails && (
+        <PipelineDetailsModal
+          isOpen={!!selectedRunForDetails}
+          onClose={() => setSelectedRunForDetails(null)}
+          runId={selectedRunForDetails.id}
+          runVersion={selectedRunForDetails.version}
+          runStatus={selectedRunForDetails.status}
+          initialMetrics={selectedRunForDetails.metrics}
+          onPipelineCancelled={() => {
+            // Refresh pipeline runs list
+            loadPipelineRuns()
+            // Optionally refresh artifacts too
+            loadPipelineArtifacts()
+          }}
+        />
+      )}
+
+      {/* Artifact Viewer Modal */}
+      {viewingArtifact && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75" onClick={() => setViewingArtifact(null)} />
+
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
+              {/* Header */}
+              <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4 flex items-center justify-between">
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold text-white">
+                    {viewingArtifact.display_name || viewingArtifact.artifact_name?.replace(/_/g, ' ') || 'Unknown Artifact'}
+                  </h3>
+                  <div className="flex items-center gap-3 mt-1">
+                    <p className="text-sm text-blue-100">
+                      {viewingArtifact.artifact_type?.toUpperCase() || 'UNKNOWN'} • {(() => {
+                        const formatFileSize = (bytes: number) => {
+                          if (bytes < 1024) return `${bytes} B`
+                          if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+                          return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+                        }
+                        return formatFileSize(viewingArtifact.file_size || 0)
+                      })()}
+                    </p>
+                    {viewingArtifact.stage_name && (
+                      <span className="text-xs text-blue-200 bg-blue-700/30 px-2 py-1 rounded">
+                        Stage: {viewingArtifact.stage_name.replace(/_/g, ' ')}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  onClick={() => setViewingArtifact(null)}
+                  className="text-white hover:text-gray-200 transition-colors ml-4"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="px-6 py-4 max-h-[70vh] overflow-y-auto">
+                {loadingArtifactContent ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                    <p className="ml-3 text-gray-600">Loading artifact content...</p>
+                  </div>
+                ) : artifactContent ? (
+                  <div className="bg-gray-900 rounded-lg p-4">
+                    <pre className="text-xs font-mono text-gray-100 whitespace-pre-wrap overflow-x-auto">
+                      {artifactContent}
+                    </pre>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <p>Unable to load artifact content</p>
+                    {viewingArtifact.download_url && (
+                      <p className="text-sm mt-2">You can download the artifact using the download button below.</p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="bg-gray-50 px-6 py-3 flex justify-end">
+                <button
+                  onClick={() => setViewingArtifact(null)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                >
+                  Close
+                </button>
               </div>
             </div>
           </div>

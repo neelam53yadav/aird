@@ -124,7 +124,7 @@ export function ProductInsightsDisplay({ productId, showTitle = true }: ProductI
               <div className="mt-2">
                 <p className="text-sm font-medium mb-1">Violations:</p>
                 <ul className="list-disc list-inside text-sm space-y-1">
-                  {policy.violations.map((violation, idx) => (
+                  {(policy.violations || []).map((violation: string, idx: number) => (
                     <li key={idx}>{violation}</li>
                   ))}
                 </ul>
@@ -134,7 +134,7 @@ export function ProductInsightsDisplay({ productId, showTitle = true }: ProductI
               <div className="mt-2">
                 <p className="text-sm font-medium mb-1">Warnings:</p>
                 <ul className="list-disc list-inside text-sm space-y-1">
-                  {policy.warnings.map((warning, idx) => (
+                  {(policy.warnings || []).map((warning: string, idx: number) => (
                     <li key={idx}>{warning}</li>
                   ))}
                 </ul>
@@ -154,22 +154,25 @@ export function ProductInsightsDisplay({ productId, showTitle = true }: ProductI
           {Object.entries(fingerprint)
             .filter(([key]) => key !== 'AI_Trust_Score')
             .sort(([a], [b]) => a.localeCompare(b))
-            .map(([key, value]) => (
-              <div key={key} className="border border-gray-200 rounded-lg p-3">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-700">{key.replace(/_/g, ' ')}</span>
-                  <span className="text-sm font-semibold text-gray-900">{formatMetricValue(value)}</span>
+            .map(([key, value]) => {
+              const numValue = typeof value === 'number' ? value : 0
+              return (
+                <div key={key} className="border border-gray-200 rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-gray-700">{key.replace(/_/g, ' ')}</span>
+                    <span className="text-sm font-semibold text-gray-900">{formatMetricValue(numValue)}</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-1.5">
+                    <div
+                      className={`h-1.5 rounded-full ${
+                        numValue >= 0.8 ? 'bg-green-500' : numValue >= 0.6 ? 'bg-yellow-500' : 'bg-red-500'
+                      }`}
+                      style={{ width: `${Math.min(numValue * 100, 100)}%` }}
+                    />
+                  </div>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-1.5">
-                  <div
-                    className={`h-1.5 rounded-full ${
-                      value >= 0.8 ? 'bg-green-500' : value >= 0.6 ? 'bg-yellow-500' : 'bg-red-500'
-                    }`}
-                    style={{ width: `${Math.min(value * 100, 100)}%` }}
-                  />
-                </div>
-              </div>
-            ))}
+              )
+            })}
         </div>
       </div>
 
@@ -184,7 +187,7 @@ export function ProductInsightsDisplay({ productId, showTitle = true }: ProductI
             <div className="mb-4">
               <p className="text-sm font-medium text-gray-700 mb-2">Recommendations:</p>
               <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
-                {optimizer.suggestions.map((suggestion, idx) => (
+                {(optimizer.suggestions || []).map((suggestion: string, idx: number) => (
                   <li key={idx}>{suggestion}</li>
                 ))}
               </ul>
@@ -194,7 +197,7 @@ export function ProductInsightsDisplay({ productId, showTitle = true }: ProductI
             <div>
               <p className="text-sm font-medium text-gray-700 mb-2">Playbook Recommendations:</p>
               <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
-                {optimizer.playbook_recommendations.map((rec, idx) => (
+                {(optimizer.playbook_recommendations || []).map((rec: string, idx: number) => (
                   <li key={idx}>{rec}</li>
                 ))}
               </ul>

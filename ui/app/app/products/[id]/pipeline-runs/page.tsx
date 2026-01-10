@@ -1,13 +1,16 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import React from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Play, RefreshCw, Clock, CheckCircle, XCircle, AlertTriangle, Loader2 } from 'lucide-react'
+import { ArrowLeft, Play, Clock, CheckCircle, XCircle, AlertTriangle, Loader2, X, Eye, Square, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import AppLayout from '@/components/layout/AppLayout'
 import { apiClient, PipelineRun } from '@/lib/api-client'
 import { useToast } from '@/components/ui/toast'
+import PipelineDetailsModal from '@/components/PipelineDetailsModal'
+import ChunkingConfigModal from '@/components/ChunkingConfigModal'
 
 export default function PipelineRunsPage() {
   const params = useParams()
@@ -20,14 +23,45 @@ export default function PipelineRunsPage() {
   const [error, setError] = useState<string | null>(null)
   const [polling, setPolling] = useState(false)
   const [triggering, setTriggering] = useState(false)
-  const [syncing, setSyncing] = useState(false)
+  const [pipelineConflict, setPipelineConflict] = useState<any>(null)
+  const [currentPage, setCurrentPage] = useState(0)
+  const [totalRuns, setTotalRuns] = useState(0)
+  const [product, setProduct] = useState<any>(null)
+  const [promotingVersion, setPromotingVersion] = useState<number | null>(null)
+  const [selectedRunForDetails, setSelectedRunForDetails] = useState<PipelineRun | null>(null)
+  const [selectedChunkingConfig, setSelectedChunkingConfig] = useState<any | null>(null)
+  const [loadingChunkingConfig, setLoadingChunkingConfig] = useState(false)
+  const RUNS_PER_PAGE = 20
+  
+  // Ref to track the polling interval
+  const intervalRef = useRef<NodeJS.Timeout | null>(null)
+  // Ref to track latest pipelineRuns state for checking inside interval callback
+  const pipelineRunsRef = useRef<PipelineRun[]>([])
+  // State for current time to update duration in real-time
+  const [currentTime, setCurrentTime] = useState(new Date())
+  // Ref to track the duration update interval
+  const durationIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
-  const loadPipelineRuns = useCallback(async (showLoading = true) => {
+  const loadProduct = useCallback(async () => {
+    try {
+      const response = await apiClient.getProduct(productId)
+      if (response.error) {
+        console.error('Failed to load product:', response.error)
+      } else if (response.data) {
+        setProduct(response.data)
+      }
+    } catch (err) {
+      console.error('Failed to load product:', err)
+    }
+  }, [productId])
+
+  const loadPipelineRuns = useCallback(async (page: number, showLoading = true) => {
     if (showLoading) setLoading(true)
     setError(null)
     
     try {
-      const response = await apiClient.getPipelineRuns(productId, 50, true)
+      const offset = page * RUNS_PER_PAGE
+      const response = await apiClient.getPipelineRuns(productId, RUNS_PER_PAGE, offset)
       
       if (response.error) {
         setError(response.error)
@@ -36,7 +70,15 @@ export default function PipelineRunsPage() {
           message: `Failed to load pipeline runs: ${response.error}`,
         })
       } else if (response.data) {
-        setPipelineRuns(response.data)
+        // Handle both old format (array) and new format (object with runs, total, etc.)
+        if (Array.isArray(response.data)) {
+          setPipelineRuns(response.data)
+          setTotalRuns(response.data.length)
+        } else {
+          setPipelineRuns(response.data.runs || [])
+          setTotalRuns(response.data.total || 0)
+        }
+        setCurrentPage(page)
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load pipeline runs'
@@ -51,49 +93,119 @@ export default function PipelineRunsPage() {
   }, [productId, addToast])
 
   useEffect(() => {
-    loadPipelineRuns()
-  }, [loadPipelineRuns])
+    loadProduct()
+    loadPipelineRuns(0, true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productId]) // Only reload when productId changes
 
-  // Poll for running pipelines
+  // Update pipelineRunsRef whenever pipelineRuns changes
+  useEffect(() => {
+    pipelineRunsRef.current = pipelineRuns
+  }, [pipelineRuns])
+
+  // Update current time every second ONLY for running pipelines
   useEffect(() => {
     const hasRunningRuns = pipelineRuns.some(
       (run) => run.status === 'running' || run.status === 'queued'
     )
 
-    if (hasRunningRuns && !polling) {
-      setPolling(true)
-      const interval = setInterval(() => {
-        loadPipelineRuns(false) // Don't show loading spinner during polling
-      }, 5000) // Poll every 5 seconds
-
-      return () => {
-        clearInterval(interval)
-        setPolling(false)
+    if (hasRunningRuns) {
+      // Update every second for real-time duration
+      durationIntervalRef.current = setInterval(() => {
+        setCurrentTime(new Date())
+      }, 1000)
+    } else {
+      if (durationIntervalRef.current) {
+        clearInterval(durationIntervalRef.current)
+        durationIntervalRef.current = null
       }
-    } else if (!hasRunningRuns) {
+    }
+
+    return () => {
+      if (durationIntervalRef.current) {
+        clearInterval(durationIntervalRef.current)
+        durationIntervalRef.current = null
+      }
+    }
+  }, [pipelineRuns])
+
+  // Check if we need to start polling when pipelineRuns changes
+  // This only starts polling if there are running runs and we're not already polling
+  useEffect(() => {
+    const hasRunningRuns = pipelineRuns.some(
+      (run) => run.status === 'running' || run.status === 'queued'
+    )
+
+    // Only start polling if:
+    // 1. There are running runs
+    // 2. We're not already polling (interval doesn't exist)
+    if (hasRunningRuns && !intervalRef.current) {
+      setPolling(true)
+      intervalRef.current = setInterval(() => {
+        loadPipelineRuns(currentPage, false).then(() => {
+          // Check the latest state from ref after loading
+          const stillHasRunning = pipelineRunsRef.current.some(
+            (run) => run.status === 'running' || run.status === 'queued'
+          )
+          
+          if (!stillHasRunning) {
+            // Stop polling if no running runs
+            if (intervalRef.current) {
+              clearInterval(intervalRef.current)
+              intervalRef.current = null
+            }
+            setPolling(false)
+          }
+        })
+      }, 10000) // Poll every 10 seconds when pipelines are running
+    }
+    // Only re-check when pipelineRuns changes, but don't recreate interval unnecessarily
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pipelineRuns, currentPage, loadPipelineRuns])
+
+  // Poll for running pipelines - cleanup effect
+  useEffect(() => {
+    // This effect handles cleanup when dependencies change
+    // The actual polling start is handled by the effect above
+    
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+        intervalRef.current = null
+      }
       setPolling(false)
     }
-  }, [pipelineRuns, polling, loadPipelineRuns])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadPipelineRuns, currentPage])
 
-  const handleTriggerPipeline = async () => {
+  const handleTriggerPipeline = async (forceRun: boolean = false) => {
     setTriggering(true)
+    setPipelineConflict(null)
     try {
-      const response = await apiClient.triggerPipeline(productId)
+      const response = await apiClient.triggerPipeline(productId, undefined, forceRun)
       
       if (response.error) {
+        // Check if it's a conflict error (409)
+        if (response.status === 409) {
+          // Handle both structured errorData and plain error messages
+          const conflictData = response.errorData && typeof response.errorData === 'object' 
+            ? response.errorData 
+            : { message: response.error || 'A pipeline run is already in progress' }
+          setPipelineConflict(conflictData)
+          return
+        }
+        
         addToast({
           type: 'error',
-          message: `Failed to trigger pipeline: ${response.error}`,
+          message: typeof response.error === 'string' ? response.error : 'Failed to trigger pipeline',
         })
       } else if (response.data) {
         addToast({
           type: 'success',
           message: `Pipeline run triggered successfully. Version: ${response.data.version}`,
         })
-        // Refresh runs after a short delay
-        setTimeout(() => {
-          loadPipelineRuns()
-        }, 1000)
+        // Immediately refresh runs to detect the new pipeline and start polling
+        await loadPipelineRuns(currentPage, false)
       }
     } catch (err) {
       addToast({
@@ -105,30 +217,57 @@ export default function PipelineRunsPage() {
     }
   }
 
-  const handleSync = async () => {
-    setSyncing(true)
+  const handleCancelRun = async (runId: string) => {
     try {
-      const response = await apiClient.syncPipelineRuns()
-      
+      const response = await apiClient.cancelPipelineRun(runId)
       if (response.error) {
         addToast({
           type: 'error',
-          message: `Failed to sync: ${response.error}`,
+          message: `Failed to cancel run: ${response.error}`,
         })
-      } else if (response.data) {
+      } else {
         addToast({
           type: 'success',
-          message: `Synced ${response.data.updated_count} pipeline runs`,
+          message: 'Pipeline run cancelled successfully',
         })
-        loadPipelineRuns()
+        loadPipelineRuns(currentPage, false)
       }
     } catch (err) {
       addToast({
         type: 'error',
-        message: err instanceof Error ? err.message : 'Failed to sync',
+        message: err instanceof Error ? err.message : 'Failed to cancel run',
+      })
+    }
+  }
+
+  const handlePromoteVersion = async (version: number) => {
+    if (!product) return
+    
+    setPromotingVersion(version)
+    try {
+      const response = await apiClient.promoteVersion(product.id, version)
+      
+      if (response.error) {
+        addToast({
+          type: 'error',
+          message: typeof response.error === 'string' ? response.error : 'Failed to promote version',
+        })
+      } else {
+        addToast({
+          type: 'success',
+          message: `Version ${version} has been promoted to production successfully`,
+        })
+        
+        // Refresh product data to get updated promoted_version
+        await loadProduct()
+      }
+    } catch (err) {
+      addToast({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Failed to promote version',
       })
     } finally {
-      setSyncing(false)
+      setPromotingVersion(null)
     }
   }
 
@@ -170,6 +309,38 @@ export default function PipelineRunsPage() {
     }
   }
 
+  // Memoized duration cell component to prevent unnecessary re-renders
+  const DurationCell = React.memo(({ run, currentTime }: { run: PipelineRun, currentTime: Date }) => {
+    const duration = useMemo(() => {
+      if (!run.started_at) return 'N/A'
+      
+      const start = new Date(run.started_at)
+      const end = run.finished_at 
+        ? new Date(run.finished_at) 
+        : (run.status === 'running' || run.status === 'queued') 
+          ? currentTime 
+          : new Date()
+      const diff = end.getTime() - start.getTime()
+      
+      const seconds = Math.floor(diff / 1000)
+      const minutes = Math.floor(seconds / 60)
+      const hours = Math.floor(minutes / 60)
+      
+      if (hours > 0) {
+        return `${hours}h ${minutes % 60}m`
+      } else if (minutes > 0) {
+        return `${minutes}m ${seconds % 60}s`
+      } else {
+        return `${seconds}s`
+      }
+    }, [run.started_at, run.finished_at, run.status, currentTime])
+    
+    return <div className="text-sm text-gray-900">{duration}</div>
+  })
+  
+  DurationCell.displayName = 'DurationCell'
+
+  // Keep formatDuration for backward compatibility (if used elsewhere)
   const formatDuration = (startedAt?: string, finishedAt?: string) => {
     if (!startedAt) return 'N/A'
     
@@ -205,6 +376,77 @@ export default function PipelineRunsPage() {
     }
   }
 
+  const getChunkingConfigForRun = (run: PipelineRun) => {
+    // For successful runs, always return config (even if empty) to show the button
+    if (run.status === 'succeeded') {
+      // First check if it's in run.metrics (from backend, stored during execution)
+      if (run.metrics?.chunking_config?.resolved_settings) {
+        return run.metrics.chunking_config.resolved_settings
+      }
+      // Fallback to product chunking_config (for backward compatibility)
+      if (product?.chunking_config?.resolved_settings) {
+        return product.chunking_config.resolved_settings
+      }
+      // Return empty object to indicate config should be shown but is not available
+      return {}
+    }
+    return null
+  }
+
+  const formatChunkingConfigSummary = (config: any) => {
+    if (!config) return null
+    const parts = []
+    if (config.chunk_size) parts.push(`Size: ${config.chunk_size}`)
+    if (config.chunk_overlap !== undefined) parts.push(`Overlap: ${config.chunk_overlap}`)
+    if (config.chunking_strategy) parts.push(`Strategy: ${config.chunking_strategy.replace(/_/g, ' ')}`)
+    if (config.content_type) parts.push(`Type: ${config.content_type}`)
+    return parts.length > 0 ? parts.join(', ') : 'Available'
+  }
+
+  const handleViewDetails = (run: PipelineRun) => {
+    setSelectedRunForDetails(run)
+  }
+
+  const handleCloseDetails = () => {
+    setSelectedRunForDetails(null)
+  }
+
+  const handlePipelineCancelled = () => {
+    loadPipelineRuns(currentPage, false)
+  }
+
+  const handleViewChunkingConfig = async (run: PipelineRun) => {
+    setLoadingChunkingConfig(true)
+    setSelectedChunkingConfig(null)
+    
+    try {
+      // First check if we already have it in run.metrics or product
+      const existingConfig = getChunkingConfigForRun(run)
+      if (existingConfig && Object.keys(existingConfig).length > 0) {
+        setSelectedChunkingConfig(existingConfig)
+        setLoadingChunkingConfig(false)
+        return
+      }
+
+      // If not, fetch from API
+      const response = await apiClient.getPipelineChunkingConfig(run.id!)
+      if (response.error || !response.data?.resolved_settings) {
+        setSelectedChunkingConfig({}) // Show empty config message
+      } else {
+        setSelectedChunkingConfig(response.data.resolved_settings)
+      }
+    } catch (err) {
+      console.error('Failed to fetch chunking config:', err)
+      addToast({
+        type: 'error',
+        message: 'Failed to fetch chunking configuration',
+      })
+      setSelectedChunkingConfig({}) // Show empty config message
+    } finally {
+      setLoadingChunkingConfig(false)
+    }
+  }
+
   return (
     <AppLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -226,16 +468,7 @@ export default function PipelineRunsPage() {
             </div>
             <div className="flex items-center gap-3">
               <Button
-                variant="outline"
-                onClick={handleSync}
-                disabled={syncing}
-                className="flex items-center gap-2"
-              >
-                <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
-                {syncing ? 'Syncing...' : 'Sync with Airflow'}
-              </Button>
-              <Button
-                onClick={handleTriggerPipeline}
+                onClick={() => handleTriggerPipeline(false)}
                 disabled={triggering}
                 className="flex items-center gap-2"
               >
@@ -245,6 +478,54 @@ export default function PipelineRunsPage() {
             </div>
           </div>
         </div>
+
+        {/* Pipeline Conflict Modal */}
+        {pipelineConflict && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+              <div className="flex items-center mb-4">
+                <AlertTriangle className="h-6 w-6 text-orange-600 mr-3" />
+                <h3 className="text-lg font-semibold text-gray-900">Pipeline Already Running</h3>
+              </div>
+              <div className="mb-6">
+                <p className="text-sm text-gray-700 mb-2">
+                  {pipelineConflict.message || 'A pipeline run is already in progress for this product and version.'}
+                </p>
+                {pipelineConflict.existing_status && (
+                  <p className="text-sm text-gray-600">
+                    Current status: <strong>{pipelineConflict.existing_status}</strong>
+                  </p>
+                )}
+                <p className="text-sm text-gray-600 mt-3">
+                  {pipelineConflict.suggestion || 'You can force run to cancel the existing run and start a new one, or wait for the current run to complete.'}
+                </p>
+              </div>
+              <div className="flex justify-end space-x-3">
+                <Button
+                  variant="outline"
+                  onClick={() => setPipelineConflict(null)}
+                  disabled={triggering}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => handleTriggerPipeline(true)}
+                  disabled={triggering}
+                  className="bg-orange-600 hover:bg-orange-700 text-white"
+                >
+                  {triggering ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Starting...
+                    </>
+                  ) : (
+                    'Force Run (Override)'
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Error State */}
         {error && (
@@ -269,7 +550,7 @@ export default function PipelineRunsPage() {
             <p className="text-gray-600 mb-6">
               Trigger a pipeline run to start processing your data product.
             </p>
-            <Button onClick={handleTriggerPipeline} disabled={triggering}>
+            <Button onClick={() => handleTriggerPipeline(false)} disabled={triggering}>
               <Play className="h-4 w-4 mr-2" />
               {triggering ? 'Triggering...' : 'Trigger First Pipeline Run'}
             </Button>
@@ -296,23 +577,35 @@ export default function PipelineRunsPage() {
                       AIRD Stages
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      DAG Run ID
+                      Chunking Config
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
                     </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {pipelineRuns.map((run) => {
                     const stagesInfo = getAirdStagesInfo(run.metrics)
+                    const chunkingConfig = getChunkingConfigForRun(run)
+                    const configSummary = formatChunkingConfigSummary(chunkingConfig)
                     return (
                       <tr key={run.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900">v{run.version}</div>
+                          <div className="flex items-center space-x-2">
+                            <span className="text-sm font-medium text-gray-900">v{run.version}</span>
+                            {product?.promoted_version === run.version && (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gradient-to-r from-purple-500 to-pink-600 text-white shadow-sm">
+                                🚀 PROD
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center gap-2">
-                            {getStatusIcon(run.status)}
-                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(run.status)}`}>
-                              {run.status.replace('_', ' ')}
+                            {getStatusIcon(run.status || 'unknown')}
+                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(run.status || 'unknown')}`}>
+                              {(run.status || 'unknown').replace(/_/g, ' ')}
                             </span>
                           </div>
                         </td>
@@ -324,13 +617,11 @@ export default function PipelineRunsPage() {
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">
-                            {formatDuration(run.started_at, run.finished_at)}
-                          </div>
+                          <DurationCell run={run} currentTime={currentTime} />
                         </td>
                         <td className="px-6 py-4">
                           {stagesInfo ? (
-                            <div className="text-sm text-gray-900">
+                            <div className="text-sm text-gray-900 mb-2">
                               <div className="font-medium">
                                 {stagesInfo.completed}/{stagesInfo.total} completed
                               </div>
@@ -341,18 +632,77 @@ export default function PipelineRunsPage() {
                                 </div>
                               )}
                             </div>
+                          ) : null}
+                          <div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleViewDetails(run)}
+                              className="flex items-center gap-1"
+                            >
+                              <Eye className="h-4 w-4" />
+                              View Stages
+                            </Button>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          {chunkingConfig !== null ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleViewChunkingConfig(run)}
+                              disabled={loadingChunkingConfig}
+                              className="flex items-center gap-1"
+                            >
+                              {loadingChunkingConfig ? (
+                                <>
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  Loading...
+                                </>
+                              ) : (
+                                <>
+                                  <Settings className="h-4 w-4" />
+                                  View Config
+                                </>
+                              )}
+                            </Button>
                           ) : (
-                            <span className="text-sm text-gray-400">No stages tracked</span>
+                            <span className="text-sm text-gray-400">No config</span>
                           )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-500 font-mono">
-                            {run.dag_run_id ? (
-                              <span className="truncate max-w-xs inline-block" title={run.dag_run_id}>
-                                {run.dag_run_id}
-                              </span>
-                            ) : (
-                              <span className="text-gray-400">N/A</span>
+                          <div className="flex items-center gap-2">
+                            {(run.status === 'running' || run.status === 'queued') && run.id && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleCancelRun(run.id!)}
+                                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                              >
+                                <Square className="h-4 w-4 mr-1 fill-current" />
+                                Stop
+                              </Button>
+                            )}
+                            {run.status === 'succeeded' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handlePromoteVersion(run.version)}
+                                disabled={promotingVersion === run.version || product?.promoted_version === run.version}
+                                className={
+                                  product?.promoted_version === run.version
+                                    ? 'bg-green-100 text-green-800 hover:bg-green-100 cursor-default'
+                                    : promotingVersion === run.version
+                                    ? 'bg-gray-100 text-gray-500 cursor-not-allowed'
+                                    : 'bg-blue-100 text-blue-800 hover:bg-blue-200'
+                                }
+                              >
+                                {product?.promoted_version === run.version
+                                  ? '✓ Promoted'
+                                  : promotingVersion === run.version
+                                  ? 'Promoting...'
+                                  : 'Promote to Prod'}
+                              </Button>
                             )}
                           </div>
                         </td>
@@ -362,6 +712,36 @@ export default function PipelineRunsPage() {
                 </tbody>
               </table>
             </div>
+            {/* Pagination Controls */}
+            {totalRuns > RUNS_PER_PAGE && (
+              <div className="mt-4 flex items-center justify-between border-t border-gray-200 px-6 py-4 bg-white">
+                <div className="text-sm text-gray-700">
+                  Showing {currentPage * RUNS_PER_PAGE + 1} to{' '}
+                  {Math.min((currentPage + 1) * RUNS_PER_PAGE, totalRuns)} of{' '}
+                  {totalRuns} runs
+                </div>
+                <div className="flex space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => loadPipelineRuns(currentPage - 1)}
+                    disabled={currentPage === 0 || loading}
+                    className="px-3 py-1.5"
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => loadPipelineRuns(currentPage + 1)}
+                    disabled={(currentPage + 1) * RUNS_PER_PAGE >= totalRuns || loading}
+                    className="px-3 py-1.5"
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -374,6 +754,26 @@ export default function PipelineRunsPage() {
             </p>
           </div>
         )}
+
+        {/* Pipeline Details Modal */}
+        {selectedRunForDetails && (
+          <PipelineDetailsModal
+            isOpen={!!selectedRunForDetails}
+            onClose={handleCloseDetails}
+            runId={selectedRunForDetails.id!}
+            runVersion={selectedRunForDetails.version}
+            runStatus={selectedRunForDetails.status || 'unknown'}
+            initialMetrics={selectedRunForDetails.metrics}
+            onPipelineCancelled={handlePipelineCancelled}
+          />
+        )}
+
+        {/* Chunking Config Modal */}
+        <ChunkingConfigModal
+          isOpen={!!selectedChunkingConfig}
+          onClose={() => setSelectedChunkingConfig(null)}
+          config={selectedChunkingConfig}
+        />
       </div>
     </AppLayout>
   )
