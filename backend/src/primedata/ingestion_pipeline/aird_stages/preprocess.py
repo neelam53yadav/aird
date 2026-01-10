@@ -939,6 +939,7 @@ class PreprocessStage(AirdStage):
 
             # chunk_size is already in tokens, use it directly as max_tokens
             max_tokens = int(manual_settings.get("chunk_size", playbook_chunking.get("max_tokens", 900)))
+            chunk_size = max_tokens
             # chunk_overlap is already in tokens
             chunk_overlap = int(manual_settings.get("chunk_overlap", 200))
             # Estimate: 1 sentence ≈ 20 tokens, so overlap_sentences = chunk_overlap / 20
@@ -1017,17 +1018,34 @@ class PreprocessStage(AirdStage):
                 auto_settings = chunking_config.get("auto_settings", {})
                 if isinstance(auto_settings, dict):
                     confidence_threshold = auto_settings.get("confidence_threshold", confidence_threshold)
-                if (
-                    resolved_settings.get("confidence") is not None
-                    and resolved_settings.get("confidence") < confidence_threshold
-                ):
-                    self.logger.info(
-                        "Resolved_settings confidence %.2f below threshold %.2f; rerunning analysis.",
-                        resolved_settings.get("confidence"),
+                resolved_confidence = resolved_settings.get("confidence")
+                analysis_confidence = chunking_config.get("analysis_confidence")
+                confidence_met = resolved_settings.get("confidence_met")
+                low_confidence = (
+                    confidence_met is False
+                    or (resolved_confidence is not None and resolved_confidence < confidence_threshold)
+                    or (analysis_confidence is not None and analysis_confidence < confidence_threshold)
+                )
+                if low_confidence:
+                    self.logger.warning(
+                        "Low confidence chunking detection; falling back to default/general chunking settings "
+                        "(confidence=%.2f, analysis_confidence=%s, threshold=%.2f).",
+                        resolved_confidence if resolved_confidence is not None else -1.0,
+                        analysis_confidence,
                         confidence_threshold,
                     )
-                    std_logger.info("Resolved_settings below confidence threshold; rerunning analysis.")
-                    resolved_settings = {}
+                    std_logger.warning("Low confidence chunking detection; falling back to defaults.")
+                    resolved_settings = {
+                        "chunk_size": resolved_settings.get("chunk_size", 1000),
+                        "chunk_overlap": resolved_settings.get("chunk_overlap", 200),
+                        "min_chunk_size": resolved_settings.get("min_chunk_size", 100),
+                        "max_chunk_size": resolved_settings.get("max_chunk_size", 2000),
+                        "chunking_strategy": "fixed_size",
+                        "content_type": "general",
+                        "confidence": resolved_confidence if resolved_confidence is not None else 0.0,
+                        "reasoning": "Low confidence fallback to default chunking",
+                        "evidence": resolved_settings.get("evidence"),
+                    }
 
             if resolved_settings and isinstance(resolved_settings, dict):
                 # Use existing resolved_settings from task_preprocess auto-detection
@@ -1083,6 +1101,26 @@ class PreprocessStage(AirdStage):
                         strategy = manual_settings["chunking_strategy"]
                         self.logger.info(f"Overriding chunking_strategy with manual_settings: {strategy}")
                         std_logger.info(f"Overriding chunking_strategy with manual_settings: {strategy}")
+
+                if chunk_size <= 0:
+                    self.logger.warning(f"chunk_size {chunk_size} is invalid; using default 1000.")
+                    std_logger.warning(f"chunk_size {chunk_size} is invalid; using default 1000.")
+                    chunk_size = 1000
+                if chunk_overlap is None or chunk_overlap < 0:
+                    self.logger.warning(f"chunk_overlap {chunk_overlap} is invalid; using default 200.")
+                    std_logger.warning(f"chunk_overlap {chunk_overlap} is invalid; using default 200.")
+                    chunk_overlap = 200
+                if chunk_overlap >= chunk_size:
+                    adjusted_overlap = max(chunk_size - 1, 0)
+                    self.logger.warning(
+                        f"chunk_overlap {chunk_overlap} must be less than chunk_size {chunk_size}; "
+                        f"using {adjusted_overlap}."
+                    )
+                    std_logger.warning(
+                        f"chunk_overlap {chunk_overlap} must be less than chunk_size {chunk_size}; "
+                        f"using {adjusted_overlap}."
+                    )
+                    chunk_overlap = adjusted_overlap
             else:
                 # No resolved_settings, analyze content now (should only happen if auto-detection was skipped)
                 self.logger.info("No resolved_settings found, running content analysis in preprocessing stage")
@@ -1225,6 +1263,8 @@ class PreprocessStage(AirdStage):
             overlap_sents = int(playbook_chunking.get("overlap_sentences", 2))
             hard_overlap = int(playbook_chunking.get("hard_overlap_chars", 300))
             strategy = (playbook_chunking.get("strategy", "sentence") or "sentence").lower()
+            chunk_size = max_tokens
+            chunk_overlap = overlap_sents * 20  # approximate tokens
             resolved_chunking_config.update(
                 {
                     "source": "playbook_default",
@@ -1245,6 +1285,7 @@ class PreprocessStage(AirdStage):
         records: List[Dict[str, Any]] = []
         sections_detected = 0
         mid_sentence_ends = 0
+        chunks_before_rules = 0
 
         # Log chunking configuration being used
         self.logger.info(
@@ -1258,10 +1299,11 @@ class PreprocessStage(AirdStage):
         
         # Validate configuration before processing
         if max_tokens <= 0:
-            error_msg = f"Invalid chunking configuration: max_tokens={max_tokens}. Cannot process file {file_stem}."
+            error_msg = f"Invalid chunking configuration: max_tokens={max_tokens}. Falling back to 900."
             self.logger.error(error_msg)
             std_logger.error(error_msg)
-            return [], {"sections": 0, "chunks": 0, "mid_sentence_ends": 0, "chunking_config_used": resolved_chunking_config}
+            max_tokens = 900
+            chunk_size = max_tokens
         
         # First, estimate total chunks for progress tracking
         estimated_chunks = 0
@@ -1340,7 +1382,8 @@ class PreprocessStage(AirdStage):
                     if page_text:
                         first_lines = "\n".join(page_text.split("\n")[:3])
                         self.logger.debug(f"First 3 lines of page {page_num}: {first_lines}")
-                    continue
+                    sections = [(f"Page {page_num}", "full_page", page_text)]
+                    sections_detected += 1
             except Exception as e:
                 self.logger.error(
                     f"Error detecting sections on page {page_num} for {file_stem}: {e}",
@@ -1387,11 +1430,18 @@ class PreprocessStage(AirdStage):
                         f"❌ No chunks created for section '{canon_section}' on page {page_num} for {file_stem}. "
                         f"Text length: {len(body_text)}, Strategy: {strategy}, Max tokens: {max_tokens}"
                     )
-                    # Log first 200 chars of body_text to help diagnose
                     if body_text:
                         preview = body_text[:200].replace('\n', '\\n')
                         self.logger.debug(f"First 200 chars of body_text for section '{canon_section}': {preview}")
-                    continue
+                    self.logger.warning(
+                        f"Falling back to single chunk for section '{canon_section}' on page {page_num}."
+                    )
+                    std_logger.warning(
+                        f"Falling back to single chunk for section '{canon_section}' on page {page_num}."
+                    )
+                    chunks = [body_text]
+
+                chunks_before_rules += len(chunks)
                 
                 # Log first few chunks for debugging
                 if chunks_processed == 0:
@@ -1691,13 +1741,25 @@ class PreprocessStage(AirdStage):
         std_logger.info(
             f"📊 Summary for {file_stem}: pages={len(pages)}, sections={sections_detected}, chunks={total_chunks}"
         )
+
+        self.logger.info(
+            f"📊 Chunking diagnostics for {file_stem}: "
+            f"pages_with_content={len(pages)}, "
+            f"chunks_before_rules={chunks_before_rules}, "
+            f"chunks_after_rules={total_chunks}"
+        )
+        std_logger.info(
+            f"📊 Chunking diagnostics: pages_with_content={len(pages)}, "
+            f"chunks_before_rules={chunks_before_rules}, chunks_after_rules={total_chunks}"
+        )
         
         # If no records were created, provide detailed diagnostic info
         if total_chunks == 0:
             self.logger.error(
                 f"❌ No records created for {file_stem}! "
                 f"Pages processed: {len(pages)}, Sections detected: {sections_detected}, "
-                f"Strategy: {strategy}, Max tokens: {max_tokens}"
+                f"Strategy: {strategy}, Max tokens: {max_tokens}, "
+                f"chunk_size={chunk_size}, chunk_overlap={chunk_overlap}"
             )
             std_logger.error(
                 f"❌ No records created for {file_stem}! "
