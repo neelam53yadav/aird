@@ -936,6 +936,7 @@ class PreprocessStage(AirdStage):
             "mode": chunking_config.get("mode", "auto"),
             "source": None,  # manual | product_auto | playbook_default
         }
+        hint_reason = None
         confidence_threshold = None
         confidence = None
         confidence_met = None
