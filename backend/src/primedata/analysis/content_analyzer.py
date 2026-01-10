@@ -15,6 +15,35 @@ from typing import Any, Dict, List, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 
+def build_representative_sample(text: str, chunk: int = 5000, max_total: int = 20000) -> str:
+    """Build a representative text sample using head, middle, and tail segments."""
+    if not text:
+        return ""
+
+    normalized = " ".join(text.split())
+    if not normalized:
+        return ""
+
+    if len(normalized) <= max_total:
+        return normalized[:max_total]
+
+    segment_size = min(chunk, max_total // 3)
+    midpoint = len(normalized) // 2
+    half_segment = segment_size // 2
+    middle_start = max(0, midpoint - half_segment)
+    middle_end = middle_start + segment_size
+    if middle_end > len(normalized):
+        middle_end = len(normalized)
+        middle_start = max(0, middle_end - segment_size)
+
+    head = normalized[:segment_size]
+    middle = normalized[middle_start:middle_end]
+    tail = normalized[-segment_size:]
+
+    sample = f"{head} === MIDDLE SAMPLE === {middle} === END SAMPLE === {tail}"
+    return sample[:max_total]
+
+
 class ContentType(str, Enum):
     """Content type enumeration."""
 
@@ -195,7 +224,8 @@ class ContentAnalyzer:
         self, 
         content: str, 
         filename: Optional[str] = None,
-        hint: Optional[str] = None
+        hint: Optional[str] = None,
+        full_text_length: Optional[int] = None,
     ) -> ChunkingConfig:
         """
         Analyze content and return optimal chunking configuration.
@@ -204,11 +234,18 @@ class ContentAnalyzer:
             content: The text content to analyze
             filename: Optional filename for additional context
             hint: Optional domain hint from playbook (e.g., "regulatory", "legal", "finance_banking")
+            full_text_length: Optional length of the full text when analyzing a sample
 
         Returns:
             ChunkingConfig with optimal settings and detection evidence
         """
-        logger.info(f"Analyzing content: {len(content)} characters" + (f" (hint: {hint})" if hint else ""))
+        if full_text_length is not None and full_text_length != len(content):
+            logger.info(
+                f"Analyzing content sample length: {len(content)} characters (full text: {full_text_length})"
+                + (f" (hint: {hint})" if hint else "")
+            )
+        else:
+            logger.info(f"Analyzing content: {len(content)} characters" + (f" (hint: {hint})" if hint else ""))
 
         # Detect content type with hint and evidence
         content_type, confidence, evidence = self._detect_content_type(content, filename, hint)
