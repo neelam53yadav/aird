@@ -876,20 +876,6 @@ class PreprocessStage(AirdStage):
             self.logger.error(error_msg)
             std_logger.error(error_msg)
             return [], {"sections": 0, "chunks": 0, "mid_sentence_ends": 0, "chunking_config_used": resolved_chunking_config}
-            self.logger.info(
-                f"📄 Page summary for {file_stem}: {len(pages)} pages, "
-                f"total_chars={total_chars:,}, avg_chars_per_page={avg_chars_per_page:,}"
-            )
-            std_logger.info(
-                f"📄 Page summary: {len(pages)} pages, total_chars={total_chars:,}"
-            )
-            # Log preview of first page
-            if pages[0].get("text"):
-                first_page_preview = pages[0]["text"][:200].replace("\n", " ")
-                self.logger.info(f"First page preview (page {pages[0].get('page', '?')}): {first_page_preview}...")
-        else:
-            self.logger.error(f"⚠️ No pages with content found for {file_stem} after processing!")
-            std_logger.error(f"⚠️ No pages with content found for {file_stem}")
 
         # Check for enhanced metadata extraction flag from chunking_config
         preprocessing_flags = {}
