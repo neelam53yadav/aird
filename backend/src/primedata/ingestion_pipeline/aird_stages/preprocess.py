@@ -343,6 +343,22 @@ class PreprocessStage(AirdStage):
                 self.logger.info(
                     f"[PreprocessStage] ✓ Successfully loaded raw text for {file_stem}: {len(raw_text)} characters"
                 )
+                std_logger.info(
+                    f"[PreprocessStage] ✓ Successfully loaded raw text for {file_stem}: {len(raw_text)} characters"
+                )
+                
+                # Validate raw_text has content
+                if not raw_text or len(raw_text.strip()) == 0:
+                    error_msg = f"[PreprocessStage] ❌ Raw text is empty for {file_stem} after extraction"
+                    self.logger.error(error_msg)
+                    std_logger.error(error_msg)
+                    failed_files.append(file_stem)
+                    continue
+                
+                # Log preview of raw text
+                preview = raw_text[:200].replace('\n', '\\n')
+                self.logger.debug(f"[PreprocessStage] Raw text preview for {file_stem}: {preview}...")
+                std_logger.debug(f"[PreprocessStage] Raw text preview for {file_stem}: {preview[:100]}...")
 
                 # Route playbook if not provided
                 file_playbook_id = initial_playbook_id  # Use initial playbook_id for this file
@@ -378,6 +394,17 @@ class PreprocessStage(AirdStage):
                     playbook = {}
 
                 # Process document
+                self.logger.info(
+                    f"[PreprocessStage] About to process document {file_stem}: "
+                    f"text_length={len(raw_text)}, playbook_id={playbook_id}, "
+                    f"chunking_config_mode={chunking_config.get('mode') if chunking_config else 'None'}, "
+                    f"has_resolved_settings={'resolved_settings' in (chunking_config or {})}"
+                )
+                std_logger.info(
+                    f"[PreprocessStage] Processing document {file_stem}: "
+                    f"text_length={len(raw_text)}, playbook_id={playbook_id}"
+                )
+                
                 records, stats = self._process_document(
                     raw_text=raw_text,
                     file_stem=file_stem,
@@ -385,6 +412,16 @@ class PreprocessStage(AirdStage):
                     playbook=playbook,
                     playbook_id=playbook_id,
                     chunking_config=chunking_config,  # Pass product chunking config
+                )
+                
+                self.logger.info(
+                    f"[PreprocessStage] Document processing completed for {file_stem}: "
+                    f"records={len(records)}, sections={stats.get('sections', 0)}, "
+                    f"chunks={stats.get('chunks', 0)}"
+                )
+                std_logger.info(
+                    f"[PreprocessStage] Document processing completed: "
+                    f"records={len(records)}, sections={stats.get('sections', 0)}"
                 )
 
                 all_records.extend(records)
@@ -583,6 +620,25 @@ class PreprocessStage(AirdStage):
 
             cleaned_pages.append({"page": page_num, "text": page_text})
 
+        # Log cleaned pages summary
+        total_cleaned_chars = sum(len(p.get("text", "")) for p in cleaned_pages)
+        pages_with_content = [p for p in cleaned_pages if p.get("text", "").strip()]
+        self.logger.info(
+            f"✅ Text cleaning completed for {file_stem}: "
+            f"{len(cleaned_pages)} total pages, {len(pages_with_content)} pages with content, "
+            f"{total_cleaned_chars:,} total characters"
+        )
+        std_logger.info(
+            f"✅ Text cleaning completed: {len(cleaned_pages)} pages, "
+            f"{len(pages_with_content)} with content, {total_cleaned_chars:,} chars"
+        )
+        
+        if len(pages_with_content) == 0:
+            error_msg = f"❌ No pages with content after cleaning for {file_stem}. All pages are empty."
+            self.logger.error(error_msg)
+            std_logger.error(error_msg)
+            return [], {"sections": 0, "chunks": 0, "mid_sentence_ends": 0, "chunking_config_used": {}}
+
         # Combine pages back into single text for optimization (which works at document level)
         # Add page markers back so they can be detected during re-splitting after optimization
         # This preserves page information through the optimization step
@@ -740,6 +796,15 @@ class PreprocessStage(AirdStage):
         else:
             # No stored boundaries, just re-split normally
             pages = split_pages_by_config(cleaned, playbook.get("page_fences", []))
+        
+        # Log re-split results
+        self.logger.info(
+            f"✅ Re-split after optimization for {file_stem}: "
+            f"{len(pages)} pages found, {len(cleaned):,} total characters"
+        )
+        std_logger.info(
+            f"✅ Re-split after optimization: {len(pages)} pages, {len(cleaned):,} chars"
+        )
 
         # Validate that we have pages with content
         if not pages:
@@ -791,6 +856,26 @@ class PreprocessStage(AirdStage):
         if pages:
             total_chars = sum(len(p.get("text", "")) for p in pages)
             avg_chars_per_page = total_chars // len(pages) if pages else 0
+            self.logger.info(
+                f"📄 Page summary for {file_stem}: "
+                f"{len(pages)} pages, {total_chars:,} total chars, "
+                f"{avg_chars_per_page:,} avg chars/page"
+            )
+            std_logger.info(
+                f"📄 Page summary: {len(pages)} pages, {total_chars:,} chars"
+            )
+            
+            # Log first few pages' content preview
+            for i, page_data in enumerate(pages[:3]):
+                page_text = page_data.get("text", "")
+                page_num = page_data.get("page", i+1)
+                preview = page_text[:150].replace('\n', '\\n')
+                self.logger.debug(f"Page {page_num} preview: {preview}...")
+        else:
+            error_msg = f"❌ No pages with content after re-splitting for {file_stem}. Optimization may have removed all content."
+            self.logger.error(error_msg)
+            std_logger.error(error_msg)
+            return [], {"sections": 0, "chunks": 0, "mid_sentence_ends": 0, "chunking_config_used": resolved_chunking_config}
             self.logger.info(
                 f"📄 Page summary for {file_stem}: {len(pages)} pages, "
                 f"total_chars={total_chars:,}, avg_chars_per_page={avg_chars_per_page:,}"
@@ -923,7 +1008,7 @@ class PreprocessStage(AirdStage):
                     f"✅ Using existing resolved_settings from auto-detection"
                 )
                 
-                # Extract values from resolved_settings
+                # Extract values from resolved_settings with validation
                 chunk_size = resolved_settings.get("chunk_size", 1000)
                 chunk_overlap = resolved_settings.get("chunk_overlap", 200)
                 min_chunk_size = resolved_settings.get("min_chunk_size", 100)
@@ -934,19 +1019,36 @@ class PreprocessStage(AirdStage):
                 reasoning = resolved_settings.get("reasoning", "Auto-detected from sample files")
                 evidence = resolved_settings.get("evidence")
                 
-                # Allow manual_settings to override if explicitly provided
-                if manual_settings.get("chunk_size"):
+                # Validate extracted values
+                if not chunk_size or chunk_size <= 0:
+                    self.logger.error(f"Invalid chunk_size from resolved_settings: {chunk_size}. Using default 1000.")
+                    std_logger.error(f"Invalid chunk_size from resolved_settings: {chunk_size}. Using default 1000.")
+                    chunk_size = 1000
+                if chunk_overlap is None or chunk_overlap < 0:
+                    self.logger.error(f"Invalid chunk_overlap from resolved_settings: {chunk_overlap}. Using default 200.")
+                    std_logger.error(f"Invalid chunk_overlap from resolved_settings: {chunk_overlap}. Using default 200.")
+                    chunk_overlap = 200
+                if not strategy:
+                    self.logger.error(f"Invalid strategy from resolved_settings: {strategy}. Using default 'fixed_size'.")
+                    std_logger.error(f"Invalid strategy from resolved_settings: {strategy}. Using default 'fixed_size'.")
+                    strategy = "fixed_size"
+                
+                # Allow manual_settings to override if explicitly provided (check if key exists, not just truthy)
+                if "chunk_size" in manual_settings and manual_settings.get("chunk_size"):
                     chunk_size = manual_settings["chunk_size"]
                     self.logger.info(f"Overriding chunk_size with manual_settings: {chunk_size}")
-                if manual_settings.get("chunk_overlap"):
+                    std_logger.info(f"Overriding chunk_size with manual_settings: {chunk_size}")
+                if "chunk_overlap" in manual_settings and manual_settings.get("chunk_overlap") is not None:
                     chunk_overlap = manual_settings["chunk_overlap"]
-                if manual_settings.get("min_chunk_size"):
+                    self.logger.info(f"Overriding chunk_overlap with manual_settings: {chunk_overlap}")
+                if "min_chunk_size" in manual_settings and manual_settings.get("min_chunk_size"):
                     min_chunk_size = manual_settings["min_chunk_size"]
-                if manual_settings.get("max_chunk_size"):
+                if "max_chunk_size" in manual_settings and manual_settings.get("max_chunk_size"):
                     max_chunk_size = manual_settings["max_chunk_size"]
-                if manual_settings.get("chunking_strategy"):
+                if "chunking_strategy" in manual_settings and manual_settings.get("chunking_strategy"):
                     strategy = manual_settings["chunking_strategy"]
                     self.logger.info(f"Overriding chunking_strategy with manual_settings: {strategy}")
+                    std_logger.info(f"Overriding chunking_strategy with manual_settings: {strategy}")
             else:
                 # No resolved_settings, analyze content now (should only happen if auto-detection was skipped)
                 self.logger.info("No resolved_settings found, running content analysis in preprocessing stage")
@@ -1044,10 +1146,27 @@ class PreprocessStage(AirdStage):
 
             # chunk_size is already in tokens, use it directly as max_tokens
             max_tokens = int(chunk_size) if chunk_size else int(playbook_chunking.get("max_tokens", 900))
+            
+            # Validate max_tokens is reasonable (must be > 0 and < 10000)
+            if max_tokens <= 0:
+                self.logger.error(f"Invalid max_tokens: {max_tokens} (chunk_size: {chunk_size}). Using default 900.")
+                std_logger.error(f"Invalid max_tokens: {max_tokens}. Using default 900.")
+                max_tokens = 900
+            elif max_tokens > 10000:
+                self.logger.warning(f"max_tokens {max_tokens} is very large. Capping at 4000.")
+                std_logger.warning(f"max_tokens {max_tokens} is very large. Capping at 4000.")
+                max_tokens = 4000
+            
             # Estimate: 1 sentence ≈ 20 tokens, so overlap_sentences = chunk_overlap / 20
             overlap_sents = max(1, int(chunk_overlap / 20))  # 1 sentence ≈ 20 tokens
             # Convert tokens to chars for hard_overlap: 1 token ≈ 4 chars
             hard_overlap = chunk_overlap * 4
+            
+            # Validate hard_overlap is reasonable
+            if hard_overlap <= 0:
+                hard_overlap = 300
+                self.logger.warning(f"Invalid hard_overlap calculated: {hard_overlap}. Using default 300.")
+                std_logger.warning(f"Invalid hard_overlap. Using default 300.")
 
             # Store resolved config with detection evidence
             resolved_chunking_config.update(
@@ -1103,7 +1222,14 @@ class PreprocessStage(AirdStage):
         std_logger.info(
             f"📊 Chunking config: strategy={strategy}, max_tokens={max_tokens}"
         )
-
+        
+        # Validate configuration before processing
+        if max_tokens <= 0:
+            error_msg = f"Invalid chunking configuration: max_tokens={max_tokens}. Cannot process file {file_stem}."
+            self.logger.error(error_msg)
+            std_logger.error(error_msg)
+            return [], {"sections": 0, "chunks": 0, "mid_sentence_ends": 0, "chunking_config_used": resolved_chunking_config}
+        
         # First, estimate total chunks for progress tracking
         estimated_chunks = 0
         total_text_length = 0
@@ -1219,14 +1345,19 @@ class PreprocessStage(AirdStage):
 
                 # Log if chunks are empty
                 if not chunks:
-                    self.logger.warning(
-                        f"No chunks created for section '{canon_section}' on page {page_num} for {file_stem}. "
+                    self.logger.error(
+                        f"❌ No chunks created for section '{canon_section}' on page {page_num} for {file_stem}. "
                         f"Body text length: {len(body_text)}, Strategy: {strategy}, Max tokens: {max_tokens}, "
                         f"Overlap sentences: {overlap_sents}, Hard overlap: {hard_overlap}"
                     )
-                    std_logger.warning(
-                        f"No chunks created for section '{canon_section}' on page {page_num} for {file_stem}"
+                    std_logger.error(
+                        f"❌ No chunks created for section '{canon_section}' on page {page_num} for {file_stem}. "
+                        f"Text length: {len(body_text)}, Strategy: {strategy}, Max tokens: {max_tokens}"
                     )
+                    # Log first 200 chars of body_text to help diagnose
+                    if body_text:
+                        preview = body_text[:200].replace('\n', '\\n')
+                        self.logger.debug(f"First 200 chars of body_text for section '{canon_section}': {preview}")
                     continue
                 
                 # Log first few chunks for debugging
