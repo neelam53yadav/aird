@@ -1198,6 +1198,7 @@ def task_preprocess(**context) -> Dict[str, Any]:
                             if isinstance(refreshed_chunking_config, dict) and refreshed_chunking_config.get("mode") == "auto":
                                 refreshed_chunking_config["manual_settings"] = {}
                             chunking_config = refreshed_chunking_config
+                            chunking_config = product.chunking_config
                             if product.playbook_id and not playbook_id:
                                 playbook_id = product.playbook_id
                             if isinstance(chunking_config, dict):
