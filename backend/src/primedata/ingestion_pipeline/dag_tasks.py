@@ -1190,6 +1190,18 @@ def task_preprocess(**context) -> Dict[str, Any]:
                         db.commit()
                         db.refresh(product)
                         logger.info("✅ Auto-detection updates committed to database")
+                        refreshed_product = db.get(Product, product_id)
+                        if refreshed_product:
+                            product = refreshed_product
+                            chunking_config = product.chunking_config
+                            if product.playbook_id and not playbook_id:
+                                playbook_id = product.playbook_id
+                            if isinstance(chunking_config, dict):
+                                logger.info(
+                                    "🔄 Refreshed chunking_config after auto-detection: "
+                                    f"last_analyzed={chunking_config.get('last_analyzed')}, "
+                                    f"sample_files_analyzed={chunking_config.get('sample_files_analyzed')}"
+                                )
                     else:
                         logger.info("ℹ️ No auto-detection updates needed or available")
                 except Exception as e:
