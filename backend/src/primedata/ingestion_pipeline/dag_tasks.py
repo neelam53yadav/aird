@@ -2175,7 +2175,6 @@ def task_indexing(**context) -> Dict[str, Any]:
                 flag_modified(pipeline_run, "metrics")
                 db.commit()
             if tracker:
-                from primedata.ingestion_pipeline.aird_stages.base import StageResult, StageStatus
                 skipped_result = StageResult(
                     status=StageStatus.SKIPPED,
                     stage_name="indexing",
