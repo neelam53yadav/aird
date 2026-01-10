@@ -188,6 +188,8 @@ class PreprocessStage(AirdStage):
         total_mid_sentence_ends = 0
         processed_files = []
         failed_files = []
+        file_chunk_counts: Dict[str, int] = {}
+        file_sections_counts: Dict[str, int] = {}
         chunking_config_used: Optional[Dict[str, Any]] = None
 
         for file_stem in raw_files:
@@ -425,6 +427,8 @@ class PreprocessStage(AirdStage):
                 )
 
                 all_records.extend(records)
+                file_chunk_counts[file_stem] = stats.get("chunks", 0)
+                file_sections_counts[file_stem] = stats.get("sections", 0)
                 total_sections += stats.get("sections", 0)
                 total_mid_sentence_ends += stats.get("mid_sentence_ends", 0)
                 if not chunking_config_used and stats.get("chunking_config_used"):
@@ -480,8 +484,8 @@ class PreprocessStage(AirdStage):
             {
                 "file_stem": stem,
                 "playbook_id": final_playbook_id,
-                "sections": total_sections,
-                "chunks": total_chunks,
+                "sections": file_sections_counts.get(stem, 0),
+                "chunks": file_chunk_counts.get(stem, 0),
                 "mid_sentence_boundary_rate": mid_sentence_rate,
             }
             for stem in processed_files
@@ -505,6 +509,7 @@ class PreprocessStage(AirdStage):
             "total_chunks": total_chunks,
             "mid_sentence_boundary_rate": mid_sentence_rate,
             "processed_file_list": processed_files,
+            "file_chunk_counts": file_chunk_counts,
             "chunking_config_used": chunking_config_used,
         }
 
@@ -975,19 +980,26 @@ class PreprocessStage(AirdStage):
             resolved_settings = chunking_config.get("resolved_settings", {})
             
             # Ensure manual_settings exists with defaults (fix for missing structure after vector_creation_enabled changes)
+            default_manual_settings = {
+                "chunk_size": 1000,
+                "chunk_overlap": 200,
+                "min_chunk_size": 100,
+                "max_chunk_size": 2000,
+                "chunking_strategy": "fixed_size",
+            }
             manual_settings = chunking_config.get("manual_settings", {})
+            manual_settings_provided = (
+                isinstance(manual_settings, dict)
+                and bool(manual_settings)
+                and manual_settings != default_manual_settings
+            )
             if not manual_settings or not isinstance(manual_settings, dict):
                 # Fallback to defaults if manual_settings is missing or invalid
-                manual_settings = {
-                    "chunk_size": 1000,
-                    "chunk_overlap": 200,
-                    "min_chunk_size": 100,
-                    "max_chunk_size": 2000,
-                    "chunking_strategy": "fixed_size",
-                }
+                manual_settings = default_manual_settings.copy()
                 chunking_config["manual_settings"] = manual_settings
                 self.logger.info(f"✅ Initialized missing manual_settings with defaults: {manual_settings}")
                 std_logger.info(f"✅ Initialized missing manual_settings with defaults")
+                manual_settings_provided = False
             
             if resolved_settings and isinstance(resolved_settings, dict):
                 # Use existing resolved_settings from task_preprocess auto-detection
@@ -1026,22 +1038,23 @@ class PreprocessStage(AirdStage):
                     std_logger.error(f"Invalid strategy from resolved_settings: {strategy}. Using default 'fixed_size'.")
                     strategy = "fixed_size"
                 
-                # Allow manual_settings to override if explicitly provided (check if key exists, not just truthy)
-                if "chunk_size" in manual_settings and manual_settings.get("chunk_size"):
-                    chunk_size = manual_settings["chunk_size"]
-                    self.logger.info(f"Overriding chunk_size with manual_settings: {chunk_size}")
-                    std_logger.info(f"Overriding chunk_size with manual_settings: {chunk_size}")
-                if "chunk_overlap" in manual_settings and manual_settings.get("chunk_overlap") is not None:
-                    chunk_overlap = manual_settings["chunk_overlap"]
-                    self.logger.info(f"Overriding chunk_overlap with manual_settings: {chunk_overlap}")
-                if "min_chunk_size" in manual_settings and manual_settings.get("min_chunk_size"):
-                    min_chunk_size = manual_settings["min_chunk_size"]
-                if "max_chunk_size" in manual_settings and manual_settings.get("max_chunk_size"):
-                    max_chunk_size = manual_settings["max_chunk_size"]
-                if "chunking_strategy" in manual_settings and manual_settings.get("chunking_strategy"):
-                    strategy = manual_settings["chunking_strategy"]
-                    self.logger.info(f"Overriding chunking_strategy with manual_settings: {strategy}")
-                    std_logger.info(f"Overriding chunking_strategy with manual_settings: {strategy}")
+                # Allow manual_settings to override only if explicitly provided (not defaults)
+                if manual_settings_provided:
+                    if "chunk_size" in manual_settings and manual_settings.get("chunk_size"):
+                        chunk_size = manual_settings["chunk_size"]
+                        self.logger.info(f"Overriding chunk_size with manual_settings: {chunk_size}")
+                        std_logger.info(f"Overriding chunk_size with manual_settings: {chunk_size}")
+                    if "chunk_overlap" in manual_settings and manual_settings.get("chunk_overlap") is not None:
+                        chunk_overlap = manual_settings["chunk_overlap"]
+                        self.logger.info(f"Overriding chunk_overlap with manual_settings: {chunk_overlap}")
+                    if "min_chunk_size" in manual_settings and manual_settings.get("min_chunk_size"):
+                        min_chunk_size = manual_settings["min_chunk_size"]
+                    if "max_chunk_size" in manual_settings and manual_settings.get("max_chunk_size"):
+                        max_chunk_size = manual_settings["max_chunk_size"]
+                    if "chunking_strategy" in manual_settings and manual_settings.get("chunking_strategy"):
+                        strategy = manual_settings["chunking_strategy"]
+                        self.logger.info(f"Overriding chunking_strategy with manual_settings: {strategy}")
+                        std_logger.info(f"Overriding chunking_strategy with manual_settings: {strategy}")
             else:
                 # No resolved_settings, analyze content now (should only happen if auto-detection was skipped)
                 self.logger.info("No resolved_settings found, running content analysis in preprocessing stage")
@@ -1092,17 +1105,18 @@ class PreprocessStage(AirdStage):
                         f"chunk_size: {chunk_size}, overlap: {chunk_overlap})"
                     )
                     
-                    # Allow manual_settings to override if provided
-                    if manual_settings.get("chunk_size"):
-                        chunk_size = manual_settings["chunk_size"]
-                    if manual_settings.get("chunk_overlap"):
-                        chunk_overlap = manual_settings["chunk_overlap"]
-                    if manual_settings.get("min_chunk_size"):
-                        min_chunk_size = manual_settings["min_chunk_size"]
-                    if manual_settings.get("max_chunk_size"):
-                        max_chunk_size = manual_settings["max_chunk_size"]
-                    if manual_settings.get("chunking_strategy"):
-                        strategy = manual_settings["chunking_strategy"]
+                    # Allow manual_settings to override only if explicitly provided
+                    if manual_settings_provided:
+                        if manual_settings.get("chunk_size"):
+                            chunk_size = manual_settings["chunk_size"]
+                        if manual_settings.get("chunk_overlap"):
+                            chunk_overlap = manual_settings["chunk_overlap"]
+                        if manual_settings.get("min_chunk_size"):
+                            min_chunk_size = manual_settings["min_chunk_size"]
+                        if manual_settings.get("max_chunk_size"):
+                            max_chunk_size = manual_settings["max_chunk_size"]
+                        if manual_settings.get("chunking_strategy"):
+                            strategy = manual_settings["chunking_strategy"]
                         
                 except Exception as e:
                     # Fallback to default if analysis fails
