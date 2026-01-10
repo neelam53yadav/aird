@@ -246,6 +246,40 @@ export default function NewProductPage() {
                 Choose a descriptive name for your data product
               </p>
             </div>
+
+            <div>
+              <Label htmlFor="use-case-description">Use Case Description (Optional)</Label>
+              <textarea
+                id="use-case-description"
+                value={useCaseDescription}
+                onChange={(e) => setUseCaseDescription(e.target.value)}
+                placeholder="Describe the use case for this product..."
+                className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-md bg-white min-h-[100px]"
+                disabled={loading}
+                rows={4}
+              />
+              <p className="mt-1 text-sm text-gray-500">
+                Optional description of the use case for this product. This can only be set during creation.
+              </p>
+            </div>
+
+            <div>
+              <Label htmlFor="vector-creation-enabled" className="flex items-center space-x-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  id="vector-creation-enabled"
+                  checked={vectorCreationEnabled}
+                  onChange={(e) => setVectorCreationEnabled(e.target.checked)}
+                  disabled={loading}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <span className="font-medium">Enable Vector Creation</span>
+              </Label>
+              <p className="mt-1 ml-6 text-sm text-gray-500">
+                Enable vector/embedding creation and indexing in Qdrant during pipeline runs. Uncheck to skip vector creation.
+              </p>
+            </div>
+
             <div>
               <Label htmlFor="document-type">Document Type</Label>
               <select
@@ -429,43 +463,6 @@ export default function NewProductPage() {
                   </div>
                 </div>
               )}
-            </div>
-
-            <div className="space-y-4 pt-4 border-t border-gray-200">
-              <div>
-                <Label htmlFor="vector-creation-enabled" className="flex items-center space-x-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    id="vector-creation-enabled"
-                    checked={vectorCreationEnabled}
-                    onChange={(e) => setVectorCreationEnabled(e.target.checked)}
-                    disabled={loading}
-                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                  />
-                  <span className="font-medium">Enable Vector Creation</span>
-                </Label>
-                <p className="mt-1 ml-6 text-sm text-gray-500">
-                  Enable vector/embedding creation and indexing in Qdrant during pipeline runs. Uncheck to skip vector creation.
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-4 pt-4 border-t border-gray-200">
-              <div>
-                <Label htmlFor="use-case-description">Use Case Description (Optional)</Label>
-                <textarea
-                  id="use-case-description"
-                  value={useCaseDescription}
-                  onChange={(e) => setUseCaseDescription(e.target.value)}
-                  placeholder="Describe the use case for this product..."
-                  className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-md bg-white min-h-[100px]"
-                  disabled={loading}
-                  rows={4}
-                />
-                <p className="mt-1 text-sm text-gray-500">
-                  Optional description of the use case for this product. This can only be set during creation.
-                </p>
-              </div>
             </div>
 
             {error && (
