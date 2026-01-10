@@ -826,6 +826,19 @@ export default function EditProductPage() {
 
             {/* Preprocessing Playbook Selection */}
             <div className="mb-6">
+              <div className="flex items-center justify-between mb-2">
+                <Label className="text-sm font-medium text-gray-700">Preprocessing Playbook</Label>
+                {(!formData.playbook_id && !(product as any)?.playbook_id) && (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                    Auto-Detect
+                  </span>
+                )}
+                {(product as any)?.playbook_selection?.method === 'auto_detected' && (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    Auto-Detected
+                  </span>
+                )}
+              </div>
               <PlaybookSelector
                 value={formData.playbook_id || undefined}
                 onChange={(playbookId) => handleInputChange('playbook_id', playbookId as string | undefined)}
@@ -834,10 +847,32 @@ export default function EditProductPage() {
                 showCustomizeButton={true}
               />
               <p className="mt-1 text-sm text-gray-500">
-                Select a preprocessing playbook to use for this product. If not selected, the system will auto-detect the best playbook based on content during pipeline execution.
+                Select a preprocessing playbook or leave empty for auto-detection during pipeline execution.
               </p>
-              {product && (product as any).playbook_id && (
-                <p className="mt-1 text-sm text-green-600">
+              {product && (product as any).playbook_selection && (
+                <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-md">
+                  <p className="text-sm text-green-800">
+                    <strong>Detection Method:</strong> {(product as any).playbook_selection.method === 'auto_detected' ? 'Auto-Detected' : 'Manual'}
+                  </p>
+                  {(product as any).playbook_selection.reason && (
+                    <p className="text-xs text-green-700 mt-1">
+                      Reason: {(product as any).playbook_selection.reason.replace(/_/g, ' ')}
+                    </p>
+                  )}
+                  {(product as any).playbook_selection.detected_at && (
+                    <p className="text-xs text-green-600 mt-1">
+                      Detected: {new Date((product as any).playbook_selection.detected_at).toLocaleString()}
+                    </p>
+                  )}
+                  {(product as any).playbook_selection.confidence && (
+                    <p className="text-xs text-green-700 mt-1">
+                      Confidence: {((product as any).playbook_selection.confidence * 100).toFixed(0)}%
+                    </p>
+                  )}
+                </div>
+              )}
+              {product && (product as any).playbook_id && (product as any).playbook_selection?.method !== 'auto_detected' && (
+                <p className="mt-2 text-sm text-green-600">
                   Current saved playbook: <strong>{(product as any).playbook_id}</strong>
                 </p>
               )}
@@ -1039,9 +1074,21 @@ export default function EditProductPage() {
 
               {/* Chunking Mode Selection */}
               <div className="mb-6">
-                <Label htmlFor="chunking_mode" className="block text-sm font-medium text-gray-700 mb-2">
-                  Chunking Mode
-                </Label>
+                <div className="flex items-center justify-between mb-2">
+                  <Label htmlFor="chunking_mode" className="block text-sm font-medium text-gray-700">
+                    Chunking Mode
+                  </Label>
+                  {formData.chunking_mode === 'auto' && (
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                      Auto-Detect
+                    </span>
+                  )}
+                  {formData.chunking_mode === 'auto' && (product as any)?.chunking_config?.resolved_settings && (
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                      Auto-Detected
+                    </span>
+                  )}
+                </div>
                 <div className="flex space-x-4">
                   <label className="flex items-center">
                     <input
@@ -1068,7 +1115,7 @@ export default function EditProductPage() {
                 </div>
                 <p className="mt-1 text-sm text-gray-500">
                   {formData.chunking_mode === 'auto' 
-                    ? 'AI will analyze your content and optimize chunking settings automatically'
+                    ? 'AI will analyze your content and optimize chunking settings automatically during pipeline execution'
                     : 'You have full control over chunking parameters for fine-tuning'
                   }
                 </p>
@@ -1078,21 +1125,60 @@ export default function EditProductPage() {
               {formData.chunking_mode === 'auto' && (
                 <div className="mb-6 p-4 bg-blue-50 rounded-lg">
                   <h4 className="text-sm font-medium text-blue-900 mb-3">Auto Configuration Settings</h4>
-                  {(product as any)?.chunking_config?.resolved_settings && (
+                  {(product as any)?.chunking_config?.resolved_settings ? (
                     <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-md">
                       <div className="flex items-start">
                         <Sparkles className="h-4 w-4 text-green-600 mt-0.5 mr-2 flex-shrink-0" />
                         <div className="flex-1">
-                          <p className="text-sm font-medium text-green-900">
-                            Content Type Detected: <strong>{(product as any).chunking_config.resolved_settings.content_type}</strong>
-                            {(product as any).chunking_config.resolved_settings.detection_confidence && (
+                          <p className="text-sm font-medium text-green-900 mb-2">
+                            ✅ Content Type Detected: <strong className="capitalize">{(product as any).chunking_config.resolved_settings.content_type}</strong>
+                            {(product as any).chunking_config.resolved_settings.confidence && (
                               <span className="ml-2 text-xs text-green-700">
-                                ({(Math.round((product as any).chunking_config.resolved_settings.detection_confidence * 100))}% confidence)
+                                ({(Math.round((product as any).chunking_config.resolved_settings.confidence * 100))}% confidence)
                               </span>
                             )}
                           </p>
-                          <p className="text-xs text-green-700 mt-1">
-                            The values below are from automatic content analysis. You can override them if needed.
+                          <div className="text-xs text-green-800 space-y-1 mt-2">
+                            <p><strong>Detected Settings:</strong></p>
+                            <ul className="list-disc list-inside ml-2 space-y-0.5">
+                              <li>Chunk Size: {(product as any).chunking_config.resolved_settings.chunk_size} tokens</li>
+                              <li>Chunk Overlap: {(product as any).chunking_config.resolved_settings.chunk_overlap} tokens</li>
+                              <li>Strategy: {(product as any).chunking_config.resolved_settings.chunking_strategy}</li>
+                              <li>Min Size: {(product as any).chunking_config.resolved_settings.min_chunk_size} tokens</li>
+                              <li>Max Size: {(product as any).chunking_config.resolved_settings.max_chunk_size} tokens</li>
+                            </ul>
+                            {(product as any).chunking_config.resolved_settings.reasoning && (
+                              <p className="mt-2 italic text-green-700">
+                                {(product as any).chunking_config.resolved_settings.reasoning}
+                              </p>
+                            )}
+                          </div>
+                          <p className="text-xs text-green-700 mt-2">
+                            These values were automatically detected from your content analysis. The settings below can be used to override defaults if needed.
+                          </p>
+                          {(product as any).chunking_config?.last_analyzed && (
+                            <p className="text-xs text-green-600 mt-1">
+                              Last analyzed: {new Date((product as any).chunking_config.last_analyzed).toLocaleString()}
+                            </p>
+                          )}
+                          {(product as any).chunking_config?.sample_files_analyzed && (product as any).chunking_config.sample_files_analyzed.length > 0 && (
+                            <p className="text-xs text-green-600 mt-1">
+                              Analyzed {((product as any).chunking_config.sample_files_analyzed as any[]).length} sample file{((product as any).chunking_config.sample_files_analyzed as any[]).length !== 1 ? 's' : ''}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mb-3 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                      <div className="flex items-start">
+                        <AlertCircle className="h-4 w-4 text-yellow-600 mt-0.5 mr-2 flex-shrink-0" />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-yellow-900">
+                            Auto-Detection Pending
+                          </p>
+                          <p className="text-xs text-yellow-700 mt-1">
+                            Chunking configuration will be automatically detected during the next pipeline run by analyzing sample files from your data sources.
                           </p>
                         </div>
                       </div>
