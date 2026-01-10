@@ -566,6 +566,13 @@ class PreprocessStage(AirdStage):
 
         for norm in pre_normalizers:
             pattern = norm.get("pattern", "")
+            if isinstance(pattern, list):
+                pattern = "[" + "".join(str(c) for c in pattern) + "]"
+            if not isinstance(pattern, str):
+                self.logger.warning(
+                    f"Normalizer pattern must be string or list, got {type(pattern)}: {pattern}, skipping"
+                )
+                continue
             # Check if this normalizer joins lines (could affect page markers)
             is_line_joiner = any(re.search(pat, pattern) for pat in line_joining_patterns)
             if is_line_joiner:
