@@ -410,7 +410,7 @@ export default function EditProductPage() {
     setFormData(prev => ({ ...prev, [field]: numValue }))
   }
 
-  const handleInputChange = (field: string, value: string | number | undefined) => {
+  const handleInputChange = (field: string, value: string | number | boolean | undefined) => {
     setFormData(prev => {
       const newData = {
         ...prev,
