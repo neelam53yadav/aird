@@ -31,7 +31,8 @@ async def submit_contact_form(request: ContactFormRequest):
     """
     Submit contact form.
     
-    Sends an email to primedata.feedback@gmail.com with the user's name, email, and feedback.
+    Sends an email to the configured feedback recipient (SMTP_TO_EMAIL or SMTP_USERNAME) 
+    with the user's name, email, and feedback.
     This endpoint is public (no authentication required) to allow anyone to contact us.
     """
     try:

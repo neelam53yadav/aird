@@ -37,7 +37,7 @@ settings = get_settings()
 
 # Create FastAPI app
 app = FastAPI(
-    title="PrimeData API",
+    title="AIRDops API",
     description="AI-ready data from any source",
     version="0.1.0",
     docs_url="/docs",
@@ -181,12 +181,6 @@ async def check_storage() -> Dict[str, Any]:
         return {"status": "unhealthy", "message": f"Storage connection failed: {str(e)}"}
 
 
-# MLflow check disabled - MLflow integration removed
-# async def check_mlflow() -> Dict[str, Any]:
-#     """Check MLflow connectivity."""
-#     ...
-
-
 async def check_airflow() -> Dict[str, Any]:
     """Check Airflow connectivity."""
     try:
@@ -211,7 +205,7 @@ async def check_airflow() -> Dict[str, Any]:
 @app.get("/health")
 async def health_check():
     """Comprehensive health check endpoint."""
-    # Check all services concurrently (MLflow removed)
+    # Check all services concurrently
     services = await asyncio.gather(check_database(), check_qdrant(), check_storage(), check_airflow(), return_exceptions=True)
 
     # Process results
@@ -241,7 +235,7 @@ async def health_check():
 
     return {
         "status": overall_status,
-        "service": "PrimeData",
+        "service": "AIRDops",
         "version": "0.1.0",
         "services": service_results,
         "timestamp": asyncio.get_event_loop().time(),
@@ -251,7 +245,7 @@ async def health_check():
 @app.get("/health/simple")
 async def simple_health_check():
     """Simple health check endpoint (app only)."""
-    return {"status": "ok", "service": "PrimeData", "version": "0.1.0"}
+    return {"status": "ok", "service": "AIRDops", "version": "0.1.0"}
 
 
 @app.get("/.well-known/jwks.json")

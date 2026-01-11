@@ -37,6 +37,8 @@ class ProductCreateRequest(BaseModel):
     playbook_id: Optional[str] = None  # Optional playbook ID (M1)
     chunking_config: Optional[Dict[str, Any]] = None  # Optional chunking configuration
     embedding_config: Optional[Dict[str, Any]] = None  # Optional embedding configuration
+    vector_creation_enabled: Optional[bool] = True  # Enable vector/embedding creation (default: True)
+    use_case_description: Optional[str] = None  # Use case description (only set during creation)
 
 
 class ChunkingConfigRequest(BaseModel):
@@ -52,6 +54,7 @@ class ProductUpdateRequest(BaseModel):
     playbook_id: Optional[str] = None
     chunking_config: Optional[ChunkingConfigRequest] = None
     embedding_config: Optional[Dict[str, Any]] = None
+    vector_creation_enabled: Optional[bool] = None  # Enable/disable vector creation (use_case_description not editable)
 
 
 class ProductResponse(BaseModel):
@@ -77,6 +80,8 @@ class ProductResponse(BaseModel):
     chunking_config: Optional[Dict[str, Any]] = None
     embedding_config: Optional[Dict[str, Any]] = None
     chunking_strategy: Optional[str] = None  # From latest successful pipeline run
+    vector_creation_enabled: bool = True  # Enable vector/embedding creation and indexing
+    use_case_description: Optional[str] = None  # Use case description (only set during creation)
     created_at: datetime
     updated_at: Optional[datetime] = None
 
@@ -162,6 +167,8 @@ async def create_product(
             chunking_config=request_body.chunking_config,  # Chunking configuration
             embedding_config=request_body.embedding_config
             or {"embedder_name": "minilm", "embedding_dimension": 384},  # Embedding configuration
+            vector_creation_enabled=request_body.vector_creation_enabled if request_body.vector_creation_enabled is not None else True,  # Default to True
+            use_case_description=request_body.use_case_description,  # Use case description (only during creation)
         )
 
         # Log the chunking config being saved
@@ -239,6 +246,8 @@ async def list_products(
             "trust_report_path": product.trust_report_path,
             "chunking_config": product.chunking_config,
             "embedding_config": product.embedding_config,
+            "vector_creation_enabled": product.vector_creation_enabled,
+            "use_case_description": product.use_case_description,
             "created_at": product.created_at,
             "updated_at": product.updated_at,
         }
@@ -299,6 +308,8 @@ async def get_product(
         "chunking_config": product.chunking_config,
         "embedding_config": product.embedding_config,
         "chunking_strategy": chunking_strategy,
+        "vector_creation_enabled": product.vector_creation_enabled,
+        "use_case_description": product.use_case_description,
         "created_at": product.created_at,
         "updated_at": product.updated_at,
     }
@@ -431,6 +442,11 @@ async def update_product(
             product.embedding_config = request_body.embedding_config
             logger.info(f"Updated embedding_config for product {product_id}: {product.embedding_config}")
 
+        # Update vector_creation_enabled (use_case_description is not editable)
+        if request_body.vector_creation_enabled is not None:
+            product.vector_creation_enabled = request_body.vector_creation_enabled
+            logger.info(f"Updated vector_creation_enabled for product {product_id}: {product.vector_creation_enabled}")
+
         # Log playbook_id update
         if request_body.playbook_id is not None:
             logger.info(f"Updated playbook_id for product {product_id}: {product.playbook_id}")
@@ -482,6 +498,8 @@ async def update_product(
             "trust_report_path": product.trust_report_path,
             "chunking_config": product.chunking_config,
             "embedding_config": product.embedding_config,
+            "vector_creation_enabled": product.vector_creation_enabled,
+            "use_case_description": product.use_case_description,
             "created_at": product.created_at,
             "updated_at": product.updated_at,
         }
@@ -1725,40 +1743,6 @@ async def auto_configure_chunking(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Auto-configuration failed: {str(e)}")
 
 
-@router.get("/{product_id}/mlflow-metrics")
-async def get_mlflow_metrics(
-    product_id: UUID, request: Request, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)
-):
-    """
-    Get MLflow metrics for the product's latest pipeline run.
-    DISABLED: MLflow integration removed.
-    """
-    # Ensure user has access to the product
-    product = ensure_product_access(db, request, product_id)
-
-    # Return empty response - MLflow disabled (no MLflow queries will be made)
-    return {"has_mlflow_data": False, "message": "MLflow tracking is disabled"}
-
-
-@router.get("/{product_id}/mlflow-run-url")
-async def get_mlflow_run_url(
-    product_id: UUID,
-    request: Request,
-    run_id: Optional[str] = None,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
-):
-    """
-    Get MLflow UI URL for viewing runs.
-    DISABLED: MLflow integration removed.
-    """
-    # Ensure user has access to the product
-    product = ensure_product_access(db, request, product_id)
-
-    # Return empty response - MLflow disabled
-    return {"mlflow_ui_url": None, "tracking_uri": None, "message": "MLflow tracking is disabled"}
-
-
 class PromoteVersionRequest(BaseModel):
     """Request model for promoting a version to production."""
 
@@ -1834,20 +1818,3 @@ async def promote_version(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to promote version: {str(e)}")
 
 
-@router.get("/{product_id}/mlflow-metrics/{version}")
-async def get_mlflow_metrics_for_version(
-    product_id: UUID,
-    version: int,
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
-):
-    """
-    Get MLflow metrics for a specific version of the product's pipeline run.
-    DISABLED: MLflow integration removed.
-    """
-    # Ensure user has access to the product
-    product = ensure_product_access(db, request, product_id)
-
-    # Return empty response - MLflow disabled (no MLflow queries will be made)
-    return {"has_mlflow_data": False, "message": "MLflow tracking is disabled", "version": version}

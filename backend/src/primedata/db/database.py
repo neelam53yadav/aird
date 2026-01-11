@@ -10,8 +10,11 @@ from sqlalchemy.orm import sessionmaker
 # Get settings
 settings = get_settings()
 
+# Get database URL (constructed from components if needed)
+database_url = settings.get_database_url()
+
 # Create database engine
-engine = create_engine(settings.DATABASE_URL, pool_pre_ping=True, pool_recycle=300, echo=settings.ENV == "development")
+engine = create_engine(database_url, pool_pre_ping=True, pool_recycle=300, echo=settings.ENV == "development")
 
 # Create session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

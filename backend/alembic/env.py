@@ -34,9 +34,9 @@ target_metadata = Base.metadata
 
 
 def get_url():
-    """Get database URL from settings."""
+    """Get database URL from settings (constructed from components if needed)."""
     settings = get_settings()
-    return settings.DATABASE_URL
+    return settings.get_database_url()
 
 
 def run_migrations_offline() -> None:

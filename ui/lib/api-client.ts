@@ -776,14 +776,6 @@ class ApiClient {
     return this.post(`/api/v1/products/${productId}/improve-ai-readiness`, config)
   }
 
-  // MLflow Metrics API (deprecated/disabled but kept for compatibility)
-  async getMLflowMetricsForVersion(productId: string, version: number): Promise<ApiResponse> {
-    // MLflow integration is disabled, return empty response
-    return Promise.resolve({
-      data: null,
-      error: 'MLflow integration is disabled'
-    })
-  }
 
   // ACL API
   async listACLs(params: { product_id?: string }): Promise<ApiResponse> {

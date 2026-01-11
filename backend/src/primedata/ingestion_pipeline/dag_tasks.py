@@ -34,6 +34,11 @@ from primedata.db.models import (
 # causes heavy import chains (embedding_config, sentence_transformers, etc.) that exceed this limit.
 # Import only lightweight enums at module level.
 from primedata.ingestion_pipeline.aird_stages.base import StageStatus
+from primedata.ingestion_pipeline.pipeline_config import (
+    resolve_content_hint,
+    resolve_effective_pipeline_config,
+    should_skip_vectors,
+)
 from primedata.ingestion_pipeline.artifact_registry import (
     calculate_checksum,
     get_artifact_summary_for_run,
@@ -186,7 +191,9 @@ def register_stage_artifacts(
                 input_artifact_ids=input_artifact_ids,  # Would be raw file artifact IDs
                 artifact_metadata={
                     "file_stem": file_stem,
-                    "chunks_count": result.metrics.get("total_chunks", 0),
+                    "chunks_count": result.metrics.get("file_chunk_counts", {}).get(
+                        file_stem, result.metrics.get("total_chunks", 0)
+                    ),
                     "playbook_id": result.metrics.get("playbook_id"),
                 },
                 retention_policy=RetentionPolicy.DAYS_90,
@@ -629,6 +636,330 @@ def get_pipeline_run_id_from_context(**context) -> str:
         return None
 
 
+def sample_files_for_analysis(
+    raw_file_records: List[RawFile], max_files: int = 5, max_per_datasource: int = 2
+) -> List[RawFile]:
+    """
+    Sample representative files from raw file records for content analysis.
+    
+    Strategy:
+    - Group files by data_source_id to ensure representation across datasources
+    - Randomly select 1-2 files per datasource (up to max_files total)
+    - Prioritize files with diverse extensions/types for better analysis
+    
+    Args:
+        raw_file_records: List of RawFile records to sample from
+        max_files: Maximum total files to sample (default: 5)
+        max_per_datasource: Maximum files per datasource (default: 2)
+    
+    Returns:
+        List of sampled RawFile records
+    """
+    import random
+    
+    if not raw_file_records:
+        return []
+    
+    # Group files by data_source_id (None is treated as a single group)
+    files_by_datasource: Dict[Optional[UUID], List[RawFile]] = {}
+    for record in raw_file_records:
+        ds_id = record.data_source_id
+        if ds_id not in files_by_datasource:
+            files_by_datasource[ds_id] = []
+        files_by_datasource[ds_id].append(record)
+    
+    logger.info(f"Grouped {len(raw_file_records)} files into {len(files_by_datasource)} datasource(s)")
+    
+    # Sample files: up to max_per_datasource per datasource, up to max_files total
+    sampled_files: List[RawFile] = []
+    
+    # Shuffle datasources to randomize selection order
+    datasource_ids = list(files_by_datasource.keys())
+    random.shuffle(datasource_ids)
+    
+    for ds_id in datasource_ids:
+        if len(sampled_files) >= max_files:
+            break
+        
+        files_in_datasource = files_by_datasource[ds_id]
+        
+        # Prioritize files with diverse extensions for better analysis
+        # Sort by extension diversity (prefer .pdf, .txt, .html, .docx, etc.)
+        def extension_diversity_key(record: RawFile) -> int:
+            ext = Path(record.filename).suffix.lower()
+            # Priority order: pdf > txt > html > docx > others
+            priority_exts = {'.pdf': 5, '.txt': 4, '.html': 3, '.htm': 3, '.docx': 2, '.doc': 2}
+            return priority_exts.get(ext, 1)
+        
+        files_in_datasource_sorted = sorted(files_in_datasource, key=extension_diversity_key, reverse=True)
+        
+        # Randomly select up to max_per_datasource files from this datasource
+        num_to_sample = min(max_per_datasource, len(files_in_datasource_sorted), max_files - len(sampled_files))
+        if num_to_sample > 0:
+            # Randomly shuffle and take first num_to_sample
+            random.shuffle(files_in_datasource_sorted)
+            sampled_files.extend(files_in_datasource_sorted[:num_to_sample])
+    
+    logger.info(f"Sampled {len(sampled_files)} files from {len(raw_file_records)} total files across {len(files_by_datasource)} datasource(s)")
+    for sampled in sampled_files:
+        logger.info(f"  - {sampled.filename} (datasource: {sampled.data_source_id}, extension: {Path(sampled.filename).suffix})")
+    
+    return sampled_files
+
+
+def extract_text_sample_from_file(
+    storage: Any, raw_file: RawFile, max_chars: Optional[int] = 5000
+) -> Optional[str]:
+    """
+    Extract text sample from a raw file for analysis.
+    
+    Args:
+        storage: AirdStorageAdapter instance
+        raw_file: RawFile record
+        max_chars: Maximum characters to extract (default: 5000). Use None for full text.
+    
+    Returns:
+        Text sample or None if extraction fails
+    """
+    try:
+        filename = raw_file.filename
+        file_stem = raw_file.file_stem
+        storage_key = raw_file.storage_key
+        storage_bucket = raw_file.storage_bucket
+        
+        # Extract text based on file type
+        if filename.lower().endswith('.pdf'):
+            # For PDFs, try to extract first 2-3 pages (roughly 2000-5000 chars)
+            try:
+                text = storage.get_raw_text(file_stem, minio_key=storage_key, minio_bucket=storage_bucket)
+                if text:
+                    return text if max_chars is None else text[:max_chars]
+            except Exception as e:
+                logger.warning(f"Failed to extract text from PDF {filename}: {e}")
+                return None
+        else:
+            # For text files, read directly
+            try:
+                text = storage.get_raw_text(file_stem, minio_key=storage_key, minio_bucket=storage_bucket)
+                if text:
+                    return text if max_chars is None else text[:max_chars]
+            except Exception as e:
+                logger.warning(f"Failed to extract text from {filename}: {e}")
+                return None
+        
+        return None
+    except Exception as e:
+        logger.warning(f"Error extracting text sample from {raw_file.filename}: {e}")
+        return None
+
+
+def auto_detect_playbook_and_chunking(
+    product: Product,
+    raw_file_records: List[RawFile],
+    storage: Any,
+    db: Session,
+) -> Dict[str, Any]:
+    """
+    Auto-detect playbook and chunking configuration from sampled files.
+    
+    Args:
+        product: Product instance to update
+        raw_file_records: List of RawFile records to sample from
+        storage: AirdStorageAdapter instance for reading files
+        db: Database session
+    
+    Returns:
+        Dict with detected playbook_id and chunking_config updates, or empty dict if no detection needed
+    """
+    from collections import Counter
+    from primedata.ingestion_pipeline.aird_stages.playbooks import route_playbook
+    from primedata.analysis.content_analyzer import build_representative_sample, content_analyzer
+    
+    updates = {}
+    needs_playbook_detection = product.playbook_id is None
+    needs_chunking_detection = (
+        product.chunking_config
+        and isinstance(product.chunking_config, dict)
+        and product.chunking_config.get("mode") == "auto"
+    )
+    
+    if not needs_playbook_detection and not needs_chunking_detection:
+        logger.info("No auto-detection needed: playbook_id is set and chunking mode is not auto")
+        return updates
+    
+    if not raw_file_records:
+        logger.warning("No raw files available for auto-detection")
+        return updates
+    
+    # Sample files for analysis
+    sampled_files = sample_files_for_analysis(raw_file_records, max_files=5, max_per_datasource=2)
+    if not sampled_files:
+        logger.warning("No files sampled for auto-detection")
+        return updates
+    
+    # Collect text samples and analyze
+    playbook_detections = []
+    chunking_analyses = []
+    sample_files_analyzed = []
+    
+    hint_reason = None
+    content_hint = resolve_content_hint(product.playbook_id, product.use_case_description)
+    if content_hint and product.use_case_description:
+        hint_reason = "use_case_description"
+    elif content_hint and product.playbook_id:
+        hint_reason = "playbook_id"
+
+    confidence_threshold = 0.7
+    if product.chunking_config and isinstance(product.chunking_config, dict):
+        auto_settings = product.chunking_config.get("auto_settings", {})
+        if isinstance(auto_settings, dict):
+            confidence_threshold = auto_settings.get("confidence_threshold", confidence_threshold)
+
+    for raw_file in sampled_files:
+        try:
+            # Extract full text for representative sampling
+            full_text = extract_text_sample_from_file(storage, raw_file, max_chars=None)
+            text_sample = build_representative_sample(full_text or "", chunk=5000, max_total=20000)
+            
+            if not text_sample or len(text_sample.strip()) < 100:
+                logger.warning(f"Skipping {raw_file.filename}: insufficient text content ({len(text_sample or '')} chars)")
+                continue
+            
+            sample_files_analyzed.append({
+                "filename": raw_file.filename,
+                "file_stem": raw_file.file_stem,
+                "data_source_id": str(raw_file.data_source_id) if raw_file.data_source_id else None,
+                "chars_extracted": len(text_sample),
+                "full_text_length": len(full_text or ""),
+            })
+            
+            # Auto-detect playbook if needed
+            if needs_playbook_detection:
+                try:
+                    playbook_id, reason = route_playbook(sample_text=text_sample, filename=raw_file.filename)
+                    playbook_detections.append((playbook_id, reason))
+                    logger.info(f"Detected playbook for {raw_file.filename}: {playbook_id} ({reason})")
+                except Exception as e:
+                    logger.warning(f"Failed to detect playbook for {raw_file.filename}: {e}")
+            
+            # Auto-detect chunking config if needed
+            if needs_chunking_detection:
+                try:
+                    chunking_config = content_analyzer.analyze_content(
+                        content=text_sample,
+                        filename=raw_file.filename,
+                        hint=content_hint,
+                        full_text_length=len(full_text or ""),
+                    )
+                    chunking_analyses.append(chunking_config)
+                    logger.info(
+                        f"Analyzed chunking for {raw_file.filename}: "
+                        f"content_type={chunking_config.content_type.value}, "
+                        f"confidence={chunking_config.confidence:.2f}, "
+                        f"chunk_size={chunking_config.chunk_size}"
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to analyze chunking for {raw_file.filename}: {e}")
+        
+        except Exception as e:
+            logger.warning(f"Error processing {raw_file.filename} for auto-detection: {e}")
+            continue
+    
+    # Determine most common/relevant playbook
+    if needs_playbook_detection and playbook_detections:
+        playbook_counts = Counter([pb_id for pb_id, _ in playbook_detections])
+        most_common_playbook, count = playbook_counts.most_common(1)[0]
+        total_detections = len(playbook_detections)
+        
+        # Get reason from most common playbook
+        most_common_reason = next((reason for pb_id, reason in playbook_detections if pb_id == most_common_playbook), "auto_detected")
+        
+        logger.info(f"Auto-detected playbook: {most_common_playbook} ({count}/{total_detections} files, reason: {most_common_reason})")
+        
+        updates["playbook_id"] = most_common_playbook
+        updates["playbook_selection"] = {
+            "method": "auto_detected",
+            "playbook_id": most_common_playbook,
+            "reason": most_common_reason,
+            "detected_at": datetime.utcnow().isoformat() + "Z",
+            "confidence": count / total_detections if total_detections > 0 else 0.0,
+            "files_analyzed": len(sample_files_analyzed),
+        }
+    
+    # Determine optimal chunking configuration
+    if needs_chunking_detection and chunking_analyses:
+        # Use the most confident analysis, or aggregate if multiple
+        if len(chunking_analyses) == 1:
+            best_analysis = chunking_analyses[0]
+        else:
+            # Aggregate: use most common content type, average chunk sizes, highest confidence
+            content_type_counts = Counter([a.content_type.value for a in chunking_analyses])
+            most_common_content_type = content_type_counts.most_common(1)[0][0]
+            
+            # Find analysis with most common content type and highest confidence
+            best_analysis = max(
+                [a for a in chunking_analyses if a.content_type.value == most_common_content_type],
+                key=lambda a: a.confidence,
+                default=chunking_analyses[0],
+            )
+        
+        logger.info(
+            f"Auto-detected chunking config: content_type={best_analysis.content_type.value}, "
+            f"confidence={best_analysis.confidence:.2f}, "
+            f"chunk_size={best_analysis.chunk_size}, "
+            f"chunk_overlap={best_analysis.chunk_overlap}"
+        )
+        
+        # Update chunking_config with resolved_settings
+        # Preserve existing auto_settings and manual_settings for backward compatibility
+        current_config = product.chunking_config or {}
+        if not isinstance(current_config, dict):
+            current_config = {}
+        
+        resolved_settings = {
+            "content_type": best_analysis.content_type.value,
+            "chunk_size": best_analysis.chunk_size,
+            "chunk_overlap": best_analysis.chunk_overlap,
+            "min_chunk_size": best_analysis.min_chunk_size,
+            "max_chunk_size": best_analysis.max_chunk_size,
+            "chunking_strategy": best_analysis.strategy.value,
+            "confidence": best_analysis.confidence,
+            "reasoning": best_analysis.reasoning,
+            "confidence_threshold": confidence_threshold,
+            "confidence_met": best_analysis.confidence >= confidence_threshold,
+            "evidence": best_analysis.evidence,
+            "hint_applied": bool(best_analysis.evidence and best_analysis.evidence.get("hint_applied")),
+            "hint_reason": hint_reason,
+        }
+        
+        # Preserve existing settings (backward compatibility)
+        updated_config = {
+            "mode": current_config.get("mode", "auto"),  # Preserve mode
+            "resolved_settings": resolved_settings,  # Add/update resolved_settings
+            "last_analyzed": datetime.utcnow().isoformat() + "Z",
+            "analysis_confidence": best_analysis.confidence,
+            "sample_files_analyzed": sample_files_analyzed,
+            # Preserve existing auto_settings and manual_settings
+            "auto_settings": current_config.get("auto_settings", {}),
+            "manual_settings": current_config.get("manual_settings", {}),
+            # Preserve other fields (e.g., preprocessing_flags, optimization_mode)
+            **{k: v for k, v in current_config.items() if k not in ["resolved_settings", "last_analyzed", "analysis_confidence", "sample_files_analyzed", "mode"]}
+        }
+        
+        updates["chunking_config"] = updated_config
+        
+        logger.info(f"Updated chunking_config with resolved_settings: {resolved_settings}")
+        if best_analysis.confidence < confidence_threshold:
+            logger.info(
+                "Auto-detected chunking confidence %.2f below threshold %.2f; "
+                "resolved_settings will be treated as low confidence.",
+                best_analysis.confidence,
+                confidence_threshold,
+            )
+    
+    return updates
+
+
 def task_preprocess(**context) -> Dict[str, Any]:
     """Preprocess raw data using AIRD PreprocessStage."""
     params = get_dag_params(**context)
@@ -804,6 +1135,102 @@ def task_preprocess(**context) -> Dict[str, Any]:
         logger.info(f"File stems to process: {raw_files}")
         logger.info(f"file_stem_to_storage_key mapping: {file_stem_to_storage_key}")
 
+        # Auto-detect playbook and chunking configuration if needed
+        # This runs BEFORE preprocessing stage to set up configuration
+        # Refresh product to get latest state
+        db.refresh(product)
+        needs_auto_detection = (
+            (product.playbook_id is None)  # Auto-detect playbook
+            or (
+                product.chunking_config
+                and isinstance(product.chunking_config, dict)
+                and product.chunking_config.get("mode") == "auto"  # Auto-detect chunking
+            )
+        )
+        
+        if needs_auto_detection:
+            # Get validated raw file records (only files that exist in MinIO)
+            validated_raw_file_records = [rf for rf in raw_file_records if rf.file_stem in validated_files]
+            
+            if validated_raw_file_records:
+                logger.info(f"🔍 Starting auto-detection for playbook and/or chunking configuration...")
+                logger.info(f"  - Playbook auto-detect: {product.playbook_id is None}")
+                logger.info(f"  - Chunking auto-detect: {product.chunking_config and isinstance(product.chunking_config, dict) and product.chunking_config.get('mode') == 'auto'}")
+                logger.info(f"  - Sampling from {len(validated_raw_file_records)} validated files")
+                
+                try:
+                    auto_detection_updates = auto_detect_playbook_and_chunking(
+                        product=product,
+                        raw_file_records=validated_raw_file_records,
+                        storage=storage,
+                        db=db,
+                    )
+                    
+                    if auto_detection_updates:
+                        logger.info(f"✅ Auto-detection completed: {list(auto_detection_updates.keys())}")
+                        
+                        # Update product with detected values
+                        if "playbook_id" in auto_detection_updates:
+                            product.playbook_id = auto_detection_updates["playbook_id"]
+                            playbook_id = auto_detection_updates["playbook_id"]  # Update local variable
+                            logger.info(f"  → Updated playbook_id: {product.playbook_id}")
+                        
+                        if "playbook_selection" in auto_detection_updates:
+                            product.playbook_selection = auto_detection_updates["playbook_selection"]
+                            logger.info(f"  → Updated playbook_selection: {auto_detection_updates['playbook_selection']}")
+                        
+                        if "chunking_config" in auto_detection_updates:
+                            from sqlalchemy.orm.attributes import flag_modified
+                            product.chunking_config = auto_detection_updates["chunking_config"]
+                            flag_modified(product, "chunking_config")
+                            chunking_config = auto_detection_updates["chunking_config"]  # Update local variable
+                            logger.info(f"  → Updated chunking_config with resolved_settings")
+                        
+                        # Commit updates to database
+                        db.commit()
+                        db.expire_all()
+                        db.refresh(product)
+                        logger.info("✅ Auto-detection updates committed to database")
+                        refreshed_product = db.get(Product, product_id)
+                        if refreshed_product:
+                            product = refreshed_product
+                            refreshed_chunking_config = product.chunking_config or {}
+                            if isinstance(refreshed_chunking_config, dict) and refreshed_chunking_config.get("mode") == "auto":
+                                refreshed_chunking_config["manual_settings"] = {}
+                            chunking_config = refreshed_chunking_config
+                            chunking_config = product.chunking_config
+                            if product.playbook_id and not playbook_id:
+                                playbook_id = product.playbook_id
+                            if isinstance(chunking_config, dict):
+                                logger.info(
+                                    "🔄 Refreshed chunking_config after auto-detection: "
+                                    f"last_analyzed={chunking_config.get('last_analyzed')}, "
+                                    f"sample_files_analyzed={chunking_config.get('sample_files_analyzed')}"
+                                )
+                            params["chunking_config"] = refreshed_chunking_config
+                            params["force_product_chunking_config"] = True
+                            dag_run = context.get("dag_run")
+                            if dag_run and isinstance(getattr(dag_run, "conf", None), dict):
+                                dag_run.conf["chunking_config"] = refreshed_chunking_config
+                                dag_run.conf["force_product_chunking_config"] = True
+                    else:
+                        logger.info("ℹ️ No auto-detection updates needed or available")
+                except Exception as e:
+                    logger.error(f"❌ Auto-detection failed: {e}", exc_info=True)
+                    std_logger.error(f"Auto-detection failed: {e}", exc_info=True)
+                    # Continue with preprocessing even if auto-detection fails
+                    # The existing playbook/chunking config will be used
+                    logger.warning("Continuing with preprocessing using existing/default configuration")
+            else:
+                logger.warning("⚠️ Auto-detection skipped: no validated raw files available")
+        else:
+            logger.info("ℹ️ Auto-detection not needed: playbook_id is set and chunking mode is not auto")
+
+        # Get playbook_id from product if updated (or from params)
+        if product.playbook_id and not playbook_id:
+            playbook_id = product.playbook_id
+            logger.info(f"Using playbook from product (after auto-detection): {playbook_id}")
+
         # Create and execute preprocessing stage
         # Lazy import to avoid DAG import timeouts
         from primedata.ingestion_pipeline.aird_stages.preprocess import PreprocessStage
@@ -826,12 +1253,17 @@ def task_preprocess(**context) -> Dict[str, Any]:
             logger.error(f"PreprocessStage creation traceback:\n{traceback.format_exc()}")
             raise
 
-        # Get chunking config from product or params
-        chunking_config = params.get("chunking_config")
-        if not chunking_config and product:
-            # Refresh product to get latest chunking_config (including preprocessing_flags from recommendations)
+        # Refresh product to get latest chunking_config (including resolved_settings from auto-detection)
+        if product:
             db.refresh(product)
-            chunking_config = product.chunking_config
+
+        effective_config = resolve_effective_pipeline_config(product, params, aird_context.get("pipeline_run"))
+        chunking_config = effective_config.get("chunking_config")
+        playbook_id = effective_config.get("playbook_id") or playbook_id
+        playbook_selection = effective_config.get("playbook_selection")
+
+        logger.info(f"Effective chunking config (preprocess): {chunking_config}")
+        logger.info(f"Effective playbook (preprocess): {playbook_selection or {'playbook_id': playbook_id}}")
 
         # Log preprocessing flags if present (from recommendations)
         if chunking_config and isinstance(chunking_config, dict):
@@ -851,10 +1283,12 @@ def task_preprocess(**context) -> Dict[str, Any]:
             "storage": storage,
             "raw_files": raw_files,
             "playbook_id": playbook_id,
+            "playbook_selection": playbook_selection,
             "file_stem_to_storage_key": file_stem_to_storage_key,  # Pass mapping for accurate file retrieval
             "chunking_config": chunking_config,  # Pass product chunking config (including preprocessing_flags)
             "workspace_id": workspace_id,  # For loading custom playbooks
             "db": db,  # For loading custom playbooks
+            "use_case_description": product.use_case_description if product else None,
         }
         logger.info(f"Executing PreprocessStage with context keys: {list(stage_context.keys())}")
         logger.info(f"Context storage type: {type(stage_context['storage']).__name__}")
@@ -1065,15 +1499,16 @@ def task_scoring(**context) -> Dict[str, Any]:
                 "message": "No processed files to score",
             }
 
+        product = db.query(Product).filter(Product.id == product_id).first()
+        effective_config = resolve_effective_pipeline_config(product, params, aird_context.get("pipeline_run"))
+        chunking_config = effective_config.get("chunking_config")
+        playbook_selection = effective_config.get("playbook_selection")
+        playbook_id = effective_config.get("playbook_id")
+
+        logger.info(f"Effective chunking config (scoring): {chunking_config}")
+        logger.info(f"Effective playbook (scoring): {playbook_selection or {'playbook_id': playbook_id}}")
+
         # Load playbook for AI-Ready metrics (noise patterns, coherence settings)
-        playbook_id = params.get("playbook_id")
-        if not playbook_id:
-            # Try to get from product
-            from primedata.db.models import Product
-            product = db.query(Product).filter(Product.id == product_id).first()
-            if product and product.playbook_id:
-                playbook_id = product.playbook_id
-        
         playbook = {}
         if playbook_id:
             try:
@@ -1104,6 +1539,7 @@ def task_scoring(**context) -> Dict[str, Any]:
             "preprocess_result": preprocess_result,
             "playbook": playbook,
             "playbook_id": playbook_id,
+            "chunking_config": chunking_config,
         }
 
         result = scoring_stage.execute(stage_context)
@@ -1659,6 +2095,53 @@ def task_reporting(**context) -> Dict[str, Any]:
         db.close()
 
 
+def task_decide_vector_indexing(**context) -> str:
+    """Branching task: decide whether to run indexing based on vector_creation_enabled."""
+    params = get_dag_params(**context)
+    product_id = params["product_id"]
+    db = next(get_db())
+
+    try:
+        product = db.query(Product).filter(Product.id == product_id).first()
+        if product and should_skip_vectors(product):
+            logger.info(f"Vector creation disabled for product {product_id}; branching to skip_indexing")
+            return "skip_indexing"
+        logger.info(f"Vector creation enabled for product {product_id}; branching to indexing")
+        return "indexing"
+    finally:
+        db.close()
+
+
+def task_record_vectors_skipped(**context) -> Dict[str, Any]:
+    """Record vector skip in pipeline metrics when vector creation is disabled."""
+    params = get_dag_params(**context)
+    product_id = params["product_id"]
+    version = params["version"]
+    db = next(get_db())
+
+    try:
+        product = db.query(Product).filter(Product.id == product_id).first()
+        if product and should_skip_vectors(product):
+            pipeline_run = (
+                db.query(PipelineRun)
+                .filter(PipelineRun.product_id == product_id, PipelineRun.version == version)
+                .first()
+            )
+            if pipeline_run:
+                if pipeline_run.metrics is None:
+                    pipeline_run.metrics = {}
+                pipeline_run.metrics["vectors_skipped"] = True
+                pipeline_run.metrics["vectors_skip_reason"] = "vector_creation_enabled is False"
+                from sqlalchemy.orm.attributes import flag_modified
+
+                flag_modified(pipeline_run, "metrics")
+                db.commit()
+                logger.info(f"Recorded vectors_skipped in pipeline_run {pipeline_run.id}")
+        return {"status": "skipped", "vectors_skipped": True}
+    finally:
+        db.close()
+
+
 def task_indexing(**context) -> Dict[str, Any]:
     """Index chunks to Qdrant using AIRD IndexingStage."""
     params = get_dag_params(**context)
@@ -1672,8 +2155,53 @@ def task_indexing(**context) -> Dict[str, Any]:
     storage = aird_context["storage"]
     tracker = aird_context.get("tracker")
     db = aird_context["db"]
+    pipeline_run = aird_context.get("pipeline_run")
 
     try:
+        # Check if vector creation is enabled for this product
+        from primedata.db.models import Product
+        product = db.query(Product).filter(Product.id == product_id).first()
+        if not product:
+            raise ValueError(f"Product {product_id} not found")
+        
+        if should_skip_vectors(product):
+            logger.info(f"Vector creation is disabled for product {product_id}, skipping indexing stage")
+            if pipeline_run is not None:
+                if pipeline_run.metrics is None:
+                    pipeline_run.metrics = {}
+                pipeline_run.metrics["vectors_skipped"] = True
+                pipeline_run.metrics["vectors_skip_reason"] = "vector_creation_enabled is False"
+                from sqlalchemy.orm.attributes import flag_modified
+                flag_modified(pipeline_run, "metrics")
+                db.commit()
+            if tracker:
+                skipped_result = StageResult(
+                    status=StageStatus.SKIPPED,
+                    stage_name="indexing",
+                    product_id=product_id,
+                    version=version,
+                    metrics={"points_indexed": 0, "reason": "vector_creation_enabled is False"},
+                    error=None,
+                )
+                tracker.record_stage_result(skipped_result)
+            return {
+                "status": "skipped",
+                "vectors_indexed": 0,
+                "reason": "vector_creation_enabled is False",
+            }
+
+    except Exception as e:
+        logger.error(f"Failed to check vector_creation_enabled for product {product_id}: {e}", exc_info=True)
+        # Continue with indexing if we can't check the flag (fallback to default behavior)
+
+    try:
+        effective_config = resolve_effective_pipeline_config(product, params, pipeline_run)
+        chunking_config = effective_config.get("chunking_config")
+        playbook_selection = effective_config.get("playbook_selection")
+
+        logger.info(f"Effective chunking config (indexing): {chunking_config}")
+        logger.info(f"Effective playbook (indexing): {playbook_selection or {'playbook_id': product.playbook_id}}")
+
         # Get processed files from preprocessing
         preprocess_result = context["task_instance"].xcom_pull(task_ids="preprocess", key="preprocess_result")
         if not preprocess_result:
@@ -1700,6 +2228,7 @@ def task_indexing(**context) -> Dict[str, Any]:
             "processed_files": processed_files,
             "preprocess_result": preprocess_result,
             "scoring_result": scoring_result,
+            "chunking_config": chunking_config,
         }
 
         result = indexing_stage.execute(stage_context)

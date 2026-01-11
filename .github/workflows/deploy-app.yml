@@ -22,6 +22,7 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment: prod  # Use 'prod' environment for secrets and variables
     permissions:
       contents: read
       id-token: write
@@ -752,19 +753,175 @@ jobs:
               done
             '"
 
+      - name: Verify and Upgrade Docker Compose
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Verifying Docker Compose version..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          
+          # Check Docker Compose version (plugin or standalone)
+          DOCKER_VERSION_OUTPUT=$(ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} "docker compose version 2>&1 || docker-compose --version 2>&1 || echo 'NOT_FOUND'")
+          
+          if echo "$DOCKER_VERSION_OUTPUT" | grep -q "NOT_FOUND"; then
+            echo "❌ Docker Compose not found. Installing Docker Compose v2..."
+            ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+              "sudo apt-get update && sudo apt-get install -y docker-compose-plugin || echo 'Installation may have failed - will try alternative method'"
+          else
+            echo "✅ Docker Compose found:"
+            echo "$DOCKER_VERSION_OUTPUT"
+            
+            # Extract version number and check if it's v2.1+
+            if echo "$DOCKER_VERSION_OUTPUT" | grep -qE "v2\.[1-9][0-9]*|version 2\.[1-9]|Docker Compose version v2"; then
+              echo "✅ Docker Compose v2.1+ detected (supports --env-file flag)"
+            elif echo "$DOCKER_VERSION_OUTPUT" | grep -qE "v2\.[0-9]"; then
+              VERSION_NUM=$(echo "$DOCKER_VERSION_OUTPUT" | grep -oE "v2\.([0-9]+)" | head -1 | cut -d'.' -f2 || echo "0")
+              if [ "$VERSION_NUM" -lt 1 ] 2>/dev/null; then
+                echo "⚠️  Docker Compose v2.0.x detected. Upgrading to v2.1+..."
+                ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+                  "sudo apt-get update && sudo apt-get install -y docker-compose-plugin || true"
+              else
+                echo "✅ Docker Compose v2.1+ detected"
+              fi
+            else
+              echo "⚠️  Docker Compose v1 detected. Upgrading to v2.1+..."
+              ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+                "sudo apt-get update && sudo apt-get install -y docker-compose-plugin || true"
+            fi
+          fi
+          
+          # Verify installation
+          echo ""
+          echo "Verifying Docker Compose installation..."
+          FINAL_VERSION=$(ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} "docker compose version 2>&1 || docker-compose --version 2>&1")
+          echo "Final version: $FINAL_VERSION"
+          echo ""
+
+      - name: Create production .env file on VM
+        run: |
+          DEPLOY_PATH="${{ steps.prepare-vm-dir.outputs.deploy_path }}"
+          DEPLOY_PATH_EXPANDED=$(ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} "echo ${DEPLOY_PATH}")
+          
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Creating production .env file on VM..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          
+          # Create .env file content
+          cat > /tmp/prod_env_file << 'ENVEOF'
+          # Database Configuration
+          # Individual components (code will construct DATABASE_URL via get_database_url() method)
+          POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_HOST=${{ vars.POSTGRES_HOST }}
+          POSTGRES_PORT=${{ vars.POSTGRES_PORT }}
+          POSTGRES_DB=${{ vars.POSTGRES_DB }}
+          DATABASE_URL="postgresql+psycopg2://${{ secrets.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@${{ vars.POSTGRES_HOST }}:${{ vars.POSTGRES_PORT }}/${{ vars.POSTGRES_DB }}"
+
+          # Airflow Database
+          AIRFLOW_DB_URL="postgresql+psycopg2://${{ secrets.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@${{ vars.POSTGRES_HOST }}:${{ vars.POSTGRES_PORT }}/${{ vars.AIRFLOW_DB_NAME }}"
+          AIRFLOW_DB_NAME=${{ vars.AIRFLOW_DB_NAME }}
+          AIRFLOW_USERNAME=${{ vars.AIRFLOW_USERNAME }}
+          AIRFLOW_PASSWORD=${{ secrets.AIRFLOW_PASSWORD }}
+          AIRFLOW_SECRET_KEY=${{ secrets.AIRFLOW_SECRET_KEY }}
+          AIRFLOW_URL=${{ vars.AIRFLOW_URL }}
+
+          # MinIO/GCS Storage
+          MINIO_HOST=${{ vars.MINIO_HOST }}
+          MINIO_ACCESS_KEY=${{ secrets.MINIO_ACCESS_KEY }}
+          MINIO_SECRET_KEY=${{ secrets.MINIO_SECRET_KEY }}
+          MINIO_SECURE=${{ vars.MINIO_SECURE }}
+          USE_GCS=${{ vars.USE_GCS }}
+
+          # GCS Configuration
+          GCS_PROJECT_ID=${{ vars.GCS_PROJECT_ID }}
+          GCS_SIGNER_SERVICE_ACCOUNT=${{ vars.GCS_SIGNER_SERVICE_ACCOUNT }}
+          GOOGLE_APPLICATION_CREDENTIALS=${{ vars.GOOGLE_APPLICATION_CREDENTIALS }}
+
+          # Application URLs
+          FRONTEND_URL=${{ vars.FRONTEND_URL }}
+          NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL }}
+          NEXTAUTH_URL=${{ vars.NEXTAUTH_URL }}
+          CORS_ORIGINS=${{ vars.CORS_ORIGINS }}
+
+          # Authentication
+          JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}
+          NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
+          DISABLE_AUTH=${{ vars.DISABLE_AUTH }}
+
+          # SMTP Configuration
+          SMTP_ENABLED=${{ vars.SMTP_ENABLED }}
+          SMTP_HOST=${{ vars.SMTP_HOST }}
+          SMTP_PORT=${{ vars.SMTP_PORT }}
+          SMTP_USE_TLS=${{ vars.SMTP_USE_TLS }}
+          SMTP_USE_SSL=${{ vars.SMTP_USE_SSL }}
+          SMTP_USERNAME=${{ secrets.SMTP_USERNAME }}
+          SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
+          SMTP_FROM_EMAIL=${{ vars.SMTP_FROM_EMAIL }}
+          SMTP_TO_EMAIL=${{ vars.SMTP_TO_EMAIL }}
+
+          # OAuth
+          GOOGLE_CLIENT_ID=${{ vars.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
+
+          # External APIs
+          OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+          STRIPE_SECRET_KEY=${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET=${{ secrets.STRIPE_WEBHOOK_SECRET }}
+
+          # Environment
+          ENV=${{ vars.ENV }}
+          ENVEOF
+          
+          # Copy .env file to BOTH locations for safety:
+          # 1. /opt/primedata/.env (where docker-compose runs from - PRIMARY)
+          # 2. /opt/primedata/infra/.env (in case compose file looks there - BACKUP)
+          
+          echo "Copying .env file to deployment root (primary location)..."
+          scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+            /tmp/prod_env_file \
+            ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }}:${DEPLOY_PATH_EXPANDED}/.env
+          
+          echo "Copying .env file to infra/ directory (backup location)..."
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+            "mkdir -p ${DEPLOY_PATH_EXPANDED}/infra"
+          
+          scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+            /tmp/prod_env_file \
+            ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }}:${DEPLOY_PATH_EXPANDED}/infra/.env
+          
+          echo "✅ Production .env file created at:"
+          echo "   - ${DEPLOY_PATH_EXPANDED}/.env (primary - where docker-compose runs from)"
+          echo "   - ${DEPLOY_PATH_EXPANDED}/infra/.env (backup - compose file directory)"
+          echo ""
+          echo "Verifying .env file exists..."
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+            "ls -la ${DEPLOY_PATH_EXPANDED}/.env ${DEPLOY_PATH_EXPANDED}/infra/.env 2>/dev/null || echo 'Warning: .env files may not exist'"
+          echo ""
+
       - name: Deploy on VM
         run: |
           DEPLOY_PATH="${{ steps.prepare-vm-dir.outputs.deploy_path }}"
           # Expand ~ to full path if needed (in case we used home directory fallback)
           DEPLOY_PATH_EXPANDED=$(ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} "echo ${DEPLOY_PATH}")
           
-          cat > /tmp/deploy_script.sh << EOF
+          cat > /tmp/deploy_script.sh << 'SCRIPTEOF'
           set -e
-          DEPLOY_DIR="${DEPLOY_PATH_EXPANDED}"
-          cd "\${DEPLOY_DIR}"
+          DEPLOY_DIR="__DEPLOY_PATH_PLACEHOLDER__"
+          ENV_FILE="${DEPLOY_DIR}/.env"
           
-          # Note: Docker Compose automatically loads .env file from the current directory
-          # No need to manually export environment variables
+          cd "${DEPLOY_DIR}"
+          
+          # Verify .env file exists
+          if [ ! -f "${ENV_FILE}" ]; then
+            echo "❌ Error: .env file not found at ${ENV_FILE}"
+            echo "Please ensure .env file was created in previous step"
+            exit 1
+          fi
+          
+          echo "✅ Using .env file from: ${ENV_FILE}"
+          echo "✅ Current directory: $(pwd)"
+          echo "✅ .env file exists: $(test -f .env && echo 'YES' || echo 'NO')"
           
           # Determine Docker command (with or without sudo)
           if docker ps > /dev/null 2>&1; then
@@ -776,53 +933,91 @@ jobs:
           fi
           
           # Determine Docker Compose command (check for plugin first, then standalone)
-          # Use sh -c to properly handle multi-word commands
-          if \${DOCKER_CMD} compose version > /dev/null 2>&1; then
-            DOCKER_COMPOSE_CMD="\${DOCKER_CMD} compose"
+          if ${DOCKER_CMD} compose version > /dev/null 2>&1; then
+            DOCKER_COMPOSE_CMD="${DOCKER_CMD} compose"
+            COMPOSE_V2=true
           elif command -v docker-compose > /dev/null 2>&1; then
             DOCKER_COMPOSE_CMD="docker-compose"
-          elif [ "\${USE_SUDO}" = "true" ] && sudo command -v docker-compose > /dev/null 2>&1; then
+            COMPOSE_V2=false
+          elif [ "${USE_SUDO}" = "true" ] && sudo command -v docker-compose > /dev/null 2>&1; then
             DOCKER_COMPOSE_CMD="sudo docker-compose"
+            COMPOSE_V2=false
           else
-            echo "Error: docker compose or docker-compose not found"
+            echo "❌ Error: docker compose or docker-compose not found"
             exit 1
           fi
           
+          # Check Docker Compose version for --env-file support
+          if [ "${COMPOSE_V2}" = "true" ]; then
+            COMPOSE_VERSION=$(${DOCKER_COMPOSE_CMD} version --short 2>/dev/null | cut -d'.' -f2 || echo "0")
+            if [ "${COMPOSE_VERSION}" -ge 1 ] 2>/dev/null; then
+              USE_ENV_FILE_FLAG=true
+              echo "✅ Docker Compose v2.1+ detected - using --env-file flag"
+            else
+              USE_ENV_FILE_FLAG=false
+              echo "⚠️  Docker Compose v2.0.x detected - .env file will be loaded from current directory"
+            fi
+          else
+            USE_ENV_FILE_FLAG=false
+            echo "⚠️  Docker Compose v1 detected - .env file will be loaded from current directory"
+          fi
+          
           # Ensure Docker network exists (idempotent)
-          \${DOCKER_CMD} network create primedata-network 2>/dev/null || echo "Network already exists"
+          ${DOCKER_CMD} network create primedata-network 2>/dev/null || echo "Network already exists"
           
           # Verify required images exist before starting
           echo "Verifying required Docker images exist..."
           REQUIRED_IMAGES=("infra-backend:latest" "infra-frontend:latest" "infra-airflow-webserver:latest" "infra-airflow-scheduler:latest")
           MISSING_IMAGES=()
-          for img in "\${REQUIRED_IMAGES[@]}"; do
-            if ! \${DOCKER_CMD} image inspect "\$img" > /dev/null 2>&1; then
-              MISSING_IMAGES+=("\$img")
+          for img in "${REQUIRED_IMAGES[@]}"; do
+            if ! ${DOCKER_CMD} image inspect "${img}" > /dev/null 2>&1; then
+              MISSING_IMAGES+=("${img}")
             fi
           done
           
-          if [ \${#MISSING_IMAGES[@]} -gt 0 ]; then
-            echo "❌ Error: Missing required images: \${MISSING_IMAGES[*]}"
+          if [ ${#MISSING_IMAGES[@]} -gt 0 ]; then
+            echo "❌ Error: Missing required images: ${MISSING_IMAGES[*]}"
             echo "Please ensure images are built before deployment."
             exit 1
           fi
           
           echo "✅ All required images exist"
           
-          # Images are already built on this VM
-          # Just start services using the built images (don't try to pull from registry)
+          # Start services with explicit .env file if supported, otherwise rely on current directory
           echo "Starting services with Docker images built on VM..."
-          # Use --pull never to prevent Docker Compose from trying to pull images
-          # If --pull is not supported, the command will fail, so we try without it as fallback
-          sh -c "\${DOCKER_COMPOSE_CMD} -f infra/docker-compose.prod.yml up -d --pull never --remove-orphans" || \
-          sh -c "\${DOCKER_COMPOSE_CMD} -f infra/docker-compose.prod.yml up -d --remove-orphans"
+          if [ "${USE_ENV_FILE_FLAG}" = "true" ]; then
+            # Use explicit --env-file flag (Docker Compose v2.1+)
+            echo "Using explicit --env-file flag: ${ENV_FILE}"
+            sh -c "${DOCKER_COMPOSE_CMD} -f infra/docker-compose.prod.yml --env-file ${ENV_FILE} up -d --pull never --remove-orphans" || \
+            sh -c "${DOCKER_COMPOSE_CMD} -f infra/docker-compose.prod.yml --env-file ${ENV_FILE} up -d --remove-orphans"
+          else
+            # Fallback: .env must be in current directory (which is DEPLOY_DIR)
+            echo "Using .env file from current directory: $(pwd)/.env"
+            if [ ! -f ".env" ]; then
+              echo "❌ Error: .env file not found in current directory $(pwd)"
+              echo "Copying from ${ENV_FILE} to current directory..."
+              cp "${ENV_FILE}" .env
+            fi
+            sh -c "${DOCKER_COMPOSE_CMD} -f infra/docker-compose.prod.yml up -d --pull never --remove-orphans" || \
+            sh -c "${DOCKER_COMPOSE_CMD} -f infra/docker-compose.prod.yml up -d --remove-orphans"
+          fi
           
           sleep 10
           
-          sh -c "\${DOCKER_COMPOSE_CMD} -f infra/docker-compose.prod.yml exec -T backend alembic upgrade head" || echo "Migration failed or already up to date"
+          # Run migrations with same .env file logic
+          if [ "${USE_ENV_FILE_FLAG}" = "true" ]; then
+            sh -c "${DOCKER_COMPOSE_CMD} -f infra/docker-compose.prod.yml --env-file ${ENV_FILE} exec -T backend alembic upgrade head" || echo "Migration failed or already up to date"
+            sh -c "${DOCKER_COMPOSE_CMD} -f infra/docker-compose.prod.yml --env-file ${ENV_FILE} ps"
+          else
+            sh -c "${DOCKER_COMPOSE_CMD} -f infra/docker-compose.prod.yml exec -T backend alembic upgrade head" || echo "Migration failed or already up to date"
+            sh -c "${DOCKER_COMPOSE_CMD} -f infra/docker-compose.prod.yml ps"
+          fi
+          SCRIPTEOF
           
-          sh -c "\${DOCKER_COMPOSE_CMD} -f infra/docker-compose.prod.yml ps"
-          EOF
+          # Replace __DEPLOY_PATH_PLACEHOLDER__ with actual path in the script
+          sed -i "s|__DEPLOY_PATH_PLACEHOLDER__|${DEPLOY_PATH_EXPANDED}|g" /tmp/deploy_script.sh
+          
+          echo "✅ Deploy script prepared with DEPLOY_DIR=${DEPLOY_PATH_EXPANDED}"
           
           scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
             /tmp/deploy_script.sh \
@@ -831,6 +1026,35 @@ jobs:
           ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
             ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
             "bash /tmp/deploy_script.sh"
+
+      - name: Restart Nginx after deployment
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Restarting Nginx to refresh upstream connections..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          
+          # Determine Docker command
+          DOCKER_CMD="docker"
+          if ! ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} "docker ps" > /dev/null 2>&1; then
+            DOCKER_CMD="sudo docker"
+          fi
+          
+          # Restart nginx container to refresh upstream connections
+          echo "Restarting nginx container..."
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+            "${DOCKER_CMD} restart primedata-nginx"
+          
+          echo "Waiting for nginx to be ready..."
+          sleep 5
+          
+          # Verify nginx is running
+          if ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+            "${DOCKER_CMD} ps | grep -q primedata-nginx"; then
+            echo "✅ Nginx restarted successfully"
+          else
+            echo "⚠️  Warning: Nginx container may not be running"
+          fi
 
       - name: Generate SSL certificate for Qdrant subdomain
         run: |
@@ -910,5 +1134,4 @@ jobs:
           sleep 5
           curl -f http://${{ steps.get-vm-ip.outputs.vm_ip }}:8000/health || echo "Health check failed"
           curl -f http://${{ steps.get-vm-ip.outputs.vm_ip }}:8080/health || echo "Airflow health check failed"
-
 

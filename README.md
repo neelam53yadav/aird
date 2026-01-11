@@ -43,7 +43,6 @@ PrimeData is a comprehensive enterprise data platform designed for AI workflows.
 - **Team Collaboration**: Role-based access control and workspace management
 - **Billing & Usage**: Stripe integration with subscription plans and usage tracking
 - **Export & Provenance**: Secure data export with complete lineage tracking
-- **MLflow Integration**: Complete experiment tracking and performance monitoring
 - **Enterprise Architecture**: Microservices design with scalable components
 
 ### Service URLs (Default)
@@ -51,16 +50,40 @@ PrimeData is a comprehensive enterprise data platform designed for AI workflows.
 - **PrimeData UI**: http://localhost:3000
 - **PrimeData API**: http://localhost:8000
 - **API Documentation**: http://localhost:8000/docs
-- **MLflow UI**: http://localhost:5000
 - **Airflow UI**: http://localhost:8080
 - **MinIO Console**: http://localhost:9001
 - **Qdrant Dashboard**: http://localhost:6333
 
-### Default Credentials
+### Environment Configuration
 
-- **Airflow**: admin / admin
-- **MinIO**: minioadmin / minioadmin123
-- **PostgreSQL**: primedata / primedata123
+⚠️ **IMPORTANT**: All credentials must be set via environment variables! No defaults are provided for security.
+
+**Required Environment Variables for Docker Compose:**
+
+1. **Database Configuration** (choose one):
+   - Option A: `DATABASE_URL` - Full connection string (simplest)
+   - Option B: Individual components (allows database name from secrets):
+     - `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`
+     - Optional: `AIRFLOW_DB_NAME` for separate Airflow database
+
+2. **MinIO Configuration:**
+   - `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`
+
+3. **Airflow Configuration:**
+   - `AIRFLOW_USERNAME`, `AIRFLOW_PASSWORD`, `AIRFLOW_SECRET_KEY`
+   - `AIRFLOW_DB_NAME` (if using separate database)
+
+4. **Security:**
+   - `JWT_SECRET_KEY`, `NEXTAUTH_SECRET`
+
+**Setup Instructions:**
+
+1. For local development: Create `.env` file in `infra/` directory based on `infra/env/services.example.env`
+2. For production: Set all variables via secrets manager (AWS Secrets Manager, HashiCorp Vault, etc.)
+3. Copy `backend/env.example` to `backend/.env` and fill in values
+4. Copy `env.production.example` to `.env.production` for production
+
+See configuration templates in `backend/env.example`, `infra/env/services.example.env`, and `env.production.example`.
 
 ---
 
@@ -96,7 +119,6 @@ source venv/bin/activate
 # Install dependencies
 cd backend
 pip install -r requirements.txt
-pip install mlflow
 
 # Run database migrations
 alembic upgrade head
@@ -104,7 +126,7 @@ alembic upgrade head
 
 This will:
 - Create and activate virtual environment
-- Install all dependencies including MLflow
+- Install all dependencies
 - Set up the database
 
 #### **Option 2: Manual Setup**
@@ -126,11 +148,23 @@ pip install -r requirements.txt
 cd ../ui
 npm install
 
-# 5. Start Docker services
-cd ..
-docker-compose -f infra/docker-compose.yml up -d
+# 5. Configure environment variables (REQUIRED!)
+# ⚠️ IMPORTANT: Create .env files before starting services - all credentials must be set!
+cd ../infra
+# Copy example file and fill in your values
+cp env/services.example.env .env
+# Edit .env and set all required values (POSTGRES_*, MINIO_ROOT_*, AIRFLOW_*, etc.)
 
-# 6. Run database migrations
+cd ../backend
+# Copy example file and fill in your values  
+cp env.example .env
+# Edit .env and set DATABASE_URL or individual POSTGRES_* components
+
+# 6. Start Docker services (will use .env file automatically)
+cd ..
+docker-compose -f infra/docker-compose.yml --env-file infra/.env up -d
+
+# 7. Run database migrations
 cd backend
 alembic upgrade head
 
@@ -144,9 +178,6 @@ python start_backend.py
 # Terminal 2: Frontend
 cd ui
 npm run dev
-
-# Terminal 3: MLflow (optional)
-mlflow server --host 0.0.0.0 --port 5000
 ```
 
 ### Database Setup
@@ -245,17 +276,6 @@ mlflow server --host 0.0.0.0 --port 5000
 3. **Recursive** (`recursive`): Hierarchical splitting for code/technical docs
 
 **Note**: When you select "Semantic" in the UI, the backend uses paragraph-based chunking, which is ideal for structured documents like annual reports.
-
-### MLflow Integration
-
-- Complete experiment tracking
-- Performance monitoring over time
-- Artifact management
-- Pipeline metrics dashboard
-- Historical analysis and A/B testing
-- Task-level metrics aggregation
-- Version-based run filtering
-- Structured parameter & metric storage
 
 ### Export & Data Management
 
@@ -389,17 +409,14 @@ You can also create custom playbooks using the UI.
 
 ```env
 # Database
-DATABASE_URL=postgresql://primedata:primedata123@localhost:5432/primedata
-
-# MLflow
-MLFLOW_TRACKING_URI=http://localhost:5000
-MLFLOW_BACKEND_STORE_URI=postgresql://primedata:primedata123@localhost:5432/primedata
-MLFLOW_DEFAULT_ARTIFACT_ROOT=s3://mlflow-artifacts
+# ⚠️ WARNING: Replace with secure passwords in production!
+DATABASE_URL=postgresql://primedata:YOUR_PASSWORD@localhost:5432/primedata
 
 # MinIO
+# ⚠️ WARNING: Replace with secure credentials in production!
 MINIO_ENDPOINT=localhost:9000
 MINIO_ACCESS_KEY=minioadmin
-MINIO_SECRET_KEY=minioadmin123
+MINIO_SECRET_KEY=YOUR_MINIO_PASSWORD
 MINIO_SECURE=false
 
 # Qdrant
@@ -839,7 +856,6 @@ Authorization: Bearer <jwt_token>
 #### **Analytics & Metrics**
 
 - `GET /api/v1/analytics/metrics` - Get analytics metrics
-- `GET /api/v1/products/{product_id}/mlflow-metrics` - Get MLflow metrics
 
 #### **Embedding Models**
 
@@ -873,7 +889,6 @@ Authorization: Bearer <jwt_token>
 - **Object Storage**: MinIO - http://localhost:9000
 - **Orchestration**: Airflow - http://localhost:8080
 - **Database**: PostgreSQL - localhost:5432
-- **ML Tracking**: MLflow - http://localhost:5000
 
 #### **Data Flow**
 
@@ -933,28 +948,6 @@ source venv/bin/activate
 alembic upgrade head
 ```
 
-### MLflow Integration
-
-MLflow provides specialized ML experiment tracking that Airflow cannot provide:
-
-**Key Features**:
-- Experiment search & historical run querying
-- Version-based run filtering
-- Structured metrics aggregation across multiple runs
-- Parameter & metric storage with prefixes
-- Experiment organization by product
-- MLflow UI integration & visualization
-- Task-level metrics tracking
-- Specialized ML metrics logging
-- Artifact versioning & storage
-- Run status aggregation across tasks
-- Historical performance trend analysis
-- Parameter extraction from historical runs
-
-**Why Both Tools?**
-- **Airflow**: Orchestrates WHEN and HOW tasks run
-- **MLflow**: Tracks WHAT happened and HOW WELL it performed
-
 ### Qdrant as Single Source of Truth
 
 The system uses Qdrant as the single source of truth for all chunk metadata:
@@ -1012,7 +1005,6 @@ curl http://localhost:8000/health
   "database": {"status": "healthy"},
   "qdrant": {"status": "healthy"},
   "minio": {"status": "healthy"},
-  "mlflow": {"status": "healthy"},
   "airflow": {"status": "healthy"}
 }
 ```
@@ -1114,17 +1106,6 @@ lsof -i :8000  # Linux/Mac
 - Check presigned URL generation
 - Ensure file paths are correct (v/{version}/clean/)
 
-#### MLflow Issues
-
-**MLflow tracking failed**
-- Check MLflow server: `curl http://localhost:5000/health`
-- Verify environment variables
-- Check PostgreSQL connection for MLflow backend
-
-**Experiment not found**
-- Verify experiment is created before logging
-- Check experiment name and ID
-- Review MLflow logs
 
 #### Data Quality Issues
 
@@ -1365,8 +1346,9 @@ nano .env.production
 
 ```bash
 # Database Configuration
-DATABASE_URL=postgresql://primedata:123Hello!@34.171.200.114:5432/primedata
-AIRFLOW_DB_URL=postgresql://primedata:123Hello!@34.171.200.114:5432/airflow
+# ⚠️ WARNING: Replace YOUR_PASSWORD and YOUR_DB_IP with your actual values!
+DATABASE_URL=postgresql://primedata:YOUR_PASSWORD@YOUR_DB_IP:5432/primedata
+AIRFLOW_DB_URL=postgresql://primedata:YOUR_PASSWORD@YOUR_DB_IP:5432/airflow
 
 # Cloud Storage (GCS) Configuration
 MINIO_HOST=storage.googleapis.com
@@ -1734,7 +1716,7 @@ This allows the service account to create tokens for itself, which is required f
 **Lightweight CI Requirements:**
 
 The CI workflow uses `backend/requirements-ci.txt` which excludes heavy ML dependencies:
-- Excludes: `sentence-transformers` (requires PyTorch + CUDA ~3GB), `mlflow` (heavy dependencies)
+- Excludes: `sentence-transformers` (requires PyTorch + CUDA ~3GB)
 - Includes: Only what's needed for linting and basic testing
 - Reduces installation size from ~3GB to ~200MB
 

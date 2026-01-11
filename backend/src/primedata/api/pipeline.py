@@ -190,50 +190,28 @@ async def trigger_pipeline(
 
         logger.info(f"Using explicit raw file version {raw_file_version} (validated: {raw_file_count} raw files found)")
     else:
-        # Auto-detect: Prefer PROCESSED versions over FAILED versions for reprocessing
-        # This ensures we use valid, successfully processed data as the source
-        latest_processed = (
+        # Auto-detect: Pick the latest raw file version regardless of status (except DELETED)
+        # This allows retrying failed pipelines easily - picks latest version with any status
+        latest_raw_file = (
             db.query(RawFile)
-            .filter(RawFile.product_id == product.id, RawFile.status == RawFileStatus.PROCESSED)
+            .filter(RawFile.product_id == product.id, RawFile.status != RawFileStatus.DELETED)
             .order_by(RawFile.version.desc())
             .first()
         )
 
-        if latest_processed:
-            raw_file_version = latest_processed.version
-            logger.info(f"Auto-detected latest processed raw file version: {raw_file_version} " f"(found file: {latest_processed.filename})")
-        else:
-            # Fallback to INGESTED files if no PROCESSED files exist
-            latest_ingested = (
-                db.query(RawFile)
-                .filter(RawFile.product_id == product.id, RawFile.status == RawFileStatus.INGESTED)
-                .order_by(RawFile.version.desc())
-                .first()
-            )
+        if not latest_raw_file:
+            error_detail = {
+                "message": "No raw files found for this product",
+                "suggestion": "Please run initial ingestion first to upload data",
+            }
+            logger.warning(f"Pipeline trigger failed: No raw files for product {product.id}")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_detail)
 
-            if not latest_ingested:
-                # Check if any raw files exist at all
-                any_raw_file = (
-                    db.query(RawFile).filter(RawFile.product_id == product.id, RawFile.status != RawFileStatus.DELETED).first()
-                )
-
-                if any_raw_file:
-                    error_detail = {
-                        "message": "No raw files found for processing.",
-                        "suggestion": "Please run initial ingestion to create a new version with raw files",
-                    }
-                else:
-                    error_detail = {
-                        "message": "No raw files found for this product",
-                        "suggestion": "Please run initial ingestion first to upload data",
-                    }
-
-                logger.warning(f"Pipeline trigger failed: No raw files for product {product.id}")
-
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_detail)
-
-            raw_file_version = latest_ingested.version
-            logger.info(f"Auto-detected latest ingested raw file version: {raw_file_version} " f"(found file: {latest_ingested.filename})")
+        raw_file_version = latest_raw_file.version
+        logger.info(
+            f"Auto-detected latest raw file version: {raw_file_version} "
+            f"(status: {latest_raw_file.status.value}, filename: {latest_raw_file.filename})"
+        )
 
     # ALWAYS create a new pipeline run version number (independent of raw file version)
     # Get the maximum existing pipeline run version for this product
@@ -678,9 +656,17 @@ async def update_pipeline_run(
                         from requests.auth import HTTPBasicAuth
                         
                         # Use same environment variables as get_pipeline_run_logs
-                        airflow_url = os.getenv("AIRFLOW_URL", "http://34.28.26.21:8080")
-                        airflow_username = os.getenv("AIRFLOW_USERNAME", "admin")
-                        airflow_password = os.getenv("AIRFLOW_PASSWORD", "admin123")
+                        # ⚠️ WARNING: Replace with your actual Airflow URL and credentials in production!
+                        airflow_url = os.getenv("AIRFLOW_URL", "http://localhost:8080")
+                        # ⚠️ WARNING: Set AIRFLOW_USERNAME environment variable!
+                        airflow_username = os.getenv("AIRFLOW_USERNAME")
+                        if not airflow_username:
+                            logger.error("AIRFLOW_USERNAME environment variable must be set")
+                            raise ValueError("AIRFLOW_USERNAME environment variable must be set")
+                        airflow_password = os.getenv("AIRFLOW_PASSWORD")  # Must be set via environment variable
+                        if not airflow_password:
+                            logger.error("AIRFLOW_PASSWORD environment variable must be set")
+                            raise ValueError("AIRFLOW_PASSWORD environment variable must be set")
                         
                         dag_id = "primedata_simple"
                         # Use PATCH to update DAG run state to failed (stops execution)
@@ -823,9 +809,21 @@ async def get_pipeline_run_logs(
         }
 
     # Fetch logs from Airflow
-    airflow_url = os.getenv("AIRFLOW_URL", "http://34.28.26.21:8080")
-    airflow_username = os.getenv("AIRFLOW_USERNAME", "admin")
-    airflow_password = os.getenv("AIRFLOW_PASSWORD", "admin123")
+    # ⚠️ WARNING: Replace with your actual Airflow URL and credentials in production!
+    airflow_url = os.getenv("AIRFLOW_URL", "http://localhost:8080")
+    # ⚠️ WARNING: Set AIRFLOW_USERNAME environment variable!
+    airflow_username = os.getenv("AIRFLOW_USERNAME")
+    if not airflow_username:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="AIRFLOW_USERNAME environment variable must be set",
+        )
+    airflow_password = os.getenv("AIRFLOW_PASSWORD")  # Must be set via environment variable
+    if not airflow_password:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="AIRFLOW_PASSWORD environment variable must be set",
+        )
 
     try:
         import requests
@@ -1252,9 +1250,19 @@ def _sync_pipeline_runs_with_airflow(db: Session) -> int:
     """
     try:
         # Get Airflow configuration
-        airflow_url = os.getenv("AIRFLOW_URL", "http://34.28.26.21:8080")
-        airflow_username = os.getenv("AIRFLOW_USERNAME", "admin")
-        airflow_password = os.getenv("AIRFLOW_PASSWORD", "admin123")
+        # ⚠️ WARNING: Replace with your actual Airflow URL and credentials in production!
+        airflow_url = os.getenv("AIRFLOW_URL", "http://localhost:8080")
+        # ⚠️ WARNING: Set AIRFLOW_USERNAME environment variable!
+        airflow_username = os.getenv("AIRFLOW_USERNAME")
+        if not airflow_username:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="AIRFLOW_USERNAME environment variable must be set",
+            )
+        airflow_password = os.getenv("AIRFLOW_PASSWORD")  # Must be set via environment variable
+        if not airflow_password:
+            logger.error("AIRFLOW_PASSWORD environment variable must be set")
+            return  # Skip sync if password not configured
 
         # Get all running pipeline runs
         running_runs = (
@@ -1391,9 +1399,23 @@ async def _trigger_airflow_dag(
         dag_run_id = f"primedata_simple_{pipeline_run_id}_{int(datetime.utcnow().timestamp())}"
 
         # Trigger DAG using Airflow REST API
-        airflow_url = os.getenv("AIRFLOW_URL", "http://34.28.26.21:8080")
-        airflow_username = os.getenv("AIRFLOW_USERNAME", "admin")
-        airflow_password = os.getenv("AIRFLOW_PASSWORD", "admin123")
+        # ⚠️ WARNING: Replace with your actual Airflow URL and credentials in production!
+        airflow_url = os.getenv("AIRFLOW_URL", "http://localhost:8080")
+        # ⚠️ WARNING: Set AIRFLOW_USERNAME environment variable!
+        airflow_username = os.getenv("AIRFLOW_USERNAME")
+        if not airflow_username:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="AIRFLOW_USERNAME environment variable must be set",
+            )
+        airflow_password = os.getenv("AIRFLOW_PASSWORD")  # Must be set via environment variable
+        if not airflow_password:
+            error_detail = {
+                "message": "AIRFLOW_PASSWORD environment variable must be set",
+                "suggestion": "Please set AIRFLOW_PASSWORD environment variable to authenticate with Airflow",
+            }
+            logger.error("Pipeline trigger failed: AIRFLOW_PASSWORD not set")
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error_detail)
 
         trigger_url = f"{airflow_url}/api/v1/dags/primedata_simple/dagRuns"
 
