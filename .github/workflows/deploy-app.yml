@@ -810,10 +810,7 @@ jobs:
           # Create .env file content
           cat > /tmp/prod_env_file << 'ENVEOF'
 # Database Configuration
-# Option 1: Full DATABASE_URL
-DATABASE_URL="postgresql+psycopg2://${{ secrets.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@${{ vars.POSTGRES_HOST }}:${{ vars.POSTGRES_PORT }}/${{ vars.POSTGRES_DB }}"
-
-# Option 2: Individual components (for component-based construction)
+# Individual components (code will construct DATABASE_URL via get_database_url() method)
 POSTGRES_USER=${{ secrets.POSTGRES_USER }}
 POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
 POSTGRES_HOST=${{ vars.POSTGRES_HOST }}
