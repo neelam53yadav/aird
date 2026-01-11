@@ -300,8 +300,14 @@ def send_contact_email(user_name: str, user_email: str, feedback: str) -> bool:
         return False
     
     try:
-        # Feedback recipient email
-        feedback_email = "primedata.feedback@gmail.com"
+        # Feedback recipient email - use SMTP_TO_EMAIL setting or fallback to SMTP_USERNAME
+        # ⚠️ WARNING: Set SMTP_TO_EMAIL environment variable for production!
+        from primedata.core.settings import get_settings
+        settings = get_settings()
+        feedback_email = settings.SMTP_TO_EMAIL or settings.SMTP_USERNAME
+        if not feedback_email:
+            logger.error("SMTP_TO_EMAIL or SMTP_USERNAME must be set for contact form submissions")
+            return False
         
         # Create message
         msg = MIMEMultipart('alternative')

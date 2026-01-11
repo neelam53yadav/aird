@@ -60,8 +60,6 @@ export default function SystemHealthPage() {
         return <Search className="h-5 w-5" />
       case 'minio':
         return <HardDrive className="h-5 w-5" />
-      case 'mlflow':
-        return <BarChart3 className="h-5 w-5" />
       case 'airflow':
         return <GitBranch className="h-5 w-5" />
       default:
@@ -77,8 +75,6 @@ export default function SystemHealthPage() {
         return 'Qdrant Vector DB'
       case 'minio':
         return 'MinIO Object Storage'
-      case 'mlflow':
-        return 'MLflow Tracking'
       case 'airflow':
         return 'Apache Airflow'
       default:

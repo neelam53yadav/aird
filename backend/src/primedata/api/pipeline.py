@@ -656,9 +656,17 @@ async def update_pipeline_run(
                         from requests.auth import HTTPBasicAuth
                         
                         # Use same environment variables as get_pipeline_run_logs
-                        airflow_url = os.getenv("AIRFLOW_URL", "http://34.28.26.21:8080")
-                        airflow_username = os.getenv("AIRFLOW_USERNAME", "admin")
-                        airflow_password = os.getenv("AIRFLOW_PASSWORD", "admin123")
+                        # ⚠️ WARNING: Replace with your actual Airflow URL and credentials in production!
+                        airflow_url = os.getenv("AIRFLOW_URL", "http://localhost:8080")
+                        # ⚠️ WARNING: Set AIRFLOW_USERNAME environment variable!
+                        airflow_username = os.getenv("AIRFLOW_USERNAME")
+                        if not airflow_username:
+                            logger.error("AIRFLOW_USERNAME environment variable must be set")
+                            raise ValueError("AIRFLOW_USERNAME environment variable must be set")
+                        airflow_password = os.getenv("AIRFLOW_PASSWORD")  # Must be set via environment variable
+                        if not airflow_password:
+                            logger.error("AIRFLOW_PASSWORD environment variable must be set")
+                            raise ValueError("AIRFLOW_PASSWORD environment variable must be set")
                         
                         dag_id = "primedata_simple"
                         # Use PATCH to update DAG run state to failed (stops execution)
@@ -801,9 +809,21 @@ async def get_pipeline_run_logs(
         }
 
     # Fetch logs from Airflow
-    airflow_url = os.getenv("AIRFLOW_URL", "http://34.28.26.21:8080")
-    airflow_username = os.getenv("AIRFLOW_USERNAME", "admin")
-    airflow_password = os.getenv("AIRFLOW_PASSWORD", "admin123")
+    # ⚠️ WARNING: Replace with your actual Airflow URL and credentials in production!
+    airflow_url = os.getenv("AIRFLOW_URL", "http://localhost:8080")
+    # ⚠️ WARNING: Set AIRFLOW_USERNAME environment variable!
+    airflow_username = os.getenv("AIRFLOW_USERNAME")
+    if not airflow_username:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="AIRFLOW_USERNAME environment variable must be set",
+        )
+    airflow_password = os.getenv("AIRFLOW_PASSWORD")  # Must be set via environment variable
+    if not airflow_password:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="AIRFLOW_PASSWORD environment variable must be set",
+        )
 
     try:
         import requests
@@ -1230,9 +1250,19 @@ def _sync_pipeline_runs_with_airflow(db: Session) -> int:
     """
     try:
         # Get Airflow configuration
-        airflow_url = os.getenv("AIRFLOW_URL", "http://34.28.26.21:8080")
-        airflow_username = os.getenv("AIRFLOW_USERNAME", "admin")
-        airflow_password = os.getenv("AIRFLOW_PASSWORD", "admin123")
+        # ⚠️ WARNING: Replace with your actual Airflow URL and credentials in production!
+        airflow_url = os.getenv("AIRFLOW_URL", "http://localhost:8080")
+        # ⚠️ WARNING: Set AIRFLOW_USERNAME environment variable!
+    airflow_username = os.getenv("AIRFLOW_USERNAME")
+    if not airflow_username:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="AIRFLOW_USERNAME environment variable must be set",
+        )
+        airflow_password = os.getenv("AIRFLOW_PASSWORD")  # Must be set via environment variable
+        if not airflow_password:
+            logger.error("AIRFLOW_PASSWORD environment variable must be set")
+            return  # Skip sync if password not configured
 
         # Get all running pipeline runs
         running_runs = (
@@ -1369,9 +1399,23 @@ async def _trigger_airflow_dag(
         dag_run_id = f"primedata_simple_{pipeline_run_id}_{int(datetime.utcnow().timestamp())}"
 
         # Trigger DAG using Airflow REST API
-        airflow_url = os.getenv("AIRFLOW_URL", "http://34.28.26.21:8080")
-        airflow_username = os.getenv("AIRFLOW_USERNAME", "admin")
-        airflow_password = os.getenv("AIRFLOW_PASSWORD", "admin123")
+        # ⚠️ WARNING: Replace with your actual Airflow URL and credentials in production!
+        airflow_url = os.getenv("AIRFLOW_URL", "http://localhost:8080")
+        # ⚠️ WARNING: Set AIRFLOW_USERNAME environment variable!
+    airflow_username = os.getenv("AIRFLOW_USERNAME")
+    if not airflow_username:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="AIRFLOW_USERNAME environment variable must be set",
+        )
+        airflow_password = os.getenv("AIRFLOW_PASSWORD")  # Must be set via environment variable
+        if not airflow_password:
+            error_detail = {
+                "message": "AIRFLOW_PASSWORD environment variable must be set",
+                "suggestion": "Please set AIRFLOW_PASSWORD environment variable to authenticate with Airflow",
+            }
+            logger.error("Pipeline trigger failed: AIRFLOW_PASSWORD not set")
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error_detail)
 
         trigger_url = f"{airflow_url}/api/v1/dags/primedata_simple/dagRuns"
 

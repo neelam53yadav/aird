@@ -37,7 +37,6 @@ PrimeData is a comprehensive enterprise data platform designed for AI workflows.
 - **Team Collaboration**: Role-based access control and workspace management
 - **Billing & Usage**: Stripe integration with subscription plans and usage tracking
 - **Export & Provenance**: Secure data export with complete lineage tracking
-- **MLflow Integration**: Complete experiment tracking and performance monitoring
 - **Enterprise Architecture**: Microservices design with scalable components
 
 ### Service URLs (Default)
@@ -45,16 +44,21 @@ PrimeData is a comprehensive enterprise data platform designed for AI workflows.
 - **PrimeData UI**: http://localhost:3000
 - **PrimeData API**: http://localhost:8000
 - **API Documentation**: http://localhost:8000/docs
-- **MLflow UI**: http://localhost:5000
 - **Airflow UI**: http://localhost:8080
 - **MinIO Console**: http://localhost:9001
 - **Qdrant Dashboard**: http://localhost:6333
 
-### Default Credentials
+### Default Development Credentials
 
-- **Airflow**: admin / admin
-- **MinIO**: minioadmin / minioadmin123
-- **PostgreSQL**: primedata / primedata123
+⚠️ **WARNING**: Do **NOT** use default credentials! Always set secure credentials via environment variables.
+
+**Required Environment Variables:**
+- `POSTGRES_USER` and `POSTGRES_PASSWORD` - Database credentials
+- `MINIO_ROOT_USER` and `MINIO_ROOT_PASSWORD` - MinIO credentials  
+- `AIRFLOW_USERNAME` and `AIRFLOW_PASSWORD` - Airflow credentials
+- `JWT_SECRET_KEY` and `NEXTAUTH_SECRET` - Authentication secrets
+
+See `backend/env.example` and `env.production.example` for complete configuration templates.
 
 ---
 
@@ -90,7 +94,6 @@ source venv/bin/activate
 # Install dependencies
 cd backend
 pip install -r requirements.txt
-pip install mlflow
 
 # Run database migrations
 alembic upgrade head
@@ -98,7 +101,7 @@ alembic upgrade head
 
 This will:
 - Create and activate virtual environment
-- Install all dependencies including MLflow
+- Install all dependencies
 - Set up the database
 
 #### **Option 2: Manual Setup**
@@ -139,8 +142,6 @@ python start_backend.py
 cd ui
 npm run dev
 
-# Terminal 3: MLflow (optional)
-mlflow server --host 0.0.0.0 --port 5000
 ```
 
 ### Database Setup
@@ -239,17 +240,6 @@ mlflow server --host 0.0.0.0 --port 5000
 3. **Recursive** (`recursive`): Hierarchical splitting for code/technical docs
 
 **Note**: When you select "Semantic" in the UI, the backend uses paragraph-based chunking, which is ideal for structured documents like annual reports.
-
-### MLflow Integration
-
-- Complete experiment tracking
-- Performance monitoring over time
-- Artifact management
-- Pipeline metrics dashboard
-- Historical analysis and A/B testing
-- Task-level metrics aggregation
-- Version-based run filtering
-- Structured parameter & metric storage
 
 ### Export & Data Management
 
@@ -383,17 +373,14 @@ You can also create custom playbooks using the UI.
 
 ```env
 # Database
-DATABASE_URL=postgresql://primedata:primedata123@localhost:5432/primedata
-
-# MLflow
-MLFLOW_TRACKING_URI=http://localhost:5000
-MLFLOW_BACKEND_STORE_URI=postgresql://primedata:primedata123@localhost:5432/primedata
-MLFLOW_DEFAULT_ARTIFACT_ROOT=s3://mlflow-artifacts
+# ⚠️ WARNING: Replace with secure passwords in production!
+DATABASE_URL=postgresql://primedata:YOUR_PASSWORD@localhost:5432/primedata
 
 # MinIO
+# ⚠️ WARNING: Replace with secure credentials in production!
 MINIO_ENDPOINT=localhost:9000
 MINIO_ACCESS_KEY=minioadmin
-MINIO_SECRET_KEY=minioadmin123
+MINIO_SECRET_KEY=YOUR_MINIO_PASSWORD
 MINIO_SECURE=false
 
 # Qdrant
@@ -833,7 +820,6 @@ Authorization: Bearer <jwt_token>
 #### **Analytics & Metrics**
 
 - `GET /api/v1/analytics/metrics` - Get analytics metrics
-- `GET /api/v1/products/{product_id}/mlflow-metrics` - Get MLflow metrics
 
 #### **Embedding Models**
 
@@ -867,7 +853,6 @@ Authorization: Bearer <jwt_token>
 - **Object Storage**: MinIO - http://localhost:9000
 - **Orchestration**: Airflow - http://localhost:8080
 - **Database**: PostgreSQL - localhost:5432
-- **ML Tracking**: MLflow - http://localhost:5000
 
 #### **Data Flow**
 
@@ -927,28 +912,6 @@ source venv/bin/activate
 alembic upgrade head
 ```
 
-### MLflow Integration
-
-MLflow provides specialized ML experiment tracking that Airflow cannot provide:
-
-**Key Features**:
-- Experiment search & historical run querying
-- Version-based run filtering
-- Structured metrics aggregation across multiple runs
-- Parameter & metric storage with prefixes
-- Experiment organization by product
-- MLflow UI integration & visualization
-- Task-level metrics tracking
-- Specialized ML metrics logging
-- Artifact versioning & storage
-- Run status aggregation across tasks
-- Historical performance trend analysis
-- Parameter extraction from historical runs
-
-**Why Both Tools?**
-- **Airflow**: Orchestrates WHEN and HOW tasks run
-- **MLflow**: Tracks WHAT happened and HOW WELL it performed
-
 ### Qdrant as Single Source of Truth
 
 The system uses Qdrant as the single source of truth for all chunk metadata:
@@ -1006,7 +969,6 @@ curl http://localhost:8000/health
   "database": {"status": "healthy"},
   "qdrant": {"status": "healthy"},
   "minio": {"status": "healthy"},
-  "mlflow": {"status": "healthy"},
   "airflow": {"status": "healthy"}
 }
 ```
@@ -1107,18 +1069,6 @@ lsof -i :8000  # Linux/Mac
 - Verify MinIO is accessible
 - Check presigned URL generation
 - Ensure file paths are correct (v/{version}/clean/)
-
-#### MLflow Issues
-
-**MLflow tracking failed**
-- Check MLflow server: `curl http://localhost:5000/health`
-- Verify environment variables
-- Check PostgreSQL connection for MLflow backend
-
-**Experiment not found**
-- Verify experiment is created before logging
-- Check experiment name and ID
-- Review MLflow logs
 
 #### Data Quality Issues
 
