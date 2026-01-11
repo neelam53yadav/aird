@@ -39,7 +39,7 @@ def send_verification_email(email: str, verification_token: str, user_name: str 
         
         # Create message
         msg = MIMEMultipart('alternative')
-        msg['Subject'] = "Verify your PrimeData account"
+        msg['Subject'] = "Verify your AIRDops account"
         msg['From'] = settings.SMTP_FROM_EMAIL
         msg['To'] = email
         
@@ -92,21 +92,21 @@ def send_verification_email(email: str, verification_token: str, user_name: str 
         </head>
         <body>
             <div class="container">
-                <h1 style="margin: 0; color: white;">PrimeData</h1>
+                <h1 style="margin: 0; color: white;">AIRDops</h1>
             </div>
             <div class="content">
                 <h2>Verify your email address</h2>
                 <p>Hello{f' {user_name}' if user_name else ''},</p>
-                <p>Thank you for signing up for PrimeData! Please verify your email address by clicking the button below:</p>
+                <p>Thank you for signing up for AIRDops! Please verify your email address by clicking the button below:</p>
                 <p style="text-align: center;">
                     <a href="{verification_link}" class="button">Verify Email Address</a>
                 </p>
                 <p>Or copy and paste this link into your browser:</p>
                 <p style="word-break: break-all; color: #667eea;">{verification_link}</p>
                 <p>This link will expire in 24 hours.</p>
-                <p>If you didn't create an account with PrimeData, please ignore this email.</p>
+                <p>If you didn't create an account with AIRDops, please ignore this email.</p>
                 <div class="footer">
-                    <p>© {settings.FRONTEND_URL.split('//')[-1].split('/')[0]} PrimeData. All rights reserved.</p>
+                    <p>© {settings.FRONTEND_URL.split('//')[-1].split('/')[0]} AIRDops. All rights reserved.</p>
                 </div>
             </div>
         </body>
@@ -115,17 +115,17 @@ def send_verification_email(email: str, verification_token: str, user_name: str 
         
         # Plain text version
         text_body = f"""
-        Verify your PrimeData account
+        Verify your AIRDops account
         
         Hello{f' {user_name}' if user_name else ''},
         
-        Thank you for signing up for PrimeData! Please verify your email address by visiting:
+        Thank you for signing up for AIRDops! Please verify your email address by visiting:
         
         {verification_link}
         
         This link will expire in 24 hours.
         
-        If you didn't create an account with PrimeData, please ignore this email.
+        If you didn't create an account with AIRDops, please ignore this email.
         """
         
         # Attach parts
@@ -179,7 +179,7 @@ def send_password_reset_email(email: str, reset_token: str, user_name: str = Non
         reset_link = f"{frontend_url}/reset-password?token={quote(reset_token)}"
         
         msg = MIMEMultipart('alternative')
-        msg['Subject'] = "Reset your PrimeData password"
+        msg['Subject'] = "Reset your AIRDops password"
         msg['From'] = settings.SMTP_FROM_EMAIL
         msg['To'] = email
         
@@ -224,7 +224,7 @@ def send_password_reset_email(email: str, reset_token: str, user_name: str = Non
         </head>
         <body>
             <div class="container">
-                <h1 style="margin: 0; color: white;">PrimeData</h1>
+                <h1 style="margin: 0; color: white;">AIRDops</h1>
             </div>
             <div class="content">
                 <h2>Reset your password</h2>
@@ -243,7 +243,7 @@ def send_password_reset_email(email: str, reset_token: str, user_name: str = Non
         """
         
         text_body = f"""
-        Reset your PrimeData password
+        Reset your AIRDops password
         
         Hello{f' {user_name}' if user_name else ''},
         
@@ -371,7 +371,7 @@ def send_contact_email(user_name: str, user_email: str, feedback: str) -> bool:
         </head>
         <body>
             <div class="container">
-                <h1 style="margin: 0; color: white;">PrimeData Contact Form</h1>
+                <h1 style="margin: 0; color: white;">AIRDops Contact Form</h1>
             </div>
             <div class="content">
                 <h2>New Contact Form Submission</h2>
@@ -387,7 +387,7 @@ def send_contact_email(user_name: str, user_email: str, feedback: str) -> bool:
                 </div>
                 
                 <div class="footer">
-                    <p>This email was sent from the PrimeData contact form.</p>
+                    <p>This email was sent from the AIRDops contact form.</p>
                     <p>You can reply directly to this email to respond to {user_name}.</p>
                 </div>
             </div>
@@ -397,7 +397,7 @@ def send_contact_email(user_name: str, user_email: str, feedback: str) -> bool:
         
         # Plain text version
         text_body = f"""
-        PrimeData Contact Form Submission
+        AIRDops Contact Form Submission
         
         Name: {user_name}
         Email: {user_email}
@@ -406,7 +406,7 @@ def send_contact_email(user_name: str, user_email: str, feedback: str) -> bool:
         {feedback}
         
         ---
-        This email was sent from the PrimeData contact form.
+        This email was sent from the AIRDops contact form.
         You can reply directly to this email to respond to {user_name}.
         """
         
