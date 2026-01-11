@@ -19,6 +19,7 @@ psycopg2-binary==2.9.9  # Compatible with Python 3.11 and 3.12
 
 # Authentication & Security
 python-jose[cryptography]==3.3.0  # Compatible with Python 3.11 and 3.12
+PyJWT>=2.8.0,<3.0.0  # For JWT token encoding/decoding (used in security.py and jwt_keys.py)
 cryptography==41.0.7  # Compatible with Python 3.11 and 3.12
 passlib[bcrypt]==1.7.4  # Compatible with Python 3.11 and 3.12
 bcrypt<4.0.0,>=3.2.0  # Compatible with Python 3.11 and 3.12
