@@ -380,8 +380,9 @@ export function AuthButtons({ className }: AuthButtonsProps) {
         </div>
       )}
 
-      {/* Email/Password Form */}
-      <form onSubmit={handleEmailAuth} className="space-y-4">
+      {/* Email/Password Form - Hide on successful signup, show on error or sign in */}
+      {!(signupSuccess && isSignUp) && (
+        <form onSubmit={handleEmailAuth} className="space-y-4">
         {isSignUp && (
           <>
             <div className="space-y-2">
@@ -575,27 +576,29 @@ export function AuthButtons({ className }: AuthButtonsProps) {
               </Link>
             </div>
           )}
-          <button
-            type="button"
-            onClick={() => {
-              setIsSignUp(!isSignUp)
-              setError(null)
-              setPassword("")
-              setConfirmPassword("")
-              setFirstName("")
-              setLastName("")
-              setEmail("")
-              setShowResendVerification(false)
-              setResendSuccess(false)
-            }}
-            className="text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors"
-          >
-            {isSignUp
-              ? "Already have an account? Sign in"
-              : "Don't have an account? Sign up"}
-          </button>
-        </div>
-      </form>
+            <button
+              type="button"
+              onClick={() => {
+                setIsSignUp(!isSignUp)
+                setError(null)
+                setPassword("")
+                setConfirmPassword("")
+                setFirstName("")
+                setLastName("")
+                setEmail("")
+                setShowResendVerification(false)
+                setResendSuccess(false)
+                setSignupSuccess(false)  // Clear success state when toggling
+              }}
+              className="text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors"
+            >
+              {isSignUp
+                ? "Already have an account? Sign in"
+                : "Don't have an account? Sign up"}
+            </button>
+          </div>
+        </form>
+      )}
     </div>
   )
 }
