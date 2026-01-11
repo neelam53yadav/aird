@@ -25,35 +25,33 @@ class Settings(BaseSettings):
     DATABASE_URL: Optional[str] = None  # Primary: full connection string
     
     # Individual components (used if DATABASE_URL not set)
-    # ⚠️ WARNING: All components must be set via environment variables!
-    # These are kept for backward compatibility but values are read directly from os.getenv() in get_database_url()
+    # ⚠️ WARNING: All components must be set via environment variables or .env file!
+    # Values are read from Settings instance attributes (loaded from .env or environment)
     POSTGRES_USER: Optional[str] = None
     POSTGRES_PASSWORD: Optional[str] = None
-    POSTGRES_HOST: str = "localhost"  # Default fallback (actual value read from os.getenv() in get_database_url())
-    POSTGRES_PORT: int = 5432  # Default fallback (actual value read from os.getenv() in get_database_url())
-    POSTGRES_DB: Optional[str] = None  # ⚠️ MUST be set via POSTGRES_DB environment variable!
+    POSTGRES_HOST: str = "localhost"  # Default fallback
+    POSTGRES_PORT: int = 5432  # Default fallback
+    POSTGRES_DB: Optional[str] = None  # ⚠️ MUST be set via POSTGRES_DB environment variable or .env file!
     
     def get_database_url(self) -> str:
         """
         Get database URL, constructing from components if DATABASE_URL not set.
         
         Priority:
-        1. DATABASE_URL environment variable (if set)
+        1. DATABASE_URL from settings (loaded from .env or environment)
         2. Construct from POSTGRES_* components (if all set)
         3. Raise error if insufficient configuration
         """
-        # Read DATABASE_URL directly from environment (most recent value)
-        db_url = os.getenv("DATABASE_URL")
-        if db_url:
-            return db_url
+        # Read DATABASE_URL from settings (loaded from .env or environment)
+        if self.DATABASE_URL:
+            return self.DATABASE_URL
         
-        # Otherwise, construct from individual components (read directly from environment)
-        user = os.getenv("POSTGRES_USER")
-        password = os.getenv("POSTGRES_PASSWORD")
-        host = os.getenv("POSTGRES_HOST", "localhost")  # Use default if not set
-        port_str = os.getenv("POSTGRES_PORT", "5432")
-        port = int(port_str) if port_str else 5432
-        db_name = os.getenv("POSTGRES_DB")
+        # Otherwise, construct from individual components
+        user = self.POSTGRES_USER
+        password = self.POSTGRES_PASSWORD
+        host = self.POSTGRES_HOST
+        port = self.POSTGRES_PORT
+        db_name = self.POSTGRES_DB
         
         if not all([user, password, db_name]):
             missing = []
