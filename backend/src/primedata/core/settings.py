@@ -19,8 +19,58 @@ class Settings(BaseSettings):
     # Environment
     ENV: str = "development"
 
-    # Database
-    DATABASE_URL: str = "postgresql+psycopg2://primedata:primedata123@localhost:5433/primedata"
+    # Database Configuration
+    # Option 1: Full DATABASE_URL (preferred - simplest)
+    # Option 2: Individual components (fallback - more flexible, allows database name from secrets)
+    DATABASE_URL: Optional[str] = None  # Primary: full connection string
+    
+    # Individual components (used if DATABASE_URL not set)
+    # ⚠️ WARNING: All components must be set via environment variables!
+    # These are kept for backward compatibility but values are read directly from os.getenv() in get_database_url()
+    POSTGRES_USER: Optional[str] = None
+    POSTGRES_PASSWORD: Optional[str] = None
+    POSTGRES_HOST: str = "localhost"  # Default fallback (actual value read from os.getenv() in get_database_url())
+    POSTGRES_PORT: int = 5432  # Default fallback (actual value read from os.getenv() in get_database_url())
+    POSTGRES_DB: Optional[str] = None  # ⚠️ MUST be set via POSTGRES_DB environment variable!
+    
+    def get_database_url(self) -> str:
+        """
+        Get database URL, constructing from components if DATABASE_URL not set.
+        
+        Priority:
+        1. DATABASE_URL environment variable (if set)
+        2. Construct from POSTGRES_* components (if all set)
+        3. Raise error if insufficient configuration
+        """
+        # Read DATABASE_URL directly from environment (most recent value)
+        db_url = os.getenv("DATABASE_URL")
+        if db_url:
+            return db_url
+        
+        # Otherwise, construct from individual components (read directly from environment)
+        user = os.getenv("POSTGRES_USER")
+        password = os.getenv("POSTGRES_PASSWORD")
+        host = os.getenv("POSTGRES_HOST", "localhost")  # Use default if not set
+        port_str = os.getenv("POSTGRES_PORT", "5432")
+        port = int(port_str) if port_str else 5432
+        db_name = os.getenv("POSTGRES_DB")
+        
+        if not all([user, password, db_name]):
+            missing = []
+            if not user:
+                missing.append("POSTGRES_USER")
+            if not password:
+                missing.append("POSTGRES_PASSWORD")
+            if not db_name:
+                missing.append("POSTGRES_DB")
+            raise ValueError(
+                f"Database configuration required! Either set DATABASE_URL, "
+                f"or set all of: POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB. "
+                f"Missing environment variables: {', '.join(missing)}. "
+                f"See backend/env.example for configuration template."
+            )
+        
+        return f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{db_name}"
 
     # CORS - can be set via environment variable as JSON array or comma-separated string
     # Example: CORS_ORIGINS='["http://localhost:3000","https://airdops.com"]'
@@ -33,18 +83,17 @@ class Settings(BaseSettings):
     JWT_AUDIENCE: str = "primedata-api"
     API_SESSION_EXCHANGE_ALLOWED_ISS: str = "https://nextauth.local"
 
-    # MLflow Configuration
-    MLFLOW_TRACKING_URI: str = "http://localhost:5000"
-    MLFLOW_BACKEND_STORE_URI: str = "postgresql://primedata:primedata123@localhost:5433/primedata"
-    MLFLOW_DEFAULT_ARTIFACT_ROOT: str = "s3://mlflow-artifacts"
 
     # Storage Configuration
     USE_GCS: bool = False  # Set to True to use GCS instead of MinIO
 
     # MinIO Configuration (for local development)
+    # ⚠️ WARNING: Default credentials are for local dev only. Set MINIO_SECRET_KEY environment variable for production!
+    # BaseSettings automatically reads from environment variables matching these field names
     MINIO_HOST: str = "localhost:9000"
-    MINIO_ACCESS_KEY: str = "minioadmin"
-    MINIO_SECRET_KEY: str = "minioadmin123"
+    # ⚠️ WARNING: Default contains placeholder. Set MINIO_ACCESS_KEY environment variable for production!
+    MINIO_ACCESS_KEY: str = "changeme"
+    MINIO_SECRET_KEY: str = "CHANGE_ME"
     MINIO_SECURE: bool = False
 
     # GCS Configuration (for production, uses Application Default Credentials)
@@ -61,15 +110,6 @@ class Settings(BaseSettings):
     # AIRD Configuration (M0)
     AIRD_PLAYBOOK_DIR: str = ""  # Path to playbook directory (empty = auto-detect)
     AIRD_SCORING_WEIGHTS_PATH: str = ""  # Path to scoring weights JSON (empty = auto-detect)
-    AIRD_DEFAULT_PLAYBOOK: str = "TECH"  # Default playbook ID
-    AIRD_DEFAULT_SCORING_THRESHOLD: float = 70.0  # Default AI Trust Score threshold
-    AIRD_POLICY_MIN_TRUST_SCORE: float = 50.0  # Minimum trust score for policy
-    AIRD_POLICY_MIN_SECURE: float = 90.0  # Minimum secure score for policy
-    AIRD_POLICY_MIN_METADATA_PRESENCE: float = 80.0  # Minimum metadata presence for policy
-    AIRD_POLICY_MIN_KB_READY: float = 50.0  # Minimum KB readiness for policy
-    AIRD_ENABLE_DEDUPLICATION: bool = False  # Enable MinHash deduplication
-    AIRD_ENABLE_VALIDATION: bool = True  # Enable validation summary generation
-    AIRD_ENABLE_PDF_REPORTS: bool = True  # Enable PDF report generation
 
     # Email Configuration (SMTP)
     SMTP_ENABLED: bool = False  # Set to True to enable email sending
@@ -80,6 +120,7 @@ class Settings(BaseSettings):
     SMTP_USERNAME: Optional[str] = None  # SMTP username (usually your email)
     SMTP_PASSWORD: Optional[str] = None  # SMTP password or app-specific password
     SMTP_FROM_EMAIL: str = "noreply@primedata.com"  # From email address
+    SMTP_TO_EMAIL: Optional[str] = None  # Recipient email for contact/feedback forms (defaults to SMTP_USERNAME if not set)
     FRONTEND_URL: str = "https://airdops.com"  # Frontend URL for email links
 
     class Config:

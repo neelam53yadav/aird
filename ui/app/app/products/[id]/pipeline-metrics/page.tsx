@@ -33,36 +33,7 @@ interface PipelineRun {
   created_at: string
 }
 
-interface MLflowMetrics {
-  has_mlflow_data: boolean
-  experiment_id?: string
-  experiment_name?: string
-  version?: number
-  latest_run?: {
-    run_id: string
-    start_time: string
-    end_time: string
-    status: string
-    status_note?: string
-    chunk_count: number
-    avg_chunk_size: number
-    embedding_count: number
-    vector_count: number
-    processing_time_seconds: number
-    chunk_size: string
-    chunk_overlap: string
-    embedder_name: string
-    embedding_dimension: string
-  }
-  run_summary?: {
-    total_runs: number
-    successful_runs: number
-    failed_runs: number
-    has_mixed_status: boolean
-  }
-  mlflow_ui_url?: string
-  message?: string
-}
+// MLflow integration removed - metrics are now shown from pipeline run data
 
 export default function PipelineMetricsPage() {
   const params = useParams()
@@ -72,9 +43,8 @@ export default function PipelineMetricsPage() {
   const [product, setProduct] = useState<Product | null>(null)
   const [pipelineRuns, setPipelineRuns] = useState<PipelineRun[]>([])
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null)
-  const [versionMetrics, setVersionMetrics] = useState<MLflowMetrics | null>(null)
+  const [selectedRun, setSelectedRun] = useState<PipelineRun | null>(null)
   const [loading, setLoading] = useState(true)
-  const [loadingMetrics, setLoadingMetrics] = useState(false)
 
   useEffect(() => {
     loadProduct()
@@ -109,29 +79,10 @@ export default function PipelineMetricsPage() {
     }
   }
 
-  const loadVersionMetrics = async (version: number) => {
-    setLoadingMetrics(true)
+  const loadVersionMetrics = (version: number) => {
     setSelectedVersion(version)
-    try {
-      const response = await apiClient.getMLflowMetricsForVersion(productId, version)
-      if (response.error) {
-        console.error('Failed to load version metrics:', response.error)
-        setVersionMetrics({
-          has_mlflow_data: false,
-          message: response.error
-        })
-        return
-      }
-      setVersionMetrics(response.data as MLflowMetrics)
-    } catch (err) {
-      console.error('Error loading version metrics:', err)
-      setVersionMetrics({
-        has_mlflow_data: false,
-        message: 'Failed to load metrics'
-      })
-    } finally {
-      setLoadingMetrics(false)
-    }
+    const run = pipelineRuns.find(r => r.version === version)
+    setSelectedRun(run || null)
   }
 
   const formatDuration = (seconds: number) => {
@@ -291,212 +242,87 @@ export default function PipelineMetricsPage() {
                   </div>
                 </div>
               </div>
-            ) : loadingMetrics ? (
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <div className="flex items-center justify-center h-64">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                </div>
-              </div>
-            ) : versionMetrics && versionMetrics.has_mlflow_data ? (
+            ) : selectedRun ? (
               <div className="space-y-6">
                 {/* Header */}
                 <div className="bg-white rounded-xl shadow-lg border-2 border-gray-100 p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h2 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
-                        <TrendingUp className="h-5 w-5" />
-                        <span>Version {selectedVersion} Metrics</span>
-                        {product?.promoted_version === selectedVersion && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                            🚀 PRODUCTION
-                          </span>
-                        )}
-                      </h2>
-                      <p className="text-sm text-gray-600 mt-1">
-                        Detailed performance metrics for pipeline version {selectedVersion}
-                      </p>
-                    </div>
-                    {versionMetrics.mlflow_ui_url && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => window.open(versionMetrics.mlflow_ui_url, '_blank')}
-                        className="flex items-center space-x-2"
-                      >
-                        <ExternalLink className="h-4 w-4" />
-                        <span>View in MLflow</span>
-                      </Button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Key Metrics */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                  <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5">
-                    <div className="flex items-center">
-                      <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl p-3 mr-4 shadow-sm">
-                        <Database className="h-6 w-6 text-white" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-600 mb-1">Chunks</p>
-                        <p className="text-3xl font-bold text-gray-900">
-                          {versionMetrics.latest_run?.chunk_count || 0}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5">
-                    <div className="flex items-center">
-                      <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl p-3 mr-4 shadow-sm">
-                        <Zap className="h-6 w-6 text-white" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-600 mb-1">Vectors</p>
-                        <p className="text-3xl font-bold text-gray-900">
-                          {versionMetrics.latest_run?.vector_count || 0}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5">
-                    <div className="flex items-center">
-                      <div className="bg-gradient-to-br from-orange-500 to-red-600 rounded-xl p-3 mr-4 shadow-sm">
-                        <Clock className="h-6 w-6 text-white" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-600 mb-1">Processing Time</p>
-                        <p className="text-3xl font-bold text-gray-900">
-                          {formatDuration(versionMetrics.latest_run?.processing_time_seconds || 0)}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5">
-                    <div className="flex items-center">
-                      <div className="bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl p-3 mr-4 shadow-sm">
-                        <BarChart3 className="h-6 w-6 text-white" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-600 mb-1">Avg Chunk Size</p>
-                        <p className="text-3xl font-bold text-gray-900">
-                          {Math.round(versionMetrics.latest_run?.avg_chunk_size || 0)}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Configuration Details */}
-                <div className="bg-white rounded-xl shadow-lg border-2 border-gray-100 p-6">
-                  <div className="mb-4">
-                    <h3 className="text-lg font-semibold text-gray-900">Configuration</h3>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Chunk Size</p>
-                      <p className="text-lg font-semibold text-gray-900">
-                        {versionMetrics.latest_run?.chunk_size || 'N/A'}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Chunk Overlap</p>
-                      <p className="text-lg font-semibold text-gray-900">
-                        {versionMetrics.latest_run?.chunk_overlap || 'N/A'}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Embedder</p>
-                      <p className="text-lg font-semibold text-gray-900">
-                        {formatEmbeddingModel(versionMetrics.latest_run?.embedder_name || 'N/A')}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Embedding Dimension</p>
-                      <p className="text-lg font-semibold text-gray-900">
-                        {versionMetrics.latest_run?.embedding_dimension || 'N/A'}
-                      </p>
-                    </div>
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
+                      <TrendingUp className="h-5 w-5" />
+                      <span>Version {selectedVersion} Pipeline Run</span>
+                      {product?.promoted_version === selectedVersion && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                          🚀 PRODUCTION
+                        </span>
+                      )}
+                    </h2>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Pipeline run details for version {selectedVersion}
+                    </p>
                   </div>
                 </div>
 
                 {/* Run Details */}
                 <div className="bg-white rounded-xl shadow-lg border-2 border-gray-100 p-6">
                   <div className="mb-4">
-                    <h3 className="text-lg font-semibold text-gray-900">Run Details</h3>
+                    <h3 className="text-lg font-semibold text-gray-900">Run Information</h3>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <p className="text-sm font-medium text-gray-600">Run ID</p>
-                      <p className="text-sm font-mono text-gray-900">
-                        {versionMetrics.latest_run?.run_id || 'N/A'}
+                      <p className="text-sm font-mono text-gray-900 break-all">
+                        {selectedRun.id}
                       </p>
                     </div>
                     <div>
                       <p className="text-sm font-medium text-gray-600">Status</p>
-                      <div className="space-y-2">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(versionMetrics.latest_run?.status || 'unknown')}`}>
-                          {versionMetrics.latest_run?.status || 'N/A'}
-                        </span>
-                        {versionMetrics.latest_run?.status_note && (
-                          <p className="text-xs text-orange-600 italic">
-                            {versionMetrics.latest_run.status_note}
-                          </p>
-                        )}
-                      </div>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(selectedRun.status)}`}>
+                        {selectedRun.status}
+                      </span>
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-gray-600">Start Time</p>
+                      <p className="text-sm font-medium text-gray-600">Started At</p>
                       <p className="text-sm text-gray-900">
-                        {versionMetrics.latest_run?.start_time 
-                          ? new Date(versionMetrics.latest_run.start_time).toLocaleString()
-                          : 'N/A'
-                        }
+                        {new Date(selectedRun.started_at).toLocaleString()}
                       </p>
                     </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">End Time</p>
-                      <p className="text-sm text-gray-900">
-                        {versionMetrics.latest_run?.end_time 
-                          ? new Date(versionMetrics.latest_run.end_time).toLocaleString()
-                          : 'N/A'
-                        }
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Run Summary - Show when there are multiple runs or mixed status */}
-                {versionMetrics.run_summary && (versionMetrics.run_summary.total_runs > 1 || versionMetrics.run_summary.has_mixed_status) && (
-                  <div className="bg-white rounded-xl shadow-lg border-2 border-gray-100 p-6">
-                    <div className="mb-4">
-                      <h3 className="text-lg font-semibold text-gray-900">Run Summary</h3>
-                      <p className="text-sm text-gray-600">Breakdown of all runs for this version</p>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="text-center">
-                        <p className="text-2xl font-bold text-gray-900">{versionMetrics.run_summary.total_runs}</p>
-                        <p className="text-sm text-gray-600">Total Runs</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-2xl font-bold text-green-600">{versionMetrics.run_summary.successful_runs}</p>
-                        <p className="text-sm text-gray-600">Successful</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-2xl font-bold text-red-600">{versionMetrics.run_summary.failed_runs}</p>
-                        <p className="text-sm text-gray-600">Failed</p>
-                      </div>
-                    </div>
-                    {versionMetrics.run_summary.has_mixed_status && (
-                      <div className="mt-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
-                        <p className="text-sm text-orange-800">
-                          <strong>Note:</strong> This version has both successful and failed runs. 
-                          Metrics shown above are from successful runs only.
+                    {selectedRun.finished_at && (
+                      <div>
+                        <p className="text-sm font-medium text-gray-600">Finished At</p>
+                        <p className="text-sm text-gray-900">
+                          {new Date(selectedRun.finished_at).toLocaleString()}
                         </p>
                       </div>
                     )}
+                    {selectedRun.dag_run_id && (
+                      <div>
+                        <p className="text-sm font-medium text-gray-600">Airflow DAG Run ID</p>
+                        <p className="text-sm font-mono text-gray-900 break-all">
+                          {selectedRun.dag_run_id}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Metrics (if available from pipeline run) */}
+                {selectedRun.metrics && Object.keys(selectedRun.metrics).length > 0 && (
+                  <div className="bg-white rounded-xl shadow-lg border-2 border-gray-100 p-6">
+                    <div className="mb-4">
+                      <h3 className="text-lg font-semibold text-gray-900">Run Metrics</h3>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {Object.entries(selectedRun.metrics).map(([key, value]) => (
+                        <div key={key}>
+                          <p className="text-sm font-medium text-gray-600 capitalize">
+                            {key.replace(/_/g, ' ')}
+                          </p>
+                          <p className="text-lg font-semibold text-gray-900">
+                            {typeof value === 'number' ? value.toLocaleString() : String(value)}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
@@ -506,10 +332,10 @@ export default function PipelineMetricsPage() {
                   <div className="text-center">
                     <BarChart3 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                     <h3 className="text-lg font-medium text-gray-900 mb-2">
-                      No Metrics Available
+                      Select a Version
                     </h3>
                     <p className="text-gray-600">
-                      {versionMetrics?.message || 'No MLflow metrics found for this version'}
+                      Choose a pipeline version from the list to view run details
                     </p>
                   </div>
                 </div>

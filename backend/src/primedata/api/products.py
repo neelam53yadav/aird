@@ -1743,40 +1743,6 @@ async def auto_configure_chunking(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Auto-configuration failed: {str(e)}")
 
 
-@router.get("/{product_id}/mlflow-metrics")
-async def get_mlflow_metrics(
-    product_id: UUID, request: Request, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)
-):
-    """
-    Get MLflow metrics for the product's latest pipeline run.
-    DISABLED: MLflow integration removed.
-    """
-    # Ensure user has access to the product
-    product = ensure_product_access(db, request, product_id)
-
-    # Return empty response - MLflow disabled (no MLflow queries will be made)
-    return {"has_mlflow_data": False, "message": "MLflow tracking is disabled"}
-
-
-@router.get("/{product_id}/mlflow-run-url")
-async def get_mlflow_run_url(
-    product_id: UUID,
-    request: Request,
-    run_id: Optional[str] = None,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
-):
-    """
-    Get MLflow UI URL for viewing runs.
-    DISABLED: MLflow integration removed.
-    """
-    # Ensure user has access to the product
-    product = ensure_product_access(db, request, product_id)
-
-    # Return empty response - MLflow disabled
-    return {"mlflow_ui_url": None, "tracking_uri": None, "message": "MLflow tracking is disabled"}
-
-
 class PromoteVersionRequest(BaseModel):
     """Request model for promoting a version to production."""
 
@@ -1852,20 +1818,3 @@ async def promote_version(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to promote version: {str(e)}")
 
 
-@router.get("/{product_id}/mlflow-metrics/{version}")
-async def get_mlflow_metrics_for_version(
-    product_id: UUID,
-    version: int,
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
-):
-    """
-    Get MLflow metrics for a specific version of the product's pipeline run.
-    DISABLED: MLflow integration removed.
-    """
-    # Ensure user has access to the product
-    product = ensure_product_access(db, request, product_id)
-
-    # Return empty response - MLflow disabled (no MLflow queries will be made)
-    return {"has_mlflow_data": False, "message": "MLflow tracking is disabled", "version": version}

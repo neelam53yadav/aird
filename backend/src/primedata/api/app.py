@@ -181,12 +181,6 @@ async def check_storage() -> Dict[str, Any]:
         return {"status": "unhealthy", "message": f"Storage connection failed: {str(e)}"}
 
 
-# MLflow check disabled - MLflow integration removed
-# async def check_mlflow() -> Dict[str, Any]:
-#     """Check MLflow connectivity."""
-#     ...
-
-
 async def check_airflow() -> Dict[str, Any]:
     """Check Airflow connectivity."""
     try:
@@ -211,7 +205,7 @@ async def check_airflow() -> Dict[str, Any]:
 @app.get("/health")
 async def health_check():
     """Comprehensive health check endpoint."""
-    # Check all services concurrently (MLflow removed)
+    # Check all services concurrently
     services = await asyncio.gather(check_database(), check_qdrant(), check_storage(), check_airflow(), return_exceptions=True)
 
     # Process results

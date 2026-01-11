@@ -33,7 +33,6 @@ RUN pip install --no-cache-dir \
     passlib[bcrypt] \
     PyJWT \
     cryptography \
-    mlflow \
     loguru \
     pypdf
 

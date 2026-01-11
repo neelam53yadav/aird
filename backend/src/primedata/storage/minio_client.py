@@ -88,9 +88,17 @@ class MinIOClient:
             self.client = None  # MinIO client not used for GCS
         else:
             # Initialize MinIO client for local development
+            # ⚠️ WARNING: In production, always set MINIO_SECRET_KEY via environment variable!
             self.host = os.getenv("MINIO_HOST", "localhost:9000")
             self.access_key = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
-            self.secret_key = os.getenv("MINIO_SECRET_KEY", "minioadmin123")
+            self.secret_key = os.getenv("MINIO_SECRET_KEY")  # Must be set via environment variable
+            if not self.secret_key:
+                # Only allow default for local development
+                if self.host == "localhost:9000" or "localhost" in self.host:
+                    logger.warning("MINIO_SECRET_KEY not set, using development default. This is unsafe for production!")
+                    self.secret_key = "CHANGE_ME"  # Placeholder that will fail in production
+                else:
+                    raise ValueError("MINIO_SECRET_KEY environment variable must be set for production MinIO")
             self.secure = os.getenv("MINIO_SECURE", "false").lower() == "true"
             self.client = Minio(self.host, access_key=self.access_key, secret_key=self.secret_key, secure=self.secure)
             self.gcs_client = None  # GCS client not used for MinIO
