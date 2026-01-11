@@ -809,68 +809,69 @@ jobs:
           
           # Create .env file content
           cat > /tmp/prod_env_file << 'ENVEOF'
-# Database Configuration
-# Individual components (code will construct DATABASE_URL via get_database_url() method)
-POSTGRES_USER=${{ secrets.POSTGRES_USER }}
-POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
-POSTGRES_HOST=${{ vars.POSTGRES_HOST }}
-POSTGRES_PORT=${{ vars.POSTGRES_PORT }}
-POSTGRES_DB=${{ vars.POSTGRES_DB }}
+          # Database Configuration
+          # Individual components (code will construct DATABASE_URL via get_database_url() method)
+          POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_HOST=${{ vars.POSTGRES_HOST }}
+          POSTGRES_PORT=${{ vars.POSTGRES_PORT }}
+          POSTGRES_DB=${{ vars.POSTGRES_DB }}
+          DATABASE_URL="postgresql+psycopg2://${{ secrets.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@${{ vars.POSTGRES_HOST }}:${{ vars.POSTGRES_PORT }}/${{ vars.POSTGRES_DB }}"
 
-# Airflow Database
-AIRFLOW_DB_URL="postgresql+psycopg2://${{ secrets.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@${{ vars.POSTGRES_HOST }}:${{ vars.POSTGRES_PORT }}/${{ vars.AIRFLOW_DB_NAME }}"
-AIRFLOW_DB_NAME=${{ vars.AIRFLOW_DB_NAME }}
-AIRFLOW_USERNAME=${{ vars.AIRFLOW_USERNAME }}
-AIRFLOW_PASSWORD=${{ secrets.AIRFLOW_PASSWORD }}
-AIRFLOW_SECRET_KEY=${{ secrets.AIRFLOW_SECRET_KEY }}
-AIRFLOW_URL=${{ vars.AIRFLOW_URL }}
+          # Airflow Database
+          AIRFLOW_DB_URL="postgresql+psycopg2://${{ secrets.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@${{ vars.POSTGRES_HOST }}:${{ vars.POSTGRES_PORT }}/${{ vars.AIRFLOW_DB_NAME }}"
+          AIRFLOW_DB_NAME=${{ vars.AIRFLOW_DB_NAME }}
+          AIRFLOW_USERNAME=${{ vars.AIRFLOW_USERNAME }}
+          AIRFLOW_PASSWORD=${{ secrets.AIRFLOW_PASSWORD }}
+          AIRFLOW_SECRET_KEY=${{ secrets.AIRFLOW_SECRET_KEY }}
+          AIRFLOW_URL=${{ vars.AIRFLOW_URL }}
 
-# MinIO/GCS Storage
-MINIO_HOST=${{ vars.MINIO_HOST }}
-MINIO_ACCESS_KEY=${{ secrets.MINIO_ACCESS_KEY }}
-MINIO_SECRET_KEY=${{ secrets.MINIO_SECRET_KEY }}
-MINIO_SECURE=${{ vars.MINIO_SECURE }}
-USE_GCS=${{ vars.USE_GCS }}
+          # MinIO/GCS Storage
+          MINIO_HOST=${{ vars.MINIO_HOST }}
+          MINIO_ACCESS_KEY=${{ secrets.MINIO_ACCESS_KEY }}
+          MINIO_SECRET_KEY=${{ secrets.MINIO_SECRET_KEY }}
+          MINIO_SECURE=${{ vars.MINIO_SECURE }}
+          USE_GCS=${{ vars.USE_GCS }}
 
-# GCS Configuration
-GCS_PROJECT_ID=${{ vars.GCS_PROJECT_ID }}
-GCS_SIGNER_SERVICE_ACCOUNT=${{ vars.GCS_SIGNER_SERVICE_ACCOUNT }}
-GOOGLE_APPLICATION_CREDENTIALS=${{ vars.GOOGLE_APPLICATION_CREDENTIALS }}
+          # GCS Configuration
+          GCS_PROJECT_ID=${{ vars.GCS_PROJECT_ID }}
+          GCS_SIGNER_SERVICE_ACCOUNT=${{ vars.GCS_SIGNER_SERVICE_ACCOUNT }}
+          GOOGLE_APPLICATION_CREDENTIALS=${{ vars.GOOGLE_APPLICATION_CREDENTIALS }}
 
-# Application URLs
-FRONTEND_URL=${{ vars.FRONTEND_URL }}
-NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL }}
-NEXTAUTH_URL=${{ vars.NEXTAUTH_URL }}
-CORS_ORIGINS=${{ vars.CORS_ORIGINS }}
+          # Application URLs
+          FRONTEND_URL=${{ vars.FRONTEND_URL }}
+          NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL }}
+          NEXTAUTH_URL=${{ vars.NEXTAUTH_URL }}
+          CORS_ORIGINS=${{ vars.CORS_ORIGINS }}
 
-# Authentication
-JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}
-NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
-DISABLE_AUTH=${{ vars.DISABLE_AUTH }}
+          # Authentication
+          JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}
+          NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
+          DISABLE_AUTH=${{ vars.DISABLE_AUTH }}
 
-# SMTP Configuration
-SMTP_ENABLED=${{ vars.SMTP_ENABLED }}
-SMTP_HOST=${{ vars.SMTP_HOST }}
-SMTP_PORT=${{ vars.SMTP_PORT }}
-SMTP_USE_TLS=${{ vars.SMTP_USE_TLS }}
-SMTP_USE_SSL=${{ vars.SMTP_USE_SSL }}
-SMTP_USERNAME=${{ secrets.SMTP_USERNAME }}
-SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
-SMTP_FROM_EMAIL=${{ vars.SMTP_FROM_EMAIL }}
-SMTP_TO_EMAIL=${{ vars.SMTP_TO_EMAIL }}
+          # SMTP Configuration
+          SMTP_ENABLED=${{ vars.SMTP_ENABLED }}
+          SMTP_HOST=${{ vars.SMTP_HOST }}
+          SMTP_PORT=${{ vars.SMTP_PORT }}
+          SMTP_USE_TLS=${{ vars.SMTP_USE_TLS }}
+          SMTP_USE_SSL=${{ vars.SMTP_USE_SSL }}
+          SMTP_USERNAME=${{ secrets.SMTP_USERNAME }}
+          SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
+          SMTP_FROM_EMAIL=${{ vars.SMTP_FROM_EMAIL }}
+          SMTP_TO_EMAIL=${{ vars.SMTP_TO_EMAIL }}
 
-# OAuth
-GOOGLE_CLIENT_ID=${{ vars.GOOGLE_CLIENT_ID }}
-GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
+          # OAuth
+          GOOGLE_CLIENT_ID=${{ vars.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
 
-# External APIs
-OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-STRIPE_SECRET_KEY=${{ secrets.STRIPE_SECRET_KEY }}
-STRIPE_WEBHOOK_SECRET=${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          # External APIs
+          OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+          STRIPE_SECRET_KEY=${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET=${{ secrets.STRIPE_WEBHOOK_SECRET }}
 
-# Environment
-ENV=${{ vars.ENV }}
-ENVEOF
+          # Environment
+          ENV=${{ vars.ENV }}
+          ENVEOF
           
           # Copy .env file to BOTH locations for safety:
           # 1. /opt/primedata/.env (where docker-compose runs from - PRIMARY)
@@ -1104,5 +1105,3 @@ ENVEOF
           sleep 5
           curl -f http://${{ steps.get-vm-ip.outputs.vm_ip }}:8000/health || echo "Health check failed"
           curl -f http://${{ steps.get-vm-ip.outputs.vm_ip }}:8080/health || echo "Airflow health check failed"
-
-
