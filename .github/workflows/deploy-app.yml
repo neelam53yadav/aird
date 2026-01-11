@@ -816,6 +816,7 @@ jobs:
           POSTGRES_HOST=${{ vars.POSTGRES_HOST }}
           POSTGRES_PORT=${{ vars.POSTGRES_PORT }}
           POSTGRES_DB=${{ vars.POSTGRES_DB }}
+          DATABASE_URL="postgresql+psycopg2://${{ secrets.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@${{ vars.POSTGRES_HOST }}:${{ vars.POSTGRES_PORT }}/${{ vars.POSTGRES_DB }}"
 
           # Airflow Database
           AIRFLOW_DB_URL="postgresql+psycopg2://${{ secrets.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@${{ vars.POSTGRES_HOST }}:${{ vars.POSTGRES_PORT }}/${{ vars.AIRFLOW_DB_NAME }}"
