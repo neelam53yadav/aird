@@ -1,8 +1,8 @@
-# PrimeData Comprehensive Guide
+# AIRDops Comprehensive Guide
 
 **AI-ready data from any source. Ingest, clean, chunk, embed & index. Test and export with confidence.**
 
-This comprehensive guide covers everything you need to know about PrimeData - from getting started to advanced configuration, optimization, troubleshooting, and enterprise deployment.
+This comprehensive guide covers everything you need to know about AIRDops - from getting started to advanced configuration, optimization, troubleshooting, and enterprise deployment.
 
 ---
 
@@ -31,7 +31,7 @@ This comprehensive guide covers everything you need to know about PrimeData - fr
 
 ## Overview
 
-PrimeData is a comprehensive enterprise data platform designed for AI workflows. It provides end-to-end data processing, from ingestion to vectorization, with enterprise-grade data quality management, billing & gating, team collaboration, and advanced analytics.
+AIRDops is a comprehensive enterprise data platform designed for AI workflows. It provides end-to-end data processing, from ingestion to vectorization, with enterprise-grade data quality management, billing & gating, team collaboration, and advanced analytics.
 
 ### Key Capabilities
 
@@ -47,8 +47,8 @@ PrimeData is a comprehensive enterprise data platform designed for AI workflows.
 
 ### Service URLs (Default)
 
-- **PrimeData UI**: http://localhost:3000
-- **PrimeData API**: http://localhost:8000
+- **AIRDops UI**: http://localhost:3000
+- **AIRDops API**: http://localhost:8000
 - **API Documentation**: http://localhost:8000/docs
 - **Airflow UI**: http://localhost:8080
 - **MinIO Console**: http://localhost:9001
@@ -105,7 +105,7 @@ See configuration templates in `backend/env.example`, `infra/env/services.exampl
 ```bash
 # Clone repository
 git clone <repository-url>
-cd PrimeData
+cd AIRDops
 
 # Create virtual environment
 python -m venv venv
@@ -134,7 +134,7 @@ This will:
 ```bash
 # 1. Clone repository
 git clone <repository-url>
-cd PrimeData
+cd AIRDops
 
 # 2. Create virtual environment
 python -m venv venv
@@ -473,7 +473,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 
 ### Overview
 
-The PrimeData optimizer actively improves data quality and pushes scores from "good" to "excellent" (>85%) to maximize AI application efficiency. Rather than just reporting metrics, it provides actionable recommendations.
+The AIRDops optimizer actively improves data quality and pushes scores from "good" to "excellent" (>85%) to maximize AI application efficiency. Rather than just reporting metrics, it provides actionable recommendations.
 
 ### The 4x Efficiency Goal
 
@@ -901,7 +901,7 @@ Authorization: Bearer <jwt_token>
 ### Project Structure
 
 ```
-PrimeData/
+AIRDops/
 ├── backend/                    # FastAPI backend
 │   ├── src/primedata/         # Python package
 │   │   ├── api/               # API endpoints
@@ -1215,7 +1215,7 @@ The system implements Option C (Hybrid Approach) for version management:
 
 #### **Platform-Agnostic Scripts**
 
-PrimeData uses Python scripts that work on Windows, macOS, and Linux:
+AIRDops uses Python scripts that work on Windows, macOS, and Linux:
 
 **Start Backend Server:**
 ```bash
@@ -1253,7 +1253,7 @@ docker-compose -f infra/docker-compose.yml restart [service_name]
 
 ### GCP Cloud Deployment
 
-PrimeData can be deployed to Google Cloud Platform (GCP) using Terraform for Infrastructure as Code (IaC) and GitHub Actions for CI/CD.
+AIRDops can be deployed to Google Cloud Platform (GCP) using Terraform for Infrastructure as Code (IaC) and GitHub Actions for CI/CD.
 
 #### **Architecture**
 
@@ -1508,7 +1508,7 @@ terraform destroy
 
 ### GitHub Actions CI/CD
 
-PrimeData uses GitHub Actions for Continuous Integration (CI) and Continuous Deployment (CD) with Workload Identity Federation for secure GCP authentication.
+AIRDops uses GitHub Actions for Continuous Integration (CI) and Continuous Deployment (CD) with Workload Identity Federation for secure GCP authentication.
 
 #### **Workflows Overview**
 
@@ -2160,7 +2160,7 @@ You'll know everything is working when:
 
 ## Conclusion
 
-PrimeData provides a comprehensive platform for preparing data for AI applications. By following this guide, you can:
+AIRDops provides a comprehensive platform for preparing data for AI applications. By following this guide, you can:
 
 - Set up and configure the system
 - Optimize data quality for maximum AI efficiency
@@ -2173,4 +2173,4 @@ For additional support, check the API documentation at http://localhost:8000/doc
 
 ---
 
-**PrimeData** - Transforming data into AI-ready insights with enterprise-grade quality and governance.
+**AIRDops** - Transforming data into AI-ready insights with enterprise-grade quality and governance.
