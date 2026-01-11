@@ -1253,12 +1253,12 @@ def _sync_pipeline_runs_with_airflow(db: Session) -> int:
         # ⚠️ WARNING: Replace with your actual Airflow URL and credentials in production!
         airflow_url = os.getenv("AIRFLOW_URL", "http://localhost:8080")
         # ⚠️ WARNING: Set AIRFLOW_USERNAME environment variable!
-    airflow_username = os.getenv("AIRFLOW_USERNAME")
-    if not airflow_username:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="AIRFLOW_USERNAME environment variable must be set",
-        )
+        airflow_username = os.getenv("AIRFLOW_USERNAME")
+        if not airflow_username:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="AIRFLOW_USERNAME environment variable must be set",
+            )
         airflow_password = os.getenv("AIRFLOW_PASSWORD")  # Must be set via environment variable
         if not airflow_password:
             logger.error("AIRFLOW_PASSWORD environment variable must be set")
@@ -1402,12 +1402,12 @@ async def _trigger_airflow_dag(
         # ⚠️ WARNING: Replace with your actual Airflow URL and credentials in production!
         airflow_url = os.getenv("AIRFLOW_URL", "http://localhost:8080")
         # ⚠️ WARNING: Set AIRFLOW_USERNAME environment variable!
-    airflow_username = os.getenv("AIRFLOW_USERNAME")
-    if not airflow_username:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="AIRFLOW_USERNAME environment variable must be set",
-        )
+        airflow_username = os.getenv("AIRFLOW_USERNAME")
+        if not airflow_username:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="AIRFLOW_USERNAME environment variable must be set",
+            )
         airflow_password = os.getenv("AIRFLOW_PASSWORD")  # Must be set via environment variable
         if not airflow_password:
             error_detail = {
