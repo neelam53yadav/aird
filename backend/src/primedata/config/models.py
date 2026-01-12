@@ -178,5 +178,49 @@ class EffectiveConfig(BaseModel):
     policy_gates: Optional[PolicyGates] = Field(default=None, description="Policy gate thresholds")
     resolution_trace: ResolutionTrace = Field(..., description="Resolution trace")
 
+    def to_legacy_dict(self, product_row: Optional[Any] = None) -> Dict[str, Any]:
+        """
+        Convert EffectiveConfig to legacy dict format for backward compatibility.
+        
+        Args:
+            product_row: Optional product row to extract manual/auto settings from
+            
+        Returns:
+            Dictionary in the format expected by existing pipeline code
+        """
+        # Extract manual/auto settings from product if available
+        manual_settings = {}
+        auto_settings = {}
+        if product_row:
+            product_chunking = getattr(product_row, "chunking_config", None) or {}
+            if isinstance(product_chunking, dict):
+                manual_settings = product_chunking.get("manual_settings", {})
+                auto_settings = product_chunking.get("auto_settings", {})
+        
+        return {
+            "chunking_config": {
+                "mode": self.chunking_config.mode,
+                "resolved_settings": {
+                    "chunk_size": self.chunking_config.chunk_size,
+                    "chunk_overlap": self.chunking_config.chunk_overlap,
+                    "min_chunk_size": self.chunking_config.min_chunk_size,
+                    "max_chunk_size": self.chunking_config.max_chunk_size,
+                    "chunking_strategy": self.chunking_config.chunking_strategy,
+                    "content_type": self.chunking_config.content_type,
+                    "confidence": self.chunking_config.confidence,
+                },
+                "manual_settings": manual_settings,
+                "auto_settings": auto_settings,
+            },
+            "playbook_id": self.playbook_id,
+            "playbook_selection": {
+                "playbook_id": self.playbook_id,
+                "method": "manual" if self.playbook_id else "auto",
+                "reason": None,
+                "detected_at": None,
+            },
+            "resolution_trace": self.resolution_trace.dict() if self.resolution_trace else None,
+        }
+
     class Config:
         use_enum_values = True
