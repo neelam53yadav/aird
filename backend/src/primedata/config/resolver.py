@@ -52,10 +52,22 @@ def _get_playbook_chunking_defaults(playbook_config: Optional[PlaybookConfig]) -
     defaults = {}
 
     # Map playbook chunking config to our format
+    # Convert tokens to characters: 1 token ≈ 4 characters (conservative estimate)
     if "max_tokens" in chunking:
-        defaults["chunk_size"] = chunking["max_tokens"]
+        max_tokens = chunking["max_tokens"]
+        defaults["chunk_size"] = max_tokens * 4
+    elif "chunk_size" in chunking:
+        defaults["chunk_size"] = chunking["chunk_size"]
+    
+    # Handle overlap: prefer hard_overlap_chars, fallback to overlap_sentences
     if "hard_overlap_chars" in chunking:
         defaults["chunk_overlap"] = chunking["hard_overlap_chars"]
+    elif "overlap_sentences" in chunking:
+        # Rough conversion: 1 sentence ≈ 50-100 chars, use 75 as average
+        defaults["chunk_overlap"] = chunking["overlap_sentences"] * 75
+    elif "chunk_overlap" in chunking:
+        defaults["chunk_overlap"] = chunking["chunk_overlap"]
+    
     if "strategy" in chunking:
         strategy = chunking["strategy"]
         # Map playbook strategies to our enum values
