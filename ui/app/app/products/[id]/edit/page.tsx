@@ -879,54 +879,270 @@ export default function EditProductPage() {
             </div>
 
             {/* Saved Configuration Display (for verification) */}
-            {product && (
-              <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                <h4 className="text-sm font-medium text-gray-700 mb-2">Saved Configuration (for verification)</h4>
-                <div className="text-xs text-gray-600 space-y-1 font-mono">
-                  <div><strong>Playbook ID:</strong> {(product as any).playbook_id || 'Auto-Detect'}</div>
-                  <div><strong>Chunking Mode:</strong> {(product as any).chunking_config?.mode || 'auto'}</div>
-                  <div><strong>Optimization Mode:</strong> {(product as any).chunking_config?.optimization_mode || formData.optimization_mode || 'pattern'}</div>
-                  {formData.chunking_mode === 'manual' && (product as any).chunking_config?.manual_settings && (
-                    <div className="mt-2">
-                      <strong>Manual Settings:</strong>
-                      <pre className="mt-1 p-2 bg-white rounded text-xs overflow-auto">
-                        {JSON.stringify((product as any).chunking_config.manual_settings, null, 2)}
-                      </pre>
+            {product && (() => {
+              const chunkingConfig = (product as any).chunking_config;
+              const mode = chunkingConfig?.mode || 'auto';
+              const manual = chunkingConfig?.manual_settings;
+              const resolved = chunkingConfig?.resolved_settings;
+              const auto = chunkingConfig?.auto_settings;
+              const embeddingConfig = (product as any).embedding_config;
+              
+              // Determine effective settings
+              const effective = mode === 'manual' && manual
+                ? manual
+                : (resolved ?? auto ?? manual);
+              
+              const usingManual = mode === 'manual' && !!manual;
+              const hasResolved = !!resolved;
+              
+              // Helper to copy JSON to clipboard
+              const copyToClipboard = (text: string, label: string) => {
+                navigator.clipboard.writeText(text).then(() => {
+                  // You could add a toast notification here
+                  alert(`Copied ${label} to clipboard`);
+                }).catch(err => {
+                  console.error('Failed to copy:', err);
+                });
+              };
+              
+              return (
+                <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <h4 className="text-sm font-medium text-gray-700 mb-3">Configuration Summary</h4>
+                  
+                  {/* Compact Summary - Always Visible */}
+                  <div className="bg-white rounded-md p-3 mb-3 border border-gray-200">
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <span className="text-gray-500">Playbook:</span>
+                        <span className="ml-2 font-medium">{(product as any).playbook_id || 'Auto-Detect'}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Chunking Mode:</span>
+                        <span className="ml-2 font-medium capitalize">{mode}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Optimization:</span>
+                        <span className="ml-2 font-medium">{chunkingConfig?.optimization_mode || formData.optimization_mode || 'pattern'}</span>
+                      </div>
+                      {embeddingConfig && (
+                        <div>
+                          <span className="text-gray-500">Embedding:</span>
+                          <span className="ml-2 font-medium">{embeddingConfig.embedder_name} ({embeddingConfig.embedding_dimension}D)</span>
+                        </div>
+                      )}
                     </div>
-                  )}
-                  {formData.chunking_mode === 'auto' && (product as any).chunking_config?.auto_settings && (
-                    <div className="mt-2">
-                      <strong>Auto Settings:</strong>
-                      <pre className="mt-1 p-2 bg-white rounded text-xs overflow-auto">
-                        {JSON.stringify((product as any).chunking_config.auto_settings, null, 2)}
-                      </pre>
+                    
+                    {/* Effective Chunking Settings */}
+                    {effective && (
+                      <div className="mt-3 pt-3 border-t border-gray-200">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-medium text-gray-700">
+                            Effective Chunking (Used by Pipeline)
+                          </span>
+                          {usingManual && (
+                            <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
+                              Manual Override
+                            </span>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
+                          <div>Size: <strong>{effective.chunk_size ?? 'N/A'}</strong> {mode === 'manual' ? 'chars' : 'tokens'}</div>
+                          <div>Overlap: <strong>{effective.chunk_overlap ?? 'N/A'}</strong> {mode === 'manual' ? 'chars' : 'tokens'}</div>
+                          <div>Strategy: <strong>{effective.chunking_strategy ?? 'N/A'}</strong></div>
+                          {effective.content_type && (
+                            <div>Type: <strong className="capitalize">{effective.content_type}</strong></div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Expandable Debug Sections */}
+                  <details className="mb-2">
+                    <summary className="cursor-pointer text-xs font-medium text-gray-600 hover:text-gray-800">
+                      📋 Show Manual Settings {manual && `(${Object.keys(manual).length} fields)`}
+                    </summary>
+                    <div className="mt-2 p-2 bg-white rounded border border-gray-200">
+                      {manual ? (
+                        <>
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="text-xs text-gray-600">Manual configuration (overrides detected settings)</span>
+                            <button
+                              onClick={() => copyToClipboard(JSON.stringify(manual, null, 2), 'Manual Settings')}
+                              className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded text-gray-700"
+                            >
+                              Copy JSON
+                            </button>
+                          </div>
+                          <pre className="text-xs overflow-auto max-h-40 p-2 bg-gray-50 rounded">
+                            {JSON.stringify(manual, null, 2)}
+                          </pre>
+                        </>
+                      ) : (
+                        <p className="text-xs text-gray-500 italic">No manual settings configured</p>
+                      )}
                     </div>
+                  </details>
+                  
+                  {hasResolved && (
+                    <details className="mb-2">
+                      <summary className="cursor-pointer text-xs font-medium text-gray-600 hover:text-gray-800">
+                        🔍 Show Detected Settings {resolved && `(${usingManual ? 'not used' : 'effective'})`}
+                      </summary>
+                      <div className="mt-2 p-2 bg-white rounded border border-gray-200">
+                        <div className="flex justify-between items-center mb-2">
+                          <div>
+                            <span className="text-xs text-gray-600">
+                              {usingManual 
+                                ? 'Auto-detected settings (shown for reference only - manual settings override)'
+                                : 'Auto-detected settings (currently used by pipeline)'}
+                            </span>
+                            {resolved.confidence != null && (
+                              <div className="mt-1 text-xs">
+                                <span className="text-gray-600">Confidence: </span>
+                                <span className={resolved.confidence >= 0.7 ? 'text-green-600 font-medium' : 'text-yellow-600 font-medium'}>
+                                  {(resolved.confidence * 100).toFixed(0)}%
+                                </span>
+                                {resolved.confidence_threshold && (
+                                  <span className="text-gray-500"> (threshold: {(resolved.confidence_threshold * 100).toFixed(0)}%)</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => copyToClipboard(JSON.stringify(resolved, null, 2), 'Detected Settings')}
+                            className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded text-gray-700"
+                          >
+                            Copy JSON
+                          </button>
+                        </div>
+                        
+                        {/* Level 1: Summary */}
+                        <div className="mb-2 p-2 bg-gray-50 rounded text-xs">
+                          <div className="grid grid-cols-2 gap-2 mb-2">
+                            <div>Content Type: <strong className="capitalize">{resolved.content_type || 'N/A'}</strong></div>
+                            <div>Chunk Size: <strong>{resolved.chunk_size ?? 'N/A'}</strong> tokens</div>
+                            <div>Chunk Overlap: <strong>{resolved.chunk_overlap ?? 'N/A'}</strong> tokens</div>
+                            <div>Strategy: <strong>{resolved.chunking_strategy ?? 'N/A'}</strong></div>
+                          </div>
+                          {resolved.reasoning && (
+                            <p className="text-gray-600 italic border-t border-gray-200 pt-2 mt-2">
+                              {resolved.reasoning}
+                            </p>
+                          )}
+                        </div>
+                        
+                        {/* Level 2: Evidence (collapsible) */}
+                        {resolved.evidence && (
+                          <details className="mt-2">
+                            <summary className="cursor-pointer text-xs font-medium text-gray-600 hover:text-gray-800">
+                              📊 Show Evidence Details
+                            </summary>
+                            <div className="mt-2 p-2 bg-gray-50 rounded text-xs">
+                              {resolved.evidence.all_scores && (
+                                <div className="mb-2">
+                                  <strong className="text-gray-700">Content Type Scores:</strong>
+                                  <div className="mt-1 grid grid-cols-2 gap-1">
+                                    {Object.entries(resolved.evidence.all_scores).map(([type, score]: [string, any]) => (
+                                      <div key={type} className="flex justify-between">
+                                        <span className="capitalize">{type}:</span>
+                                        <span className={type === resolved.evidence.final_type ? 'font-bold text-blue-600' : ''}>
+                                          {(score * 100).toFixed(1)}%
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              
+                              {resolved.evidence.matched_patterns && resolved.evidence.matched_patterns.length > 0 && (
+                                <div className="mb-2">
+                                  <strong className="text-gray-700">Matched Patterns:</strong>
+                                  <div className="mt-1 flex flex-wrap gap-1">
+                                    {resolved.evidence.matched_patterns.slice(0, 10).map((pattern: string, idx: number) => (
+                                      <span key={idx} className="px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded text-xs">
+                                        {pattern}
+                                      </span>
+                                    ))}
+                                    {resolved.evidence.matched_patterns.length > 10 && (
+                                      <span className="text-gray-500 text-xs">
+                                        +{resolved.evidence.matched_patterns.length - 10} more
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </details>
+                        )}
+                        
+                        {/* Level 3: Full JSON (collapsible) */}
+                        <details className="mt-2">
+                          <summary className="cursor-pointer text-xs font-medium text-gray-600 hover:text-gray-800">
+                            📄 Show Raw JSON
+                          </summary>
+                          <pre className="mt-2 text-xs overflow-auto max-h-60 p-2 bg-gray-50 rounded border border-gray-200">
+                            {JSON.stringify(resolved, null, 2)}
+                          </pre>
+                        </details>
+                      </div>
+                    </details>
                   )}
-                  {(product as any).chunking_config?.resolved_settings && (
-                    <div className="mt-2">
-                      <strong>Resolved Settings (Detected from Content Analysis):</strong>
-                      <pre className="mt-1 p-2 bg-green-50 border border-green-200 rounded text-xs overflow-auto">
-                        {JSON.stringify((product as any).chunking_config.resolved_settings, null, 2)}
-                      </pre>
-                      <p className="mt-1 text-xs text-green-700">
-                        These settings were automatically detected from your content. The UI should display these values.
-                      </p>
-                    </div>
+                  
+                  {auto && !resolved && (
+                    <details className="mb-2">
+                      <summary className="cursor-pointer text-xs font-medium text-gray-600 hover:text-gray-800">
+                        ⚙️ Show Auto Settings
+                      </summary>
+                      <div className="mt-2 p-2 bg-white rounded border border-gray-200">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-xs text-gray-600">Auto-detection configuration</span>
+                          <button
+                            onClick={() => copyToClipboard(JSON.stringify(auto, null, 2), 'Auto Settings')}
+                            className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded text-gray-700"
+                          >
+                            Copy JSON
+                          </button>
+                        </div>
+                        <pre className="text-xs overflow-auto max-h-40 p-2 bg-gray-50 rounded">
+                          {JSON.stringify(auto, null, 2)}
+                        </pre>
+                      </div>
+                    </details>
                   )}
-                  {(product as any).embedding_config && (
-                    <div className="mt-2">
-                      <strong>Embedding Config:</strong>
-                      <pre className="mt-1 p-2 bg-white rounded text-xs overflow-auto">
-                        {JSON.stringify((product as any).embedding_config, null, 2)}
-                      </pre>
-                    </div>
+                  
+                  {embeddingConfig && (
+                    <details className="mb-2">
+                      <summary className="cursor-pointer text-xs font-medium text-gray-600 hover:text-gray-800">
+                        🤖 Show Embedding Config
+                      </summary>
+                      <div className="mt-2 p-2 bg-white rounded border border-gray-200">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-xs text-gray-600">Embedding model configuration</span>
+                          <button
+                            onClick={() => copyToClipboard(JSON.stringify(embeddingConfig, null, 2), 'Embedding Config')}
+                            className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded text-gray-700"
+                          >
+                            Copy JSON
+                          </button>
+                        </div>
+                        <pre className="text-xs overflow-auto p-2 bg-gray-50 rounded">
+                          {JSON.stringify(embeddingConfig, null, 2)}
+                        </pre>
+                      </div>
+                    </details>
                   )}
+                  
+                  <p className="mt-3 text-xs text-gray-500 italic">
+                    {usingManual 
+                      ? 'Manual settings override detected settings. Detected settings are shown for reference only.'
+                      : hasResolved
+                      ? 'Detected settings are currently used by the pipeline.'
+                      : 'Configuration will be detected during the next pipeline run.'}
+                  </p>
                 </div>
-                <p className="mt-2 text-xs text-gray-500">
-                  This shows the configuration currently saved in the database. After saving, refresh the page to see updated values.
-                </p>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Text Optimization Mode Section */}
             <div className="border-t border-gray-200 pt-6">
