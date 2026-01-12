@@ -1216,61 +1216,121 @@ export default function ProductDetailPage() {
                 )}
                 {/* Chunking Configuration */}
                 {(() => {
-                  const chunkingConfig = (product as any).chunking_config
-                  const chunkingMode = chunkingConfig?.mode || 'auto'
-                  const resolvedSettings = chunkingConfig?.resolved_settings
-                  const contentType = resolvedSettings?.content_type || chunkingConfig?.auto_settings?.content_type
-                  const isAutoMode = chunkingMode === 'auto'
-                  
-                  if (!contentType && !isAutoMode) return null
-                  
+                  const chunkingConfig = (product as any)?.chunking_config;
+                  if (!chunkingConfig) return null;
+
+                  const mode = chunkingConfig.mode || "auto";
+
+                  const manual = chunkingConfig.manual_settings;
+                  const resolved = chunkingConfig.resolved_settings;
+                  const auto = chunkingConfig.auto_settings;
+
+                  // Effective settings = what pipeline should use
+                  const effective =
+                    mode === "manual"
+                      ? (manual ?? resolved ?? auto)
+                      : (resolved ?? auto ?? manual);
+
+                  if (!effective) return null;
+
+                  // Units (prefer explicit if present)
+                  const units =
+                    effective.units ||
+                    (mode === "manual" ? "characters" : "tokens");
+
+                  const contentType =
+                    effective.content_type || auto?.content_type || "general";
+
+                  const usingManual = mode === "manual" && !!manual;
+
                   return (
                     <div>
-                      <dt className="text-sm font-medium text-gray-500">Chunking Configuration</dt>
+                      <dt className="text-sm font-medium text-gray-500">
+                        Chunking Configuration
+                      </dt>
+
                       <dd className="mt-1">
                         <div className="flex items-center gap-2 flex-wrap">
-                          {isAutoMode && !resolvedSettings ? (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                              Auto-Detect (Will be detected during pipeline run)
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 capitalize">
+                            {contentType}
+                          </span>
+
+                          {usingManual ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                              Manual (Effective)
                             </span>
-                          ) : resolvedSettings ? (
-                            <>
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 capitalize">
-                                {contentType || 'general'}
-                              </span>
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                Auto-Detected
-                              </span>
-                            </>
+                          ) : resolved ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                              Auto-Detected (Effective)
+                            </span>
                           ) : (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                              Manual Mode
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                              Auto (Pending Detection)
                             </span>
                           )}
                         </div>
-                        {resolvedSettings && (
-                          <div className="mt-2 text-xs text-gray-600 space-y-1">
-                            <p>Chunk Size: {resolvedSettings.chunk_size || 'N/A'} tokens</p>
-                            <p>Chunk Overlap: {resolvedSettings.chunk_overlap || 'N/A'} tokens</p>
-                            <p>Strategy: {resolvedSettings.chunking_strategy || 'N/A'}</p>
-                            {resolvedSettings.confidence && (
-                              <p>Confidence: {(resolvedSettings.confidence * 100).toFixed(0)}%</p>
-                            )}
-                          </div>
-                        )}
-                        {chunkingConfig?.last_analyzed && (
+
+                        <div className="mt-2 text-xs text-gray-600 space-y-1">
+                          <p>
+                            Chunk Size: {effective.chunk_size ?? "N/A"} {units}
+                          </p>
+                          <p>
+                            Chunk Overlap: {effective.chunk_overlap ?? "N/A"} {units}
+                          </p>
+                          <p>Strategy: {effective.chunking_strategy ?? "N/A"}</p>
+
+                          {effective.confidence != null && (
+                            <p>Confidence: {(effective.confidence * 100).toFixed(0)}%</p>
+                          )}
+
+                          {usingManual && (
+                            <p className="mt-1 text-xs text-gray-500 italic">
+                              Using manual settings (overrides playbook defaults)
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Show auto-analysis metadata ONLY if it's relevant */}
+                        {!usingManual && chunkingConfig.last_analyzed && (
                           <p className="mt-1 text-xs text-gray-400">
                             Last analyzed: {new Date(chunkingConfig.last_analyzed).toLocaleString()}
                           </p>
                         )}
-                        {chunkingConfig?.sample_files_analyzed && chunkingConfig.sample_files_analyzed.length > 0 && (
-                          <p className="mt-1 text-xs text-gray-400">
-                            Analyzed {chunkingConfig.sample_files_analyzed.length} sample file{chunkingConfig.sample_files_analyzed.length !== 1 ? 's' : ''}
-                          </p>
+
+                        {!usingManual &&
+                          Array.isArray(chunkingConfig.sample_files_analyzed) &&
+                          chunkingConfig.sample_files_analyzed.length > 0 && (
+                            <p className="mt-1 text-xs text-gray-400">
+                              Analyzed {chunkingConfig.sample_files_analyzed.length} sample file
+                              {chunkingConfig.sample_files_analyzed.length !== 1 ? "s" : ""}
+                            </p>
+                          )}
+
+                        {/* Optional: show detected config as "not used" when manual */}
+                        {usingManual && resolved && (
+                          <details className="mt-2 text-xs text-gray-500">
+                            <summary className="cursor-pointer">
+                              Auto-detected suggestion (not used)
+                            </summary>
+                            <div className="mt-1 space-y-1">
+                              <p>Chunk Size: {resolved.chunk_size ?? "N/A"} {resolved.units ?? "tokens"}</p>
+                              <p>Chunk Overlap: {resolved.chunk_overlap ?? "N/A"} {resolved.units ?? "tokens"}</p>
+                              <p>Strategy: {resolved.chunking_strategy ?? "N/A"}</p>
+                              {resolved.confidence != null && (
+                                <p>Confidence: {(resolved.confidence * 100).toFixed(0)}%</p>
+                              )}
+                              {chunkingConfig.last_analyzed && (
+                                <p>
+                                  Auto-detection last analyzed:{" "}
+                                  {new Date(chunkingConfig.last_analyzed).toLocaleString()}
+                                </p>
+                              )}
+                            </div>
+                          </details>
                         )}
                       </dd>
                     </div>
-                  )
+                  );
                 })()}
                 {/* Chunking Strategy from latest successful pipeline run */}
                 {(() => {
