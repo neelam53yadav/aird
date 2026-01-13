@@ -122,7 +122,9 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "https://airdops.com"  # Frontend URL for email links
 
     class Config:
-        env_file = ".env"
+        # Check for .env.local first (for local development), then fall back to .env
+        # pydantic_settings will try files in order and use the first one that exists
+        env_file = [".env.local", ".env"]
         case_sensitive = True
         extra = "ignore"  # Ignore extra fields from .env (for backward compatibility during migration)
 
