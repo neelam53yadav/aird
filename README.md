@@ -355,6 +355,10 @@ Policy evaluation serves as a quality gate to ensure data meets production stand
 - **Node.js**: 18+
 - **Docker**: 20.10+ and Docker Compose 2.0+
 - **Git**: 2.30+
+- **Make**: 4.0+ (optional, for Makefile commands - recommended for easier setup)
+  - **Windows**: Install via [Chocolatey](https://chocolatey.org/) (`choco install make`), [Scoop](https://scoop.sh/) (`scoop install make`), or use WSL/Git Bash
+  - **macOS**: Install via Homebrew (`brew install make`) or Xcode Command Line Tools
+  - **Linux**: Usually pre-installed, or install via package manager (`apt-get install make` / `yum install make`)
 - **System Resources**:
   - RAM: Minimum 8GB, Recommended 16GB+
   - Storage: Minimum 10GB free space
@@ -362,17 +366,101 @@ Policy evaluation serves as a quality gate to ensure data meets production stand
 
 ### Quick Start (Local Development)
 
+#### Option 1: Using Makefile (Recommended)
+
+The easiest way to set up and run AIRDops locally is using the provided Makefile. The Makefile handles all setup steps automatically and works cross-platform (Windows, macOS, Linux).
+
+**Initial Setup:**
+
+```bash
+# 1. Clone repository
+git clone <repository-url>
+cd aird
+
+# 2. Configure environment variables
+# Create backend/.env.local (copy from backend/env.example)
+# Create infra/.env.local (copy from infra/env/services.example.env)
+# Create ui/.env.local (copy from infra/env/ui.example.env.local)
+# See Configuration section below for required variables
+
+# 3. One-time setup (installs dependencies, starts services, runs migrations)
+make setup
+
+# 4. Start development servers (in separate terminals)
+# Terminal 1:
+make backend
+
+# Terminal 2:
+make frontend
+```
+
+**Available Make Commands:**
+
+| Command | Description | When to Use |
+|---------|-------------|-------------|
+| `make setup` | Complete one-time setup: installs dependencies, starts Docker services, runs migrations | First time setup or after cloning the repository |
+| `make install` | Install both backend and frontend dependencies | When dependencies change (requirements.txt or package.json updated) |
+| `make install-backend` | Install only backend Python dependencies | When only backend dependencies change |
+| `make install-frontend` | Install only frontend npm dependencies | When only frontend dependencies change |
+| `make services` | Start/restart Docker services (PostgreSQL, Qdrant, MinIO, Airflow) | When services need to be restarted or after system reboot |
+| `make migrate` | Run database migrations only | When database schema changes |
+| `make backend` | Start backend development server (with hot reload) | Daily development - run in separate terminal |
+| `make frontend` | Start frontend development server (Next.js) | Daily development - run in separate terminal |
+| `make dev` | Show instructions for running development servers | Quick reference for starting dev servers |
+| `make stop` | Stop all Docker services | When you're done working |
+| `make clean` | Stop services and remove all Docker volumes (⚠️ destructive) | When you want to start fresh (removes all data) |
+| `make help` | Show all available commands | Quick reference |
+
+**Daily Development Workflow:**
+
+```bash
+# Morning: Start services (if not already running)
+make services
+
+# Start development servers in separate terminals
+# Terminal 1:
+make backend
+
+# Terminal 2:
+make frontend
+
+# When done for the day:
+make stop
+```
+
+**Common Scenarios:**
+
+```bash
+# After pulling latest changes with new dependencies
+make install
+make migrate  # If there are new migrations
+
+# After database schema changes
+make migrate
+
+# Restart services after configuration changes
+make stop
+make services
+
+# Complete reset (removes all data)
+make clean
+make setup
+```
+
+#### Option 2: Manual Setup
+
 ```bash
 # 1. Clone repository
 git clone <repository-url>
 cd aird
 
 # 2. Create Python virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
 # 3. Install backend dependencies
 cd backend
+pip install --upgrade pip
 pip install -r requirements.txt
 
 # 4. Install frontend dependencies
@@ -380,45 +468,80 @@ cd ../ui
 npm install
 
 # 5. Configure environment variables
-cd ../infra
-cp env/services.example.env .env
-# Edit .env with your configuration (see Configuration section)
-
-cd ../backend
-cp env.example .env
-# Edit .env with database and service credentials
+# Backend: Create backend/.env.local (copy from backend/env.example)
+# Infrastructure: Create infra/.env.local (copy from infra/env/services.example.env)
+# Frontend: Create ui/.env.local (copy from infra/env/ui.example.env.local)
+# Edit each .env.local file with your configuration (see Configuration section)
 
 # 6. Start Docker services
+cd ../infra
+docker compose -f docker-compose.yml --env-file .env.local up -d
+
+# 7. Wait for services to be ready (10-15 seconds)
+# On Windows: python -c "import time; time.sleep(10)"
+# On Unix/Mac: sleep 10
+
+# 8. Run database migrations
+cd ../backend
+python -m alembic upgrade head
+
+# 9. Start backend server (in one terminal)
 cd ..
-docker-compose -f infra/docker-compose.yml --env-file infra/.env up -d
+python start_backend.py
 
-# 7. Run database migrations
-cd backend
-alembic upgrade head
-
-# 8. Start backend server
-python start_backend.py  # Or: uvicorn primedata.api.app:app --reload --port 8000
-
-# 9. Start frontend (in separate terminal)
+# 10. Start frontend (in separate terminal)
 cd ui
 npm run dev
 ```
 
 ### Service URLs (Local Development)
 
+Once all services are running, you can access:
+
 - **Frontend UI**: http://localhost:3000
 - **Backend API**: http://localhost:8000
 - **API Documentation**: http://localhost:8000/docs
 - **ReDoc**: http://localhost:8000/redoc
 - **Airflow UI**: http://localhost:8080
+  - Username: Set in `infra/.env.local` (`AIRFLOW_USERNAME`)
+  - Password: Set in `infra/.env.local` (`AIRFLOW_PASSWORD`)
 - **Qdrant Dashboard**: http://localhost:6333/dashboard
 - **MinIO Console**: http://localhost:9001
+  - Username: Set in `infra/.env.local` (`MINIO_ROOT_USER`)
+  - Password: Set in `infra/.env.local` (`MINIO_ROOT_PASSWORD`)
+
+### Troubleshooting
+
+**Makefile not working on Windows:**
+- Ensure you have `make` installed (see Prerequisites)
+- Use Git Bash, WSL, or install make via Chocolatey/Scoop
+- The Makefile uses Python for cross-platform compatibility, so Python must be in your PATH
+
+**Docker services not starting:**
+- Check if ports are already in use: `docker ps`
+- Verify `.env.local` files are configured correctly
+- Check Docker logs: `docker logs primedata-postgres`, `docker logs primedata-airflow-webserver`, etc.
+
+**Migrations failing:**
+- Ensure PostgreSQL is running and healthy: `docker ps | grep postgres`
+- Verify `DATABASE_URL` in `backend/.env.local` is correct
+- Check database connection: `docker exec -it primedata-postgres psql -U <user> -d <db>`
+
+**Airflow not accessible:**
+- Wait 30-60 seconds after starting services for Airflow to initialize
+- Check Airflow logs: `docker logs primedata-airflow-webserver`
+- Verify `AIRFLOW_DB_NAME` is set in `infra/.env.local`
+
+**Backend/Frontend not starting:**
+- Ensure virtual environment is activated (for backend)
+- Check that all dependencies are installed: `make install`
+- Verify environment variables in `.env.local` files
 
 ### Configuration
 
 #### Required Environment Variables
 
-**Backend (`backend/.env`)**:
+**Backend (`backend/.env.local`)**:
 ```env
 # Database
 DATABASE_URL=postgresql://primedata:password@localhost:5432/primedata
@@ -458,7 +581,7 @@ GOOGLE_CLIENT_SECRET=<your-google-client-secret>
 NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
-**Infrastructure (`infra/.env`)**:
+**Infrastructure (`infra/.env.local`)**:
 ```env
 # PostgreSQL
 POSTGRES_USER=primedata
@@ -470,6 +593,7 @@ MINIO_ROOT_USER=minioadmin
 MINIO_ROOT_PASSWORD=<secure-password>
 
 # Airflow
+AIRFLOW_DB_NAME=airflow
 AIRFLOW_USERNAME=admin
 AIRFLOW_PASSWORD=<secure-password>
 AIRFLOW_SECRET_KEY=<generate-secret>
