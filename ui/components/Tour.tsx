@@ -11,7 +11,7 @@ interface TourProps {
 
 const TOUR_STORAGE_KEY = 'primedata_tour_completed'
 
-// Custom styles to match AIRDOps design
+// Custom styles to match PrimeData design
 const joyrideStyles: Partial<Styles> = {
   options: {
     primaryColor: '#4f46e5', // indigo-600

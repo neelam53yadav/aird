@@ -3,32 +3,16 @@
 import Link from 'next/link'
 import { Footer } from '@/components/Footer'
 import { 
-  Sparkles, 
   Shield,
   ArrowLeft
 } from 'lucide-react'
 
 // Constants
-const BETA_BANNER_TEXT = "AIRDOps Beta Release - We're actively improving based on your feedback"
 const LAST_UPDATED = new Date().toLocaleDateString('en-US', { 
   year: 'numeric', 
   month: 'long', 
   day: 'numeric' 
 })
-
-// Component: Beta Banner
-function BetaBanner() {
-  return (
-    <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white py-2" role="banner">
-      <div className="container mx-auto px-4">
-        <div className="flex items-center justify-center space-x-2" aria-live="polite">
-          <Sparkles className="h-4 w-4" aria-hidden="true" />
-          <span className="text-sm font-medium">{BETA_BANNER_TEXT}</span>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 // Component: Privacy Section
 interface PrivacySectionProps {
@@ -53,14 +37,13 @@ function PrivacySection({ id, title, subtitle, children }: PrivacySectionProps) 
 /**
  * Privacy Policy Page Component
  * 
- * Displays privacy policy for AIRDOps platform.
+ * Displays privacy policy for PrimeData platform.
  * Follows enterprise best practices with proper accessibility,
  * semantic HTML, and GDPR compliance considerations.
  */
 export default function PrivacyPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex flex-col">
-      <BetaBanner />
 
       {/* Header */}
       <header className="bg-white border-b border-gray-200">
@@ -71,7 +54,7 @@ export default function PrivacyPage() {
               <span className="text-sm text-gray-600 hover:text-gray-900 transition-colors">Back to Home</span>
             </Link>
             <Link href="/" className="text-2xl font-bold bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent">
-              AIRDOps
+              PrimeData
             </Link>
             <div className="w-24"></div> {/* Spacer for centering */}
           </div>
@@ -98,7 +81,7 @@ export default function PrivacyPage() {
           <div className="prose prose-lg max-w-none space-y-8 text-gray-700">
             <section>
               <p className="text-lg">
-                At AIRDOps, we take your privacy seriously. This Privacy Policy explains how we collect, use, disclose, 
+                At PrimeData, we take your privacy seriously. This Privacy Policy explains how we collect, use, disclose, 
                 and safeguard your information when you use our Service.
               </p>
             </section>
@@ -133,7 +116,7 @@ export default function PrivacyPage() {
               <div className="mt-6">
                 <h3 className="text-xl font-semibold text-gray-900 mb-3">1.3 Data You Process</h3>
                 <p>
-                  We process data that you upload to AIRDOps for the purpose of providing our services. You retain all ownership 
+                  We process data that you upload to PrimeData for the purpose of providing our services. You retain all ownership 
                   and rights to your data. We do not use your processed data for any purpose other than providing the Service.
                 </p>
               </div>

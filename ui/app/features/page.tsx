@@ -4,7 +4,6 @@ import { useMemo } from 'react'
 import Link from 'next/link'
 import { Footer } from '@/components/Footer'
 import { 
-  Sparkles, 
   Shield, 
   BarChart3, 
   TestTube, 
@@ -147,21 +146,6 @@ const FEATURES: readonly Feature[] = [
   }
 ] as const
 
-const BETA_BANNER_TEXT = "AIRDOps Beta Release - We're actively improving based on your feedback"
-
-// Component: Beta Banner (reusable)
-function BetaBanner() {
-  return (
-    <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white py-2" role="banner">
-      <div className="container mx-auto px-4">
-        <div className="flex items-center justify-center space-x-2" aria-live="polite">
-          <Sparkles className="h-4 w-4" aria-hidden="true" />
-          <span className="text-sm font-medium">{BETA_BANNER_TEXT}</span>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 // Component: Feature Card (extracted for reusability)
 function FeatureCard({ feature, index }: { feature: Feature; index: number }) {
@@ -229,7 +213,7 @@ function CTASection() {
 /**
  * Features Page Component
  * 
- * Displays comprehensive feature list for AIRDOps platform.
+ * Displays comprehensive feature list for PrimeData platform.
  * Follows enterprise best practices with proper TypeScript types,
  * accessibility, and performance optimizations.
  */
@@ -239,7 +223,6 @@ export default function FeaturesPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex flex-col">
-      <BetaBanner />
 
       {/* Header */}
       <header className="bg-white border-b border-gray-200">
@@ -250,7 +233,7 @@ export default function FeaturesPage() {
               <span className="text-sm text-gray-600 hover:text-gray-900 transition-colors">Back to Home</span>
             </Link>
             <Link href="/" className="text-2xl font-bold bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent">
-              AIRDOps
+              PrimeData
             </Link>
             <div className="w-24"></div> {/* Spacer for centering */}
           </div>

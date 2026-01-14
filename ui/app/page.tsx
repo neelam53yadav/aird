@@ -1,12 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { signIn, useSession } from 'next-auth/react'
+import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import { exchangeToken } from '@/lib/auth-utils'
 import { Footer } from '@/components/Footer'
 import { 
-  Sparkles, 
   Shield, 
   BarChart3, 
   TestTube, 
@@ -29,14 +27,7 @@ export default function HomePage() {
   useEffect(() => {
     const initializeAuth = async () => {
       if (status === 'authenticated' && session) {
-        try {
-          await exchangeToken()
-          // Wait a bit to ensure cookie is set before redirect
-          await new Promise(resolve => setTimeout(resolve, 100))
-          router.push('/dashboard')
-        } catch (error) {
-          router.push('/dashboard')
-        }
+        router.push('/dashboard')
       }
     }
     
@@ -50,22 +41,6 @@ export default function HomePage() {
     }, 5000)
     return () => clearInterval(interval)
   }, [])
-
-  const handleGoogleSignIn = async () => {
-    try {
-      const result = await signIn("google", { 
-        callbackUrl: "/dashboard",
-        redirect: false
-      })
-      
-      if (result?.ok) {
-        await exchangeToken()
-        router.push('/dashboard')
-      }
-    } catch (error) {
-      // Sign in error handled silently
-    }
-  }
 
   const handleEmailSignIn = () => {
     router.push("/signin")
@@ -115,18 +90,6 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex flex-col">
-      {/* Beta Badge - Top Banner */}
-      <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white py-2">
-        <div className="container mx-auto px-4">
-          <div className="flex items-center justify-center space-x-2">
-            <Sparkles className="h-4 w-4" />
-            <span className="text-sm font-medium">
-              AIRDOps Beta Release - We're actively improving based on your feedback
-            </span>
-          </div>
-        </div>
-      </div>
-
       {/* Hero Section */}
       <div className="container mx-auto px-4 py-20">
         <div className="text-center max-w-5xl mx-auto">
@@ -137,7 +100,7 @@ export default function HomePage() {
           
           <h1 className="text-6xl md:text-7xl font-bold mb-4 leading-tight">
             <span className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent">
-              AIRDOps
+              PrimeData
             </span>
             <span className="block text-xl md:text-2xl text-gray-500 font-normal mt-5 tracking-normal">
               Making Data AI-Ready

@@ -648,7 +648,6 @@ async def exchange_session(request: SessionExchangeRequest, db: Session = Depend
     name = claims["name"]
     picture = claims["picture"]
     provider = claims["provider"]
-    google_sub = claims.get("google_sub")
 
     # Upsert user
     user = db.query(User).filter(User.email == email).first()
@@ -660,7 +659,6 @@ async def exchange_session(request: SessionExchangeRequest, db: Session = Depend
             name=name,
             picture_url=picture,
             auth_provider=normalize_auth_provider(provider),
-            google_sub=google_sub,
             roles=["viewer"],
         )
         db.add(user)
@@ -671,8 +669,6 @@ async def exchange_session(request: SessionExchangeRequest, db: Session = Depend
         user.name = name
         user.picture_url = picture
         user.auth_provider = normalize_auth_provider(provider)
-        if google_sub:
-            user.google_sub = google_sub
         db.commit()
 
     # Check if user has any workspace memberships

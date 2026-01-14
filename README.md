@@ -1,8 +1,8 @@
-# AirdOps: Enterprise AI-Ready Data Platform
+# PrimeData: Enterprise AI-Ready Data Platform
 
 **Transform raw data into production-ready AI applications with enterprise-grade quality, governance, and scalability.**
 
-AirdOps is a comprehensive data platform designed to ingest, process, vectorize, and optimize data for AI/ML applications. Built with enterprise architecture principles, it provides end-to-end data processing workflows from ingestion to vectorization, with integrated quality management, team collaboration, and advanced analytics.
+PrimeData is a comprehensive data platform designed to ingest, process, vectorize, and optimize data for AI/ML applications. Built with enterprise architecture principles, it provides end-to-end data processing workflows from ingestion to vectorization, with integrated quality management, team collaboration, and advanced analytics.
 
 ---
 
@@ -21,9 +21,9 @@ AirdOps is a comprehensive data platform designed to ingest, process, vectorize,
 
 ## Platform Overview
 
-### What is AirdOps?
+### What is PrimeData?
 
-AirdOps is an enterprise-grade data processing platform that transforms unstructured and structured data sources into AI-ready formats. The platform handles the complete data lifecycle—from ingestion and preprocessing to vectorization and quality assessment—enabling organizations to build production-ready RAG (Retrieval-Augmented Generation) applications and AI systems with confidence.
+PrimeData is an enterprise-grade data processing platform that transforms unstructured and structured data sources into AI-ready formats. The platform handles the complete data lifecycle—from ingestion and preprocessing to vectorization and quality assessment—enabling organizations to build production-ready RAG (Retrieval-Augmented Generation) applications and AI systems with confidence.
 
 ### Key Value Propositions
 
@@ -35,13 +35,13 @@ AirdOps is an enterprise-grade data processing platform that transforms unstruct
 
 ### Production Deployment
 
-**Live Instance**: [https://airdops.com](https://airdops.com)
+**Live Instance**: [https://primedata.com](https://primedata.com)
 
 **Service Endpoints**:
-- Frontend UI: `https://airdops.com`
-- Backend API: `https://airdops.com/api` (via reverse proxy)
-- API Documentation: `https://airdops.com/docs`
-- Airflow Dashboard: `https://airdops.com/airflow`
+- Frontend UI: `https://primedata.com`
+- Backend API: `https://primedata.com/api` (via reverse proxy)
+- API Documentation: `https://primedata.com/docs`
+- Airflow Dashboard: `https://primedata.com/airflow`
 
 ---
 
@@ -49,7 +49,7 @@ AirdOps is an enterprise-grade data processing platform that transforms unstruct
 
 ### System Architecture
 
-AirdOps follows a **microservices architecture** with clear separation of concerns:
+PrimeData follows a **microservices architecture** with clear separation of concerns:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -96,7 +96,7 @@ AirdOps follows a **microservices architecture** with clear separation of concer
 - **Framework**: Next.js 13+ (App Router)
 - **Language**: TypeScript
 - **UI Library**: React 18+ with custom components
-- **Authentication**: NextAuth.js (Google OAuth, Email/Password)
+- **Authentication**: NextAuth.js (Email/Password, SSO coming soon)
 - **Styling**: Tailwind CSS
 - **Build**: Docker multi-stage builds with standalone output
 
@@ -137,7 +137,7 @@ AirdOps follows a **microservices architecture** with clear separation of concer
 
 ### 1. Data Ingestion & Connectors
 
-AirdOps supports multiple data source types with extensible connector architecture:
+PrimeData supports multiple data source types with extensible connector architecture:
 
 #### Supported Data Sources
 
@@ -573,9 +573,9 @@ FRONTEND_URL=http://localhost:3000
 NEXTAUTH_SECRET=<generate-64-char-secret>
 NEXTAUTH_URL=http://localhost:3000
 
-# Google OAuth (optional)
-GOOGLE_CLIENT_ID=<your-google-client-id>
-GOOGLE_CLIENT_SECRET=<your-google-client-secret>
+# SSO Configuration (coming soon)
+# SSO_CLIENT_ID=<your-sso-client-id>
+# SSO_CLIENT_SECRET=<your-sso-client-secret>
 
 # API Configuration
 NEXT_PUBLIC_API_URL=http://localhost:8000
@@ -614,7 +614,7 @@ openssl rand -base64 16
 
 ### Database Schema
 
-AirdOps uses PostgreSQL for metadata storage with the following core tables:
+PrimeData uses PostgreSQL for metadata storage with the following core tables:
 
 - **users**: User accounts and authentication
 - **workspaces**: Workspace/organization definitions
@@ -697,7 +697,7 @@ Metadata → PostgreSQL
 
 #### Authentication & Authorization
 
-- **Frontend**: NextAuth.js with Google OAuth and email/password
+- **Frontend**: NextAuth.js with email/password authentication (SSO coming soon)
 - **Backend**: JWT (HS256) with configurable expiration
 - **API**: Bearer token authentication
 - **Workspace-Level ACL**: Role-based access control per workspace
@@ -715,7 +715,7 @@ Metadata → PostgreSQL
 
 ### Production Deployment (GCP)
 
-AirdOps is designed for deployment on Google Cloud Platform using Infrastructure as Code (Terraform) and CI/CD (GitHub Actions).
+PrimeData is designed for deployment on Google Cloud Platform using Infrastructure as Code (Terraform) and CI/CD (GitHub Actions).
 
 #### Architecture Components
 
@@ -768,7 +768,7 @@ This starts all services in production mode:
 
 ### Base URL
 
-- **Production**: `https://airdops.com/api`
+- **Production**: `https://primedata.com/api`
 - **Local Development**: `http://localhost:8000/api`
 
 ### Authentication
@@ -853,9 +853,9 @@ Authorization: Bearer <jwt_token>
 - **Documentation**: This README and [COMPREHENSIVE_GUIDE.md](COMPREHENSIVE_GUIDE.md)
 - **API Documentation**: Interactive Swagger UI at `/docs`
 - **GitHub Repository**: Source code and issue tracking
-- **Production Instance**: https://airdops.com
+- **Production Instance**: https://primedata.com
 
 ---
 
-**AirdOps** - Enterprise AI-Ready Data Platform  
+**PrimeData** - Enterprise AI-Ready Data Platform  
 *Transform data into production-ready AI applications with confidence.*

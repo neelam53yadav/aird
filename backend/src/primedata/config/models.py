@@ -1,5 +1,5 @@
 """
-Pydantic models for AirdOps configuration.
+Pydantic models for PrimeData configuration.
 
 Defines structured configuration models for playbooks, chunking, optimization,
 scoring weights, and policy gates.

@@ -37,7 +37,7 @@ settings = get_settings()
 
 # Create FastAPI app
 app = FastAPI(
-    title="AIRDops API",
+    title="PrimeData API",
     description="AI-ready data from any source",
     version="0.1.0",
     docs_url="/docs",
@@ -235,7 +235,7 @@ async def health_check():
 
     return {
         "status": overall_status,
-        "service": "AIRDops",
+        "service": "PrimeData",
         "version": "0.1.0",
         "services": service_results,
         "timestamp": asyncio.get_event_loop().time(),

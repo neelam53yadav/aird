@@ -113,7 +113,7 @@ export default function ContactPage() {
               <span className="text-sm text-gray-600 hover:text-gray-900 transition-colors">Back to Home</span>
             </Link>
             <Link href="/" className="text-2xl font-bold bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent">
-              AIRDOps
+              PrimeData
             </Link>
             <div className="w-24"></div> {/* Spacer for centering */}
           </div>

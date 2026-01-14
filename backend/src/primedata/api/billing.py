@@ -92,7 +92,7 @@ async def create_checkout_session(
         billing_profile = db.query(BillingProfile).filter(BillingProfile.workspace_id == request.workspace_id).first()
 
         if not billing_profile:
-            billing_profile = BillingProfile(workspace_id=request.workspace_id, plan=BillingPlan.FREE)
+            billing_profile = BillingProfile(workspace_id=request.workspace_id, plan=BillingPlan.ENTERPRISE)
             db.add(billing_profile)
             db.commit()
 
@@ -211,7 +211,7 @@ async def get_billing_limits(workspace_id: str, db: Session = Depends(get_db), c
 
         if not billing_profile:
             # Create default billing profile
-            billing_profile = BillingProfile(workspace_id=workspace_id, plan=BillingPlan.FREE)
+            billing_profile = BillingProfile(workspace_id=workspace_id, plan=BillingPlan.ENTERPRISE)
             db.add(billing_profile)
             db.commit()
 

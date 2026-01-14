@@ -1,5 +1,5 @@
 """
-Configuration models and resolver for AirdOps pipeline.
+Configuration models and resolver for PrimeData pipeline.
 
 This module provides Pydantic models for configuration management and
 a resolver that implements precedence-based configuration resolution.

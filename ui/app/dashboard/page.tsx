@@ -45,7 +45,7 @@ export default function DashboardPage() {
   const tourSteps: Step[] = [
     {
       target: 'body',
-      content: 'Welcome to AIRDOps! This quick tour will help you understand the platform and get started quickly.',
+      content: 'Welcome to PrimeData! This quick tour will help you understand the platform and get started quickly.',
       placement: 'center',
       disableBeacon: true,
     },

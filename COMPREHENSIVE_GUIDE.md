@@ -1,8 +1,8 @@
-# AIRDops Comprehensive Guide
+# PrimeData Comprehensive Guide
 
 **AI-ready data from any source. Ingest, clean, chunk, embed & index. Test and export with confidence.**
 
-This comprehensive guide covers everything you need to know about AIRDops - from getting started to advanced configuration, optimization, troubleshooting, and enterprise deployment.
+This comprehensive guide covers everything you need to know about PrimeData - from getting started to advanced configuration, optimization, troubleshooting, and enterprise deployment.
 
 ---
 
@@ -25,7 +25,7 @@ This comprehensive guide covers everything you need to know about AIRDops - from
 
 ## Overview
 
-AIRDops is a comprehensive enterprise data platform designed for AI workflows. It provides end-to-end data processing, from ingestion to vectorization, with enterprise-grade data quality management, billing & gating, team collaboration, and advanced analytics.
+PrimeData is a comprehensive enterprise data platform designed for AI workflows. It provides end-to-end data processing, from ingestion to vectorization, with enterprise-grade data quality management, billing & gating, team collaboration, and advanced analytics.
 
 ### Key Capabilities
 
@@ -41,8 +41,8 @@ AIRDops is a comprehensive enterprise data platform designed for AI workflows. I
 
 ### Service URLs (Default)
 
-- **AIRDops UI**: http://localhost:3000
-- **AIRDops API**: http://localhost:8000
+- **PrimeData UI**: http://localhost:3000
+- **PrimeData API**: http://localhost:8000
 - **API Documentation**: http://localhost:8000/docs
 - **Airflow UI**: http://localhost:8080
 - **MinIO Console**: http://localhost:9001
@@ -80,7 +80,7 @@ See `backend/env.example` and `env.production.example` for complete configuratio
 ```bash
 # Clone repository
 git clone <repository-url>
-cd AIRDops
+cd PrimeData
 
 # Create virtual environment
 python -m venv venv
@@ -109,7 +109,7 @@ This will:
 ```bash
 # 1. Clone repository
 git clone <repository-url>
-cd AIRDops
+cd PrimeData
 
 # 2. Create virtual environment
 python -m venv venv
@@ -437,7 +437,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 
 ### Overview
 
-The AIRDops optimizer actively improves data quality and pushes scores from "good" to "excellent" (>85%) to maximize AI application efficiency. Rather than just reporting metrics, it provides actionable recommendations.
+The PrimeData optimizer actively improves data quality and pushes scores from "good" to "excellent" (>85%) to maximize AI application efficiency. Rather than just reporting metrics, it provides actionable recommendations.
 
 ### The 4x Efficiency Goal
 
@@ -865,7 +865,7 @@ Authorization: Bearer <jwt_token>
 ### Project Structure
 
 ```
-AIRDops/
+PrimeData/
 ├── backend/                    # FastAPI backend
 │   ├── src/primedata/         # Python package
 │   │   ├── api/               # API endpoints
@@ -1178,7 +1178,7 @@ The system implements Option C (Hybrid Approach) for version management:
 
 #### **Platform-Agnostic Scripts**
 
-AIRDops uses Python scripts that work on Windows, macOS, and Linux:
+PrimeData uses Python scripts that work on Windows, macOS, and Linux:
 
 **Start Backend Server:**
 ```bash
@@ -1272,7 +1272,7 @@ Recommended options:
 
 ## Conclusion
 
-AIRDops provides a comprehensive platform for preparing data for AI applications. By following this guide, you can:
+PrimeData provides a comprehensive platform for preparing data for AI applications. By following this guide, you can:
 
 - Set up and configure the system
 - Optimize data quality for maximum AI efficiency
@@ -1285,4 +1285,4 @@ For additional support, check the API documentation at http://localhost:8000/doc
 
 ---
 
-**AIRDops** - Transforming data into AI-ready insights with enterprise-grade quality and governance.
+**PrimeData** - Transforming data into AI-ready insights with enterprise-grade quality and governance.
