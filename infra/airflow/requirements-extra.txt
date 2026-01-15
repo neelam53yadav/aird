@@ -1,0 +1,21 @@
+# Extra python deps you want inside airflow image
+# IMPORTANT: do NOT pin versions that conflict with Airflow constraints.
+
+numpy<2.0
+psycopg2-binary
+minio
+qdrant-client==1.16.2
+sentence-transformers
+openai>=1.0.0
+
+fastapi
+uvicorn
+alembic
+requests
+python-multipart
+python-jose[cryptography]
+passlib[bcrypt]
+PyJWT
+cryptography
+loguru
+pypdf

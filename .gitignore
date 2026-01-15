@@ -103,3 +103,10 @@ dmypy.json
 # Alembic
 alembic/versions/*.py
 !alembic/versions/.gitkeep
+
+# Container image exports
+*.tar
+*.tar.gz
+*.tgz
+aird_images.tar
+postgres.tar

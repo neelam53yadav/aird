@@ -1,40 +1,30 @@
 FROM apache/airflow:2.7.1-python3.11
 
-# Switch to root to install system packages
 USER root
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
+# Optional: avoid failing apt-get update on corp networks / extra repos
+# (Base image sometimes carries extra apt sources; we only need Debian official repos)
+RUN rm -f /etc/apt/sources.list.d/*microsoft* /etc/apt/sources.list.d/*pgdg* || true
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
-    && rm -rf /var/lib/apt/lists/*
+    ca-certificates \
+  && apt-get clean \
+  && rm -rf /var/lib/apt/lists/*
 
-# Switch back to airflow user
 USER airflow
 
-# Install Python dependencies for PrimeData
-# Fix NumPy compatibility by downgrading to 1.x
+# Copy Airflow constraints + extra requirements
+COPY constraints/constraints-3.11.txt /opt/airflow/constraints-3.11.txt
+COPY requirements-extra.txt /opt/airflow/requirements-extra.txt
+
+# Keep pip sane; use constraints to avoid dependency conflicts
+RUN python -m pip install --no-cache-dir --upgrade "pip<25" "setuptools<67" "wheel"
+
 RUN pip install --no-cache-dir \
-    "numpy<2.0" \
-    sqlalchemy==1.4.53 \
-    psycopg2-binary \
-    minio \
-    qdrant-client==1.16.2 \
-    sentence-transformers \
-    openai>=1.0.0 \
-    pydantic \
-    pydantic-settings \
-    fastapi \
-    uvicorn \
-    alembic \
-    requests \
-    python-multipart \
-    python-jose[cryptography] \
-    passlib[bcrypt] \
-    PyJWT \
-    cryptography \
-    loguru \
-    pypdf
+  --constraint /opt/airflow/constraints-3.11.txt \
+  -r /opt/airflow/requirements-extra.txt
 
 # Set the working directory
 WORKDIR /opt/airflow
