@@ -1,3 +1,4 @@
+
 # Python
 __pycache__/
 *.py[cod]
@@ -103,3 +104,12 @@ dmypy.json
 # Alembic
 alembic/versions/*.py
 !alembic/versions/.gitkeep
+
+
+
+*.tar
+*.tar.gz
+*.tgz
+aird_images.tar
+postgres.tar
+
