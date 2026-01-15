@@ -15,7 +15,6 @@ import {
   X,
   ChevronDown,
   CreditCard,
-  Sparkles,
   ChevronLeft,
   Bell,
   Search,
@@ -35,7 +34,6 @@ const navigation = [
   { name: 'Products', href: '/app/products', icon: Package },
   { name: 'Data Sources', href: '/app/datasources', icon: Database },
   { name: 'Analytics', href: '/app/analytics', icon: BarChart3 },
-  { name: 'Billing', href: '/app/billing', icon: CreditCard },
   { name: 'Team', href: '/app/team', icon: Users, comingSoon: true },
   { name: 'Support', href: '/app/support', icon: HelpCircle },
   { name: 'Settings', href: '/app/settings', icon: Settings },
@@ -48,13 +46,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
-  const [betaBannerDismissed, setBetaBannerDismissed] = useState(() => {
-    // Check localStorage to persist dismissal
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('betaBannerDismissed') === 'true'
-    }
-    return false
-  })
 
   useEffect(() => {
     if (status === 'loading') return
@@ -80,12 +71,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
     }
   }, [userMenuOpen])
 
-  const handleDismissBanner = () => {
-    setBetaBannerDismissed(true)
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('betaBannerDismissed', 'true')
-    }
-  }
 
   if (status === 'loading') {
     return (
@@ -104,36 +89,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-gray-50">
-      {/* Professional Beta Release Banner */}
-      {!betaBannerDismissed && (
-        <div className="relative bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white shadow-lg">
-          <div className="absolute inset-0 bg-black opacity-5"></div>
-          <div className="relative flex items-center justify-center px-4 py-2.5">
-            <div className="flex items-center space-x-3 max-w-7xl w-full">
-              <div className="flex items-center space-x-2 flex-shrink-0">
-                <div className="bg-white/20 backdrop-blur-sm rounded-full p-1.5">
-                  <Sparkles className="h-4 w-4 text-white" />
-                </div>
-                <span className="text-xs font-bold tracking-wider uppercase bg-white/20 px-2 py-0.5 rounded">
-                  Beta
-                </span>
-              </div>
-              <p className="text-sm font-medium flex-1 text-center">
-                You're using AIRDOps Beta. We're actively improving features and performance. 
-                <span className="hidden sm:inline"> Your feedback helps us build better.</span>
-              </p>
-              <button
-                onClick={handleDismissBanner}
-                className="flex-shrink-0 p-1 rounded-md hover:bg-white/20 transition-colors focus:outline-none focus:ring-2 focus:ring-white/50"
-                aria-label="Dismiss beta banner"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       <div className="flex-1 flex overflow-hidden">
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
@@ -154,7 +109,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
           {!sidebarCollapsed && (
             <div>
               <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-                AIRDOps
+                PrimeData
               </h1>
               <p className="text-xs text-gray-500 mt-0.5">Making Data AI-Ready</p>
             </div>
@@ -340,7 +295,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
         <footer className="bg-white border-t border-gray-200 py-4">
           <div className="container mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center text-sm text-gray-500">
-              © {new Date().getFullYear()} AIRDOps. All rights reserved.
             </div>
           </div>
         </footer>

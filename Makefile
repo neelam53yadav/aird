@@ -1,11 +1,11 @@
-# AIRDops Development Makefile
+# PrimeData Development Makefile
 # Common development tasks for local setup and daily development
 
 .PHONY: setup dev backend frontend services migrate stop clean help install install-backend install-frontend
 
 # Default target
 help:
-	@echo "AIRDops Development Commands:"
+	@echo "PrimeData Development Commands:"
 	@echo ""
 	@echo "  make setup      - One-time setup: install deps + services + migrations"
 	@echo "  make install    - Install backend and frontend dependencies"

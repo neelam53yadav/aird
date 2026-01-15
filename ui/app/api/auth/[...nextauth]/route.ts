@@ -1,14 +1,9 @@
 import NextAuth from "next-auth"
-import GoogleProvider from "next-auth/providers/google"
 import CredentialsProvider from "next-auth/providers/credentials"
 import { getApiUrl } from "@/lib/config"
 
 const handler = NextAuth({
   providers: [
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID || "dummy",
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || "dummy",
-    }),
     CredentialsProvider({
       name: "Credentials",
       credentials: {
@@ -87,7 +82,6 @@ const handler = NextAuth({
         token.name = user.name
         token.picture = user.image
         token.provider = account?.provider
-        token.google_sub = account?.provider === "google" ? account.providerAccountId : null
         token.roles = ["viewer"] // Default roles
         // Store backend access token for credentials provider
         if ((user as any).access_token) {
@@ -107,7 +101,6 @@ const handler = NextAuth({
         // Add custom properties to session
         (session as any).iss = token.iss as string
         (session.user as any).roles = token.roles as string[]
-        (session.user as any).google_sub = token.google_sub as string | null
       }
       return session
     },

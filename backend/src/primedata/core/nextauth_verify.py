@@ -103,7 +103,7 @@ def verify_nextauth_token(token: str) -> Optional[Dict[str, Any]]:
         token: The JWT token to verify
 
     Returns:
-        Normalized claims dict with email, name, picture, provider, google_sub
+        Normalized claims dict with email, name, picture, provider
         or None if verification fails
     """
     import logging
@@ -185,7 +185,6 @@ def verify_nextauth_token(token: str) -> Optional[Dict[str, Any]]:
                         "name": payload.get("name"),
                         "picture": payload.get("picture"),
                         "provider": payload.get("provider"),
-                        "google_sub": payload.get("google_sub"),
                         "sub": payload.get("sub"),
                         "iat": payload.get("iat"),
                         "exp": payload.get("exp"),

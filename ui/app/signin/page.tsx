@@ -1,33 +1,22 @@
 "use client"
 
 import { AuthButtons } from "@/components/AuthButtons"
-import { Sparkles, ArrowLeft } from "lucide-react"
+import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
 
 export default function SignInPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex flex-col">
-      {/* Beta Badge - Top Banner */}
-      <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white py-2" role="banner">
-        <div className="container mx-auto px-4">
-          <div className="flex items-center justify-center space-x-2" aria-live="polite">
-            <Sparkles className="h-4 w-4" aria-hidden="true" />
-            <span className="text-sm font-medium">
-              AIRDOps Beta Release - We're actively improving based on your feedback
-            </span>
-          </div>
-        </div>
-      </div>
 
       {/* Main Content */}
       <div className="flex-1 flex items-center justify-center px-4 py-12">
         <div className="w-full max-w-md">
           {/* Logo/Brand Section */}
           <div className="text-center mb-8">
-            <Link href="/" className="inline-block mb-6" aria-label="Go to AIRDOps homepage">
+            <Link href="/" className="inline-block mb-6" aria-label="Go to PrimeData homepage">
               <h1 className="text-5xl md:text-6xl font-bold mb-2">
                 <span className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                  AIRDOps
+                  PrimeData
                 </span>
               </h1>
               <p className="text-sm text-gray-500 mt-1">Making Data AI-Ready</p>
