@@ -126,3 +126,10 @@ postgres.tar
 *.tgz
 aird_images.tar
 postgres.tar
+
+# Container image exports
+*.tar
+*.tar.gz
+*.tgz
+aird_images.tar
+postgres.tar
