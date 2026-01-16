@@ -7,6 +7,7 @@ Create Date: 2025-12-21 22:52:07.513665
 """
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.dialects import postgresql
 
 
@@ -41,10 +42,10 @@ def upgrade() -> None:
     # Create pipeline_artifacts table if it doesn't exist
     if not table_exists('pipeline_artifacts'):
         op.create_table('pipeline_artifacts',
-            sa.Column('id', sa.UUID(), nullable=False),
-            sa.Column('pipeline_run_id', sa.UUID(), nullable=False),
-            sa.Column('workspace_id', sa.UUID(), nullable=False),
-            sa.Column('product_id', sa.UUID(), nullable=False),
+            sa.Column('id', PG_UUID(as_uuid=True), nullable=False),
+            sa.Column('pipeline_run_id', PG_UUID(as_uuid=True), nullable=False),
+            sa.Column('workspace_id', PG_UUID(as_uuid=True), nullable=False),
+            sa.Column('product_id', PG_UUID(as_uuid=True), nullable=False),
             sa.Column('version', sa.Integer(), nullable=False),
             sa.Column('stage_name', sa.String(length=100), nullable=False),
             sa.Column('artifact_type', postgresql.ENUM('JSONL', 'JSON', 'CSV', 'PDF', 'VECTOR', 'TEXT', 'BINARY', name='artifacttype', create_type=False), nullable=False),
@@ -61,7 +62,7 @@ def upgrade() -> None:
             sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
             sa.Column('archived_at', sa.DateTime(timezone=True), nullable=True),
             sa.Column('deleted_at', sa.DateTime(timezone=True), nullable=True),
-            sa.Column('created_by', sa.UUID(), nullable=True),
+            sa.Column('created_by', PG_UUID(as_uuid=True), nullable=True),
             sa.ForeignKeyConstraint(['created_by'], ['users.id'], ),
             sa.ForeignKeyConstraint(['pipeline_run_id'], ['pipeline_runs.id'], ),
             sa.ForeignKeyConstraint(['product_id'], ['products.id'], ),

@@ -7,6 +7,7 @@ Create Date: 2025-09-25 22:06:54.878780
 """
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy import inspect, text
 from sqlalchemy.dialects import postgresql
 
@@ -48,10 +49,10 @@ def upgrade() -> None:
     # Create dq_violations table if it doesn't exist
     if not table_exists('dq_violations'):
         op.create_table('dq_violations',
-            sa.Column('id', sa.UUID(), nullable=False),
-            sa.Column('product_id', sa.UUID(), nullable=False),
+            sa.Column('id', PG_UUID(as_uuid=True), nullable=False),
+            sa.Column('product_id', PG_UUID(as_uuid=True), nullable=False),
             sa.Column('version', sa.Integer(), nullable=False),
-            sa.Column('pipeline_run_id', sa.UUID(), nullable=True),
+            sa.Column('pipeline_run_id', PG_UUID(as_uuid=True), nullable=True),
             sa.Column('rule_name', sa.String(length=255), nullable=False),
             sa.Column('rule_type', sa.String(length=100), nullable=False),
             sa.Column('severity', postgresql.ENUM('ERROR', 'WARNING', 'INFO', name='dqviolationseverity', create_type=False), nullable=False),

@@ -7,6 +7,7 @@ Create Date: 2025-09-20 17:51:43.751262
 """
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy import inspect, text
 from sqlalchemy.dialects import postgresql
 
@@ -48,9 +49,9 @@ def upgrade() -> None:
     # Create pipeline_runs table if it doesn't exist
     if not table_exists('pipeline_runs'):
         op.create_table('pipeline_runs',
-            sa.Column('id', sa.UUID(), nullable=False),
-            sa.Column('workspace_id', sa.UUID(), nullable=False),
-            sa.Column('product_id', sa.UUID(), nullable=False),
+            sa.Column('id', PG_UUID(as_uuid=True), nullable=False),
+            sa.Column('workspace_id', PG_UUID(as_uuid=True), nullable=False),
+            sa.Column('product_id', PG_UUID(as_uuid=True), nullable=False),
             sa.Column('version', sa.Integer(), nullable=False),
             sa.Column('status', postgresql.ENUM('QUEUED', 'RUNNING', 'SUCCEEDED', 'FAILED', name='pipelinerunstatus', create_type=False), nullable=False),
             sa.Column('started_at', sa.DateTime(timezone=True), nullable=True),

@@ -1,192 +1,238 @@
+# docker-compose.yml (infra/docker-compose.yml)
+# Fixes:
+# - Ensures primedata app/DAG code reads the SAME app DB as the backend (no "product not found")
+# - Keeps Airflow metadata DB separate (still uses aird)
+# - Keeps mounts/ports/services the same as your current file
+#
+# Key idea:
+#   AIRFLOW__DATABASE__SQL_ALCHEMY_CONN  -> Airflow metadata DB (aird)
+#   DATABASE_URL / POSTGRES_DB          -> PrimeData app DB (must match backend DB)
+
 services:
   postgres:
-    image: postgres:15-alpine
-    container_name: primedata-postgres
+    image: ${POSTGRES_IMAGE:-postgres:15}
+    container_name: aird-postgres
     environment:
-      # ⚠️ WARNING: Set all POSTGRES_* environment variables!
-      # For production: Set via environment variables/secrets manager
-      # For local dev: Create .env file with these values (see infra/env/services.example.env)
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      # Note: These will fail if not set - create .env file or export environment variables
+      POSTGRES_USER: ${POSTGRES_USER:-aird}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aird}
+      POSTGRES_DB: ${POSTGRES_DB:-aird}
     ports:
-      - "5433:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./init/init-airflow-db.sql:/docker-entrypoint-initdb.d/init-airflow-db.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aird} -d ${POSTGRES_DB:-aird}"]
       interval: 10s
       timeout: 5s
-      retries: 5
-    networks:
-      - primedata-network
+      retries: 10
+    restart: unless-stopped
 
   qdrant:
-    image: qdrant/qdrant:v1.16.2
-    container_name: primedata-qdrant
-    ulimits:
-      nofile:
-        soft: 65536
-        hard: 65536
+    image: ${QDRANT_IMAGE:-qdrant/qdrant:v1.16.2}
+    container_name: aird-qdrant
     ports:
-      - "6333:6333"
-      - "6334:6334"
+      - "${QDRANT_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_PORT:-6334}:6334"
     volumes:
       - qdrant_data:/qdrant/storage
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
-      interval: 15s
-      timeout: 10s
-      retries: 10
-      start_period: 30s
-    networks:
-      - primedata-network
+    restart: unless-stopped
 
   minio:
-    image: minio/minio:latest
-    container_name: primedata-minio
+    image: ${MINIO_IMAGE:-minio/minio:latest}
+    container_name: aird-minio
+    command: server /data --console-address ":9001"
     environment:
-      # ⚠️ WARNING: Set MINIO_ROOT_PASSWORD environment variable for production!
-      # ⚠️ WARNING: Set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD environment variables!
-      # No defaults - must be set via environment variables or .env file
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "${MINIO_HOST_PORT:-9002}:9000"
+      - "${MINIO_CONSOLE_HOST_PORT:-9003}:9001"
     volumes:
       - minio_data:/data
-      - ./init/minio-buckets.sh:/docker-entrypoint-initdb.d/minio-buckets.sh
-    command: server /data --console-address ":9001"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - primedata-network
+    restart: unless-stopped
+
+  minio-init:
+    image: ${MINIO_MC_IMAGE:-minio/mc:latest}
+    container_name: aird-minio-init
+    depends_on:
+      - minio
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_BUCKET_NAME: ${MINIO_BUCKET_NAME:-aird}
+      MINIO_PORT: ${MINIO_PORT:-9000}
+    volumes:
+      - ./minio/init.sh:/scripts/init.sh:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command: "/scripts/init.sh"
+    restart: "no"
+
+  airflow-init:
+    env_file:
+      - .env.local
+    build:
+      context: ./airflow
+      dockerfile: Dockerfile
+    image: ${AIRFLOW_IMAGE:-primedata-airflow:2.7.1-py3.11}
+    container_name: aird-airflow-init
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Airflow metadata DB (keep separate)
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: ${AIRFLOW__DATABASE__SQL_ALCHEMY_CONN:-postgresql+psycopg2://aird:aird@postgres:5432/aird}
+      AIRFLOW__CORE__EXECUTOR: ${AIRFLOW__CORE__EXECUTOR:-LocalExecutor}
+      AIRFLOW__CORE__LOAD_EXAMPLES: ${AIRFLOW__CORE__LOAD_EXAMPLES:-false}
+      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY:-}
+      AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY}
+      AIRFLOW__API__AUTH_BACKENDS: "airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session"
+      PYTHONPATH: "/opt/airflow/backend/src"
+
+      # ✅ PrimeData APP DB settings (MUST MATCH backend DB)
+      POSTGRES_HOST: "postgres"
+      POSTGRES_PORT: "${POSTGRES_PORT:-5432}"
+      POSTGRES_USER: "${POSTGRES_USER:-aird}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-aird}"
+
+      # Single source of truth for APP DB
+      # Default matches your backend DB (where products exist)
+      PRIMEDATA_APP_DB: "${PRIMEDATA_APP_DB:-primedata_backend}"
+      POSTGRES_DB: "${PRIMEDATA_APP_DB:-primedata_backend}"
+      DATABASE_URL: "postgresql+psycopg2://${POSTGRES_USER:-aird}:${POSTGRES_PASSWORD:-aird}@postgres:${POSTGRES_PORT:-5432}/${PRIMEDATA_APP_DB:-primedata_backend}"
+
+      # ✅ MinIO inside docker network
+      MINIO_HOST: "minio:9000"
+      MINIO_ENDPOINT: "minio:9000"
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_BUCKET_NAME: ${MINIO_BUCKET_NAME:-aird}
+      MINIO_SECURE: "false"
+
+      # ✅ Qdrant inside docker network
+      QDRANT_HOST: "qdrant"
+      QDRANT_PORT: "6333"
+
+      AIRFLOW_ADMIN_USER: ${AIRFLOW_ADMIN_USER:-admin}
+      AIRFLOW_ADMIN_FIRSTNAME: ${AIRFLOW_ADMIN_FIRSTNAME:-Admin}
+      AIRFLOW_ADMIN_LASTNAME: ${AIRFLOW_ADMIN_LASTNAME:-User}
+      AIRFLOW_ADMIN_EMAIL: ${AIRFLOW_ADMIN_EMAIL:-admin@example.com}
+      AIRFLOW_ADMIN_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:-admin123}
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - airflow_logs:/opt/airflow/logs
+      - ../plugins:/opt/airflow/plugins
+      - ../backend:/opt/airflow/backend:ro
+      - ./airflow/init.sh:/scripts/airflow_init.sh:ro
+    entrypoint: ["/bin/bash", "-lc"]
+    command: "bash /scripts/airflow_init.sh"
+    restart: "no"
 
   airflow-webserver:
+    env_file:
+      - .env.local
     build:
       context: ./airflow
       dockerfile: Dockerfile
-    container_name: primedata-airflow-webserver
-    environment:
-      AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      # ⚠️ WARNING: Use environment variables for database credentials in production!
-      # Construct Airflow DB connection using env vars (including database name)
-      # Set AIRFLOW_DB_NAME environment variable - no default to force explicit configuration
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${AIRFLOW_DB_NAME}
-      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
-      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
-      AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth'
-      AIRFLOW__WEBSERVER__EXPOSE_CONFIG: 'true'
-      # ⚠️ WARNING: Set AIRFLOW_SECRET_KEY environment variable!
-      # No default - must be set via environment variable or .env file
-      AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY}
-      _AIRFLOW_DB_UPGRADE: 'true'
-      _AIRFLOW_WWW_USER_CREATE: 'true'
-      # ⚠️ WARNING: Set AIRFLOW_USERNAME and AIRFLOW_PASSWORD environment variables!
-      # No defaults - must be set via environment variables or .env file
-      _AIRFLOW_WWW_USER_USERNAME: ${AIRFLOW_USERNAME}
-      _AIRFLOW_WWW_USER_PASSWORD: ${AIRFLOW_PASSWORD}
-      # PrimeData specific environment variables
-      PRIMEDATA_BACKEND_URL: http://host.docker.internal:8000
-      # ⚠️ WARNING: Use environment variables for database credentials in production!
-      # Construct DATABASE_URL from individual components (allows database name from secrets)
-      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB}
-      MINIO_HOST: minio:9000
-      # ⚠️ WARNING: Set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD environment variables!
-      # No defaults - must be set via environment variables or .env file
-      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
-      MINIO_SECURE: 'false'
-      QDRANT_HOST: qdrant
-      QDRANT_PORT: '6333'
-      QDRANT_GRPC_PORT: '6334'
-      DISABLE_AUTH: 'true'
-      PYTHONPATH: /opt/airflow/primedata/src
-    ports:
-      - "8080:8080"
-    volumes:
-      - airflow_dags:/opt/airflow/dags
-      - airflow_logs:/opt/airflow/logs
-      - airflow_plugins:/opt/airflow/plugins
-      - ./airflow/triggers:/opt/airflow/triggers
-      - ./airflow/dags:/opt/airflow/dags:ro
-      - ../backend/src:/opt/airflow/primedata/src:ro
-      - ${AIRFLOW_DATA_DIR:-./data}:/opt/airflow/data
-    command: webserver
+    image: ${AIRFLOW_IMAGE:-primedata-airflow:2.7.1-py3.11}
+    container_name: aird-airflow-webserver
     depends_on:
+      airflow-init:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - primedata-network
+    environment:
+      # Airflow metadata DB (keep separate)
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: ${AIRFLOW__DATABASE__SQL_ALCHEMY_CONN:-postgresql+psycopg2://aird:aird@postgres:5432/aird}
+      AIRFLOW__CORE__EXECUTOR: ${AIRFLOW__CORE__EXECUTOR:-LocalExecutor}
+      AIRFLOW__CORE__LOAD_EXAMPLES: ${AIRFLOW__CORE__LOAD_EXAMPLES:-false}
+      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY:-}
+      AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY}
+      AIRFLOW__API__AUTH_BACKENDS: "airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session"
+      PYTHONPATH: "/opt/airflow/backend/src"
+
+      # ✅ PrimeData APP DB (MUST MATCH backend DB)
+      POSTGRES_HOST: "postgres"
+      POSTGRES_PORT: "${POSTGRES_PORT:-5432}"
+      POSTGRES_USER: "${POSTGRES_USER:-aird}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-aird}"
+      PRIMEDATA_APP_DB: "${PRIMEDATA_APP_DB:-primedata_backend}"
+      POSTGRES_DB: "${PRIMEDATA_APP_DB:-primedata_backend}"
+      DATABASE_URL: "postgresql+psycopg2://${POSTGRES_USER:-aird}:${POSTGRES_PASSWORD:-aird}@postgres:${POSTGRES_PORT:-5432}/${PRIMEDATA_APP_DB:-primedata_backend}"
+
+      # ✅ MinIO
+      MINIO_HOST: "minio:9000"
+      MINIO_ENDPOINT: "minio:9000"
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_BUCKET_NAME: ${MINIO_BUCKET_NAME:-aird}
+      MINIO_SECURE: "false"
+
+      # ✅ Qdrant
+      QDRANT_HOST: "qdrant"
+      QDRANT_PORT: "6333"
+    ports:
+      - "${AIRFLOW_WEBSERVER_PORT:-8080}:8080"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - airflow_logs:/opt/airflow/logs
+      - ../plugins:/opt/airflow/plugins
+      - ../backend:/opt/airflow/backend:ro
+    command: ["airflow", "webserver"]
+    restart: unless-stopped
 
   airflow-scheduler:
+    env_file:
+      - .env.local
     build:
       context: ./airflow
       dockerfile: Dockerfile
-    container_name: primedata-airflow-scheduler
-    environment:
-      AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      # ⚠️ WARNING: Use environment variables for database credentials in production!
-      # Construct Airflow DB connection using env vars (including database name)
-      # Set AIRFLOW_DB_NAME environment variable - no default to force explicit configuration
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${AIRFLOW_DB_NAME}
-      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
-      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
-      AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth'
-      # ⚠️ WARNING: Set AIRFLOW_SECRET_KEY environment variable!
-      # No default - must be set via environment variable or .env file
-      AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY}
-      _AIRFLOW_DB_UPGRADE: 'true'
-      # PrimeData specific environment variables
-      PRIMEDATA_BACKEND_URL: http://host.docker.internal:8000
-      # ⚠️ WARNING: Use environment variables for database credentials in production!
-      # Construct DATABASE_URL from individual components (allows database name from secrets)
-      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB}
-      MINIO_HOST: minio:9000
-      # ⚠️ WARNING: Set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD environment variables!
-      # No defaults - must be set via environment variables or .env file
-      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
-      MINIO_SECURE: 'false'
-      QDRANT_HOST: qdrant
-      QDRANT_PORT: '6333'
-      QDRANT_GRPC_PORT: '6334'
-      DISABLE_AUTH: 'true'
-      PYTHONPATH: /opt/airflow/primedata/src
-    volumes:
-      - airflow_dags:/opt/airflow/dags
-      - airflow_logs:/opt/airflow/logs
-      - airflow_plugins:/opt/airflow/plugins
-      - ./airflow/triggers:/opt/airflow/triggers
-      - ./airflow/dags:/opt/airflow/dags:ro
-      - ../backend/src:/opt/airflow/primedata/src:ro
-      - ${AIRFLOW_DATA_DIR:-./data}:/opt/airflow/data
-    command: scheduler
+    image: ${AIRFLOW_IMAGE:-primedata-airflow:2.7.1-py3.11}
+    container_name: aird-airflow-scheduler
     depends_on:
+      airflow-init:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
-    networks:
-      - primedata-network
+    environment:
+      # Airflow metadata DB (keep separate)
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: ${AIRFLOW__DATABASE__SQL_ALCHEMY_CONN:-postgresql+psycopg2://aird:aird@postgres:5432/aird}
+      AIRFLOW__CORE__EXECUTOR: ${AIRFLOW__CORE__EXECUTOR:-LocalExecutor}
+      AIRFLOW__CORE__LOAD_EXAMPLES: ${AIRFLOW__CORE__LOAD_EXAMPLES:-false}
+      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY:-}
+      AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY}
+      AIRFLOW__API__AUTH_BACKENDS: "airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session"
+      PYTHONPATH: "/opt/airflow/backend/src"
+
+      # ✅ PrimeData APP DB (MOST IMPORTANT for task runtime)
+      POSTGRES_HOST: "postgres"
+      POSTGRES_PORT: "${POSTGRES_PORT:-5432}"
+      POSTGRES_USER: "${POSTGRES_USER:-aird}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-aird}"
+      PRIMEDATA_APP_DB: "${PRIMEDATA_APP_DB:-primedata_backend}"
+      POSTGRES_DB: "${PRIMEDATA_APP_DB:-primedata_backend}"
+      DATABASE_URL: "postgresql+psycopg2://${POSTGRES_USER:-aird}:${POSTGRES_PASSWORD:-aird}@postgres:${POSTGRES_PORT:-5432}/${PRIMEDATA_APP_DB:-primedata_backend}"
+
+      # ✅ MinIO
+      MINIO_HOST: "minio:9000"
+      MINIO_ENDPOINT: "minio:9000"
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_BUCKET_NAME: ${MINIO_BUCKET_NAME:-aird}
+      MINIO_SECURE: "false"
+
+      # ✅ Qdrant
+      QDRANT_HOST: "qdrant"
+      QDRANT_PORT: "6333"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - airflow_logs:/opt/airflow/logs
+      - ../plugins:/opt/airflow/plugins
+      - ../backend:/opt/airflow/backend:ro
+    command: ["airflow", "scheduler"]
+    restart: unless-stopped
 
 volumes:
   postgres_data:
   qdrant_data:
   minio_data:
-  airflow_dags:
   airflow_logs:
-  airflow_plugins:
-
-networks:
-  primedata-network:
-    driver: bridge

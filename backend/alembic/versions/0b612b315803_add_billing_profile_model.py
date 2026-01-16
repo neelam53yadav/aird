@@ -7,6 +7,7 @@ Create Date: 2025-09-27 10:49:50.659171
 """
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy import inspect, text
 from sqlalchemy.dialects import postgresql
 
@@ -48,7 +49,7 @@ def upgrade() -> None:
     # Create billing_profiles table if it doesn't exist
     if not table_exists('billing_profiles'):
         op.create_table('billing_profiles',
-            sa.Column('workspace_id', sa.UUID(), nullable=False),
+            sa.Column('workspace_id', PG_UUID(as_uuid=True), nullable=False),
             sa.Column('stripe_customer_id', sa.String(length=255), nullable=True),
             sa.Column('plan', postgresql.ENUM('FREE', 'PRO', 'ENTERPRISE', name='billingplan', create_type=False), nullable=False),
             sa.Column('default_payment_method_id', sa.String(length=255), nullable=True),

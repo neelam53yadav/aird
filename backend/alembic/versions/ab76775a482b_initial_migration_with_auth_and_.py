@@ -7,6 +7,7 @@ Create Date: 2025-09-18 18:32:12.505404
 """
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy import inspect
 
 
@@ -52,7 +53,7 @@ def upgrade() -> None:
         op.create_index(op.f('ix_pipelines_id'), 'pipelines', ['id'], unique=False)
     if not table_exists('users'):
         op.create_table('users',
-            sa.Column('id', sa.UUID(), nullable=False),
+            sa.Column('id', PG_UUID(as_uuid=True), nullable=False),
             sa.Column('email', sa.String(length=255), nullable=False),
             sa.Column('name', sa.String(length=255), nullable=False),
             sa.Column('picture_url', sa.String(length=500), nullable=True),
@@ -69,7 +70,7 @@ def upgrade() -> None:
         op.create_index(op.f('ix_users_id'), 'users', ['id'], unique=False)
     if not table_exists('workspaces'):
         op.create_table('workspaces',
-            sa.Column('id', sa.UUID(), nullable=False),
+            sa.Column('id', PG_UUID(as_uuid=True), nullable=False),
             sa.Column('name', sa.String(length=255), nullable=False),
             sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
             sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
@@ -78,9 +79,9 @@ def upgrade() -> None:
         op.create_index(op.f('ix_workspaces_id'), 'workspaces', ['id'], unique=False)
     if not table_exists('workspace_members'):
         op.create_table('workspace_members',
-            sa.Column('id', sa.UUID(), nullable=False),
-            sa.Column('workspace_id', sa.UUID(), nullable=False),
-            sa.Column('user_id', sa.UUID(), nullable=False),
+            sa.Column('id', PG_UUID(as_uuid=True), nullable=False),
+            sa.Column('workspace_id', PG_UUID(as_uuid=True), nullable=False),
+            sa.Column('user_id', PG_UUID(as_uuid=True), nullable=False),
             sa.Column('role', sa.Enum('OWNER', 'ADMIN', 'EDITOR', 'VIEWER', name='workspacerole'), nullable=False),
             sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
             sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),

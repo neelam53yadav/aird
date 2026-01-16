@@ -7,6 +7,7 @@ Create Date: 2025-09-26 11:57:04.850264
 """
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy import inspect, text
 from sqlalchemy.dialects import postgresql
 
@@ -54,8 +55,8 @@ def upgrade() -> None:
     # Create data_quality_compliance_reports table if it doesn't exist
     if not table_exists('data_quality_compliance_reports'):
         op.create_table('data_quality_compliance_reports',
-            sa.Column('id', sa.UUID(), nullable=False),
-            sa.Column('workspace_id', sa.UUID(), nullable=False),
+            sa.Column('id', PG_UUID(as_uuid=True), nullable=False),
+            sa.Column('workspace_id', PG_UUID(as_uuid=True), nullable=False),
             sa.Column('report_name', sa.String(length=255), nullable=False),
             sa.Column('report_type', sa.String(length=50), nullable=False),
             sa.Column('compliance_framework', sa.String(length=100), nullable=True),
@@ -63,7 +64,7 @@ def upgrade() -> None:
             sa.Column('period_end', sa.DateTime(timezone=True), nullable=False),
             sa.Column('report_data', sa.JSON(), nullable=False),
             sa.Column('summary', sa.Text(), nullable=True),
-            sa.Column('generated_by', sa.UUID(), nullable=False),
+            sa.Column('generated_by', PG_UUID(as_uuid=True), nullable=False),
             sa.Column('generated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
             sa.ForeignKeyConstraint(['workspace_id'], ['workspaces.id'], ),
             sa.PrimaryKeyConstraint('id')
@@ -72,8 +73,8 @@ def upgrade() -> None:
     # Create data_quality_rule_sets table if it doesn't exist
     if not table_exists('data_quality_rule_sets'):
             op.create_table('data_quality_rule_sets',
-            sa.Column('id', sa.UUID(), nullable=False),
-            sa.Column('workspace_id', sa.UUID(), nullable=False),
+            sa.Column('id', PG_UUID(as_uuid=True), nullable=False),
+            sa.Column('workspace_id', PG_UUID(as_uuid=True), nullable=False),
             sa.Column('name', sa.String(length=255), nullable=False),
             sa.Column('description', sa.Text(), nullable=False),
             sa.Column('version', sa.String(length=20), nullable=False),
@@ -82,8 +83,8 @@ def upgrade() -> None:
             sa.Column('data_classification', sa.String(length=50), nullable=True),
             sa.Column('status', postgresql.ENUM('DRAFT', 'ACTIVE', 'DEPRECATED', 'ARCHIVED', name='rulestatus', create_type=False), nullable=False),
             sa.Column('is_active', sa.Boolean(), nullable=False),
-            sa.Column('created_by', sa.UUID(), nullable=False),
-            sa.Column('approved_by', sa.UUID(), nullable=True),
+            sa.Column('created_by', PG_UUID(as_uuid=True), nullable=False),
+            sa.Column('approved_by', PG_UUID(as_uuid=True), nullable=True),
             sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
             sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
             sa.Column('effective_from', sa.DateTime(timezone=True), nullable=True),
@@ -95,10 +96,10 @@ def upgrade() -> None:
     # Create data_quality_rule_assignments table if it doesn't exist
     if not table_exists('data_quality_rule_assignments'):
             op.create_table('data_quality_rule_assignments',
-            sa.Column('id', sa.UUID(), nullable=False),
-            sa.Column('rule_set_id', sa.UUID(), nullable=False),
-            sa.Column('product_id', sa.UUID(), nullable=False),
-            sa.Column('assigned_by', sa.UUID(), nullable=False),
+            sa.Column('id', PG_UUID(as_uuid=True), nullable=False),
+            sa.Column('rule_set_id', PG_UUID(as_uuid=True), nullable=False),
+            sa.Column('product_id', PG_UUID(as_uuid=True), nullable=False),
+            sa.Column('assigned_by', PG_UUID(as_uuid=True), nullable=False),
             sa.Column('assigned_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
             sa.Column('is_override', sa.Boolean(), nullable=False),
             sa.Column('override_reason', sa.Text(), nullable=True),
@@ -110,9 +111,9 @@ def upgrade() -> None:
     # Create data_quality_rules table if it doesn't exist
     if not table_exists('data_quality_rules'):
         op.create_table('data_quality_rules',
-            sa.Column('id', sa.UUID(), nullable=False),
-            sa.Column('product_id', sa.UUID(), nullable=False),
-            sa.Column('workspace_id', sa.UUID(), nullable=False),
+            sa.Column('id', PG_UUID(as_uuid=True), nullable=False),
+            sa.Column('product_id', PG_UUID(as_uuid=True), nullable=False),
+            sa.Column('workspace_id', PG_UUID(as_uuid=True), nullable=False),
             sa.Column('name', sa.String(length=255), nullable=False),
             sa.Column('description', sa.Text(), nullable=False),
             sa.Column('rule_type', sa.String(length=50), nullable=False),
@@ -121,11 +122,11 @@ def upgrade() -> None:
             sa.Column('configuration', sa.JSON(), nullable=False),
             sa.Column('version', sa.Integer(), nullable=False),
             sa.Column('is_current', sa.Boolean(), nullable=False),
-            sa.Column('parent_rule_id', sa.UUID(), nullable=True),
+            sa.Column('parent_rule_id', PG_UUID(as_uuid=True), nullable=True),
             sa.Column('enabled', sa.Boolean(), nullable=False),
-            sa.Column('created_by', sa.UUID(), nullable=False),
-            sa.Column('updated_by', sa.UUID(), nullable=True),
-            sa.Column('approved_by', sa.UUID(), nullable=True),
+            sa.Column('created_by', PG_UUID(as_uuid=True), nullable=False),
+            sa.Column('updated_by', PG_UUID(as_uuid=True), nullable=True),
+            sa.Column('approved_by', PG_UUID(as_uuid=True), nullable=True),
             sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
             sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
             sa.Column('activated_at', sa.DateTime(timezone=True), nullable=True),
@@ -142,10 +143,10 @@ def upgrade() -> None:
     # Create data_quality_rule_audit table if it doesn't exist
     if not table_exists('data_quality_rule_audit'):
         op.create_table('data_quality_rule_audit',
-            sa.Column('id', sa.UUID(), nullable=False),
-            sa.Column('rule_id', sa.UUID(), nullable=False),
+            sa.Column('id', PG_UUID(as_uuid=True), nullable=False),
+            sa.Column('rule_id', PG_UUID(as_uuid=True), nullable=False),
             sa.Column('action', postgresql.ENUM('CREATE', 'UPDATE', 'DELETE', 'ACTIVATE', 'DEPRECATE', 'ARCHIVE', name='auditaction', create_type=False), nullable=False),
-            sa.Column('changed_by', sa.UUID(), nullable=False),
+            sa.Column('changed_by', PG_UUID(as_uuid=True), nullable=False),
             sa.Column('changed_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
             sa.Column('old_values', sa.JSON(), nullable=True),
             sa.Column('new_values', sa.JSON(), nullable=True),

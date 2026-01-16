@@ -7,6 +7,7 @@ Create Date: 2025-12-27 16:17:52.789995
 """
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy import inspect
 from sqlalchemy.dialects import postgresql
 
@@ -118,8 +119,8 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_custom_playbooks_workspace_id'), table_name='custom_playbooks')
     op.drop_index(op.f('ix_custom_playbooks_owner_user_id'), table_name='custom_playbooks')
     op.create_table('document_metadata',
-    sa.Column('id', sa.UUID(), autoincrement=False, nullable=False),
-    sa.Column('product_id', sa.UUID(), autoincrement=False, nullable=False),
+    sa.Column('id', PG_UUID(as_uuid=True), autoincrement=False, nullable=False),
+    sa.Column('product_id', PG_UUID(as_uuid=True), autoincrement=False, nullable=False),
     sa.Column('version', sa.INTEGER(), autoincrement=False, nullable=False),
     sa.Column('chunk_id', sa.VARCHAR(length=255), autoincrement=False, nullable=False),
     sa.Column('score', sa.DOUBLE_PRECISION(precision=53), autoincrement=False, nullable=True),
@@ -139,8 +140,8 @@ def downgrade() -> None:
     op.create_index('idx_document_metadata_field_name', 'document_metadata', ['field_name'], unique=False)
     op.create_index('idx_document_metadata_chunk_id', 'document_metadata', ['chunk_id'], unique=False)
     op.create_table('vector_metadata',
-    sa.Column('id', sa.UUID(), autoincrement=False, nullable=False),
-    sa.Column('product_id', sa.UUID(), autoincrement=False, nullable=False),
+    sa.Column('id', PG_UUID(as_uuid=True), autoincrement=False, nullable=False),
+    sa.Column('product_id', PG_UUID(as_uuid=True), autoincrement=False, nullable=False),
     sa.Column('version', sa.INTEGER(), autoincrement=False, nullable=False),
     sa.Column('collection_id', sa.VARCHAR(length=255), autoincrement=False, nullable=False),
     sa.Column('chunk_id', sa.VARCHAR(length=255), autoincrement=False, nullable=False),

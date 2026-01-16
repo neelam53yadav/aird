@@ -7,6 +7,7 @@ Create Date: 2025-12-15 12:25:10.232681
 """
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy import inspect, text
 from sqlalchemy.dialects import postgresql
 
@@ -56,9 +57,9 @@ def upgrade() -> None:
     # Create acls table if it doesn't exist
     if not table_exists('acls'):
         op.create_table('acls',
-            sa.Column('id', sa.UUID(), nullable=False),
-            sa.Column('user_id', sa.UUID(), nullable=False),
-            sa.Column('product_id', sa.UUID(), nullable=False),
+            sa.Column('id', PG_UUID(as_uuid=True), nullable=False),
+            sa.Column('user_id', PG_UUID(as_uuid=True), nullable=False),
+            sa.Column('product_id', PG_UUID(as_uuid=True), nullable=False),
             sa.Column('access_type', postgresql.ENUM('FULL', 'INDEX', 'DOCUMENT', 'FIELD', name='aclaccesstype', create_type=False), nullable=False),
             sa.Column('index_scope', sa.String(length=500), nullable=True),
             sa.Column('doc_scope', sa.String(length=500), nullable=True),
@@ -80,8 +81,8 @@ def upgrade() -> None:
     # Create document_metadata table if it doesn't exist
     if not table_exists('document_metadata'):
         op.create_table('document_metadata',
-            sa.Column('id', sa.UUID(), nullable=False),
-            sa.Column('product_id', sa.UUID(), nullable=False),
+            sa.Column('id', PG_UUID(as_uuid=True), nullable=False),
+            sa.Column('product_id', PG_UUID(as_uuid=True), nullable=False),
             sa.Column('version', sa.Integer(), nullable=False),
             sa.Column('chunk_id', sa.String(length=255), nullable=False),
             sa.Column('score', sa.Float(), nullable=True),
@@ -104,8 +105,8 @@ def upgrade() -> None:
     # Create vector_metadata table if it doesn't exist
     if not table_exists('vector_metadata'):
         op.create_table('vector_metadata',
-            sa.Column('id', sa.UUID(), nullable=False),
-            sa.Column('product_id', sa.UUID(), nullable=False),
+            sa.Column('id', PG_UUID(as_uuid=True), nullable=False),
+            sa.Column('product_id', PG_UUID(as_uuid=True), nullable=False),
             sa.Column('version', sa.Integer(), nullable=False),
             sa.Column('collection_id', sa.String(length=255), nullable=False),
             sa.Column('chunk_id', sa.String(length=255), nullable=False),

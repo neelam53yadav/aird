@@ -1,21 +1,15 @@
-# Extra python deps you want inside airflow image
-# IMPORTANT: do NOT pin versions that conflict with Airflow constraints.
+# primedata DAG/runtime deps
+loguru==0.7.3
+minio==7.2.20
+pydantic-settings>=2.0,<3
 
-numpy<2.0
-psycopg2-binary
-minio
+# PDF parsing + advanced regex (your logs show both missing earlier)
+pypdf>=4.0,<6
+regex==2023.8.8
+
+# Qdrant client (upgrade it too)
 qdrant-client==1.16.2
-sentence-transformers
-openai>=1.0.0
 
-fastapi
-uvicorn
-alembic
-requests
-python-multipart
-python-jose[cryptography]
-passlib[bcrypt]
-PyJWT
-cryptography
-loguru
-pypdf
+# keep compatible with Airflow constraints ecosystem
+urllib3<1.27
+cffi<2

@@ -7,6 +7,7 @@ Create Date: 2025-09-19 13:18:53.166593
 """
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy import inspect, text
 from sqlalchemy.dialects import postgresql
 
@@ -53,9 +54,9 @@ def upgrade() -> None:
     # Create products table
     if not table_exists('products'):
         op.create_table('products',
-            sa.Column('id', sa.UUID(), nullable=False),
-            sa.Column('workspace_id', sa.UUID(), nullable=False),
-            sa.Column('owner_user_id', sa.UUID(), nullable=False),
+            sa.Column('id', PG_UUID(as_uuid=True), nullable=False),
+            sa.Column('workspace_id', PG_UUID(as_uuid=True), nullable=False),
+            sa.Column('owner_user_id', PG_UUID(as_uuid=True), nullable=False),
             sa.Column('name', sa.String(length=255), nullable=False),
             sa.Column('status', postgresql.ENUM('DRAFT', 'RUNNING', 'READY', 'FAILED', name='productstatus', create_type=False), nullable=False),
             sa.Column('current_version', sa.Integer(), nullable=False),
@@ -91,9 +92,9 @@ def upgrade() -> None:
     # Create data_sources table with new schema if it doesn't exist
     if not table_exists('data_sources'):
         op.create_table('data_sources',
-            sa.Column('id', sa.UUID(), nullable=False),
-            sa.Column('workspace_id', sa.UUID(), nullable=False),
-            sa.Column('product_id', sa.UUID(), nullable=False),
+            sa.Column('id', PG_UUID(as_uuid=True), nullable=False),
+            sa.Column('workspace_id', PG_UUID(as_uuid=True), nullable=False),
+            sa.Column('product_id', PG_UUID(as_uuid=True), nullable=False),
             sa.Column('type', postgresql.ENUM('WEB', 'DB', 'CONFLUENCE', 'SHAREPOINT', 'FOLDER', name='datasourcetype', create_type=False), nullable=False),
             sa.Column('config', sa.JSON(), nullable=False),
             sa.Column('last_cursor', sa.JSON(), nullable=True),
