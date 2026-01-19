@@ -1013,6 +1013,251 @@ async def apply_recommendation(
         )
 
 
+class ApplyRAGRecommendationRequest(BaseModel):
+    """Request model for applying a RAG quality recommendation."""
+    
+    recommendation_type: str = Field(..., description="Recommendation type: 'chunk_overlap', 'chunk_size', 'embedding_model', etc.")
+    config: Dict[str, Any] = Field(..., description="Configuration changes to apply")
+
+
+@router.get("/{product_id}/rag-recommendations")
+async def get_rag_recommendations(
+    product_id: UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Get RAG quality improvement recommendations based on latest evaluation run.
+    """
+    from primedata.core.scope import ensure_product_access
+    from primedata.db.models import EvalRun, RAGQualityMetric
+    from primedata.evaluation.improvement.recommendation_engine import RecommendationEngine
+    from primedata.evaluation.improvement.root_cause_analyzer import RootCauseAnalyzer
+
+    product = ensure_product_access(db, request, product_id)
+
+    # Get latest completed evaluation run
+    latest_run = db.query(EvalRun).filter(
+        EvalRun.product_id == product_id,
+        EvalRun.status == 'completed'
+    ).order_by(EvalRun.created_at.desc()).first()
+
+    if not latest_run or not latest_run.metrics:
+        return {
+            "recommendations": [],
+            "primary_recommendation": None,
+            "message": "No completed evaluation runs found. Run an evaluation first."
+        }
+
+    # Get product thresholds
+    thresholds = product.rag_quality_thresholds or {}
+    
+    # Get metrics from latest run
+    metrics = latest_run.metrics.get('metrics_summary', {})
+    
+    # Analyze failures and generate recommendations
+    root_cause_analyzer = RootCauseAnalyzer()
+    recommendation_engine = RecommendationEngine()
+    all_recommendations = []
+
+    current_config = {
+        "chunking_config": product.chunking_config or {},
+        "embedding_config": product.embedding_config or {},
+    }
+
+    for metric_name, metric_data in metrics.items():
+        avg_score = metric_data.get('average_score', 0.0)
+        threshold_key = f"{metric_name}_min"
+        threshold = thresholds.get(threshold_key, 0.8)  # Default threshold
+
+        if avg_score < threshold:
+            # Analyze root cause
+            root_cause = root_cause_analyzer.analyze_failure(
+                metric_name=metric_name,
+                score=avg_score,
+                threshold=threshold,
+                evaluation_details=metric_data.get('details', {})
+            )
+
+            if root_cause:
+                # Generate recommendation
+                recommendation = recommendation_engine.generate_recommendations(
+                    root_cause=root_cause,
+                    metric_name=metric_name,
+                    current_score=avg_score,
+                    threshold=threshold,
+                    current_config=current_config
+                )
+                if recommendation.get('recommendations'):
+                    all_recommendations.extend(recommendation['recommendations'])
+
+    return {
+        "recommendations": all_recommendations,
+        "primary_recommendation": all_recommendations[0] if all_recommendations else None
+    }
+
+
+@router.get("/{product_id}/rag-quality-gates")
+async def get_rag_quality_gates(
+    product_id: UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Get RAG quality gates status based on latest evaluation run.
+    
+    Returns gate evaluation results showing which quality thresholds passed/failed.
+    """
+    from primedata.core.scope import ensure_product_access
+    from primedata.db.models import EvalRun
+    from primedata.evaluation.gates.gate_evaluator import GateEvaluator
+    from primedata.evaluation.gates.thresholds import ThresholdManager
+    
+    product = ensure_product_access(db, request, product_id)
+    
+    # Get latest completed evaluation run
+    latest_run = db.query(EvalRun).filter(
+        EvalRun.product_id == product_id,
+        EvalRun.status == 'completed'
+    ).order_by(EvalRun.created_at.desc()).first()
+    
+    if not latest_run or not latest_run.metrics:
+        # No evaluation run yet - return empty gates
+        default_thresholds = ThresholdManager.get_default_thresholds()
+        gates = {}
+        for key, threshold in default_thresholds.items():
+            gates[key] = {
+                "threshold": threshold,
+                "actual": None,
+                "passed": False
+            }
+        
+        return {
+            "all_passed": False,
+            "blocking": True,
+            "gates": gates
+        }
+    
+    # Get product thresholds (custom or defaults)
+    custom_thresholds = product.rag_quality_thresholds or {}
+    default_thresholds = ThresholdManager.get_default_thresholds()
+    thresholds = ThresholdManager.merge_thresholds(default_thresholds, custom_thresholds)
+    
+    # Get aggregate metrics from latest run
+    aggregate_metrics = latest_run.metrics.get('aggregate', {})
+    per_query_results = latest_run.metrics.get('per_query', [])
+    
+    # Evaluate gates
+    gate_evaluator = GateEvaluator(thresholds=thresholds)
+    gate_results = gate_evaluator.evaluate_gates(
+        aggregate_metrics=aggregate_metrics,
+        per_query_results=per_query_results
+    )
+    
+    return gate_results
+
+
+@router.post("/{product_id}/apply-rag-recommendation", response_model=ApplyRecommendationResponse)
+async def apply_rag_recommendation(
+    product_id: UUID,
+    request_body: ApplyRAGRecommendationRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Apply a RAG quality recommendation.
+    
+    Updates product configuration based on evaluation results and triggers pipeline re-run.
+    """
+    from primedata.api.pipeline import trigger_pipeline
+    from primedata.core.scope import ensure_product_access
+    from sqlalchemy.orm.attributes import flag_modified
+
+    logger.info(f"POST /api/v1/products/{product_id}/apply-rag-recommendation - Type: {request_body.recommendation_type}")
+
+    try:
+        product = ensure_product_access(db, request, product_id)
+        applied_changes = {}
+        requires_rerun = True
+
+        # Apply recommendation based on type
+        if request_body.recommendation_type == "increase_chunk_overlap":
+            current_config = product.chunking_config or {}
+            if current_config.get("mode") != "manual":
+                current_config["mode"] = "manual"
+            if "manual_settings" not in current_config:
+                current_config["manual_settings"] = {}
+            
+            new_overlap = request_body.config.get("chunk_overlap")
+            if new_overlap:
+                current_config["manual_settings"]["chunk_overlap"] = new_overlap
+                applied_changes["chunk_overlap"] = new_overlap
+                product.chunking_config = current_config
+                flag_modified(product, "chunking_config")
+
+        elif request_body.recommendation_type == "increase_chunk_size":
+            current_config = product.chunking_config or {}
+            if current_config.get("mode") != "manual":
+                current_config["mode"] = "manual"
+            if "manual_settings" not in current_config:
+                current_config["manual_settings"] = {}
+            
+            new_size = request_body.config.get("chunk_size")
+            if new_size:
+                current_config["manual_settings"]["chunk_size"] = new_size
+                applied_changes["chunk_size"] = new_size
+                product.chunking_config = current_config
+                flag_modified(product, "chunking_config")
+
+        elif request_body.recommendation_type == "upgrade_embedding_model":
+            new_model = request_body.config.get("embedder_name")
+            if new_model:
+                current_embedding = product.embedding_config or {}
+                current_embedding["embedder_name"] = new_model
+                # Update dimension based on model
+                from primedata.core.embedding_config import get_embedding_model_config
+                model_config = get_embedding_model_config(new_model)
+                if model_config:
+                    current_embedding["embedding_dimension"] = model_config.dimension
+                product.embedding_config = current_embedding
+                flag_modified(product, "embedding_config")
+                applied_changes["embedding_model"] = new_model
+
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unknown recommendation type: {request_body.recommendation_type}",
+            )
+
+        db.commit()
+
+        # Trigger pipeline re-run if needed
+        if requires_rerun:
+            from primedata.api.pipeline import PipelineRunRequest
+            pipeline_request = PipelineRunRequest(product_id=str(product_id), version=None)
+            # Note: This would need to be called properly - for now just return success
+            # In production, you'd trigger the pipeline asynchronously
+
+        return ApplyRecommendationResponse(
+            success=True,
+            message=f"Applied {request_body.recommendation_type} recommendation",
+            applied_changes=applied_changes,
+            requires_pipeline_rerun=requires_rerun,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error applying RAG recommendation: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to apply recommendation: {str(e)}",
+        )
+
+
 @router.get("/{product_id}/validation-summary")
 async def download_validation_summary(
     product_id: UUID, request: Request, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)

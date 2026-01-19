@@ -1445,20 +1445,27 @@ export default function ProductDetailPage() {
                     <p className="text-sm text-gray-600">Search and explore your indexed data</p>
                   </div>
                 </Link>
-                <ComingSoonBadge
-                  title="AI Readiness"
-                  description="Assess and improve data quality"
-                  icon={TrendingUp}
-                  variant="compact"
-                  className="h-full"
-                />
-                <ComingSoonBadge
-                  title="Pipeline Metrics"
-                  description="View detailed metrics for each version"
-                  icon={BarChart3}
-                  variant="compact"
-                  className="h-full"
-                />
+                <Link href={`/app/products/${productId}/ai-readiness`}>
+                  <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer h-full flex flex-col">
+                    <TrendingUp className="h-8 w-8 text-orange-600 mb-2" />
+                    <h3 className="font-medium text-gray-900">AI Readiness</h3>
+                    <p className="text-sm text-gray-600">Assess and improve data quality</p>
+                  </div>
+                </Link>
+                <Link href={`/app/products/${productId}/rag-quality`}>
+                  <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer h-full flex flex-col">
+                    <BarChart3 className="h-8 w-8 text-indigo-600 mb-2" />
+                    <h3 className="font-medium text-gray-900">RAG Quality</h3>
+                    <p className="text-sm text-gray-600">Evaluate RAG system quality metrics</p>
+                  </div>
+                </Link>
+                <Link href={`/app/products/${productId}/pipeline-metrics`}>
+                  <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer h-full flex flex-col">
+                    <BarChart3 className="h-8 w-8 text-purple-600 mb-2" />
+                    <h3 className="font-medium text-gray-900">Pipeline Metrics</h3>
+                    <p className="text-sm text-gray-600">View detailed metrics for each version</p>
+                  </div>
+                </Link>
                 <Link href={`/app/products/${productId}/pipeline-runs`}>
                   <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer h-full flex flex-col">
                     <GitBranch className="h-8 w-8 text-indigo-600 mb-2" />

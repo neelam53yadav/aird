@@ -12,6 +12,10 @@ RUN apt-get update && apt-get install -y \
 # Switch back to airflow user
 USER airflow
 
+# CRITICAL: Install/upgrade email-validator FIRST (before pydantic)
+# The base Airflow image may have an older version that needs upgrading
+RUN pip install --no-cache-dir --upgrade "email-validator>=2.0"
+
 # Install Python dependencies for PrimeData
 # Fix NumPy compatibility by downgrading to 1.x
 RUN pip install --no-cache-dir \

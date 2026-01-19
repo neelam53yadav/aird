@@ -13,6 +13,7 @@ from primedata.api.analytics import router as analytics_router
 from primedata.api.artifacts import router as artifacts_router
 from primedata.api.auth import router as auth_router
 from primedata.api.billing import router as billing_router
+from primedata.api.chat import router as chat_router
 from primedata.api.contact import router as contact_router
 from primedata.api.data_quality import router as data_quality_router
 from primedata.api.datasources import router as datasources_router
@@ -78,6 +79,7 @@ app.include_router(datasources_router)
 app.include_router(artifacts_router)
 app.include_router(pipeline_router)
 app.include_router(playground_router)
+app.include_router(chat_router)  # RAG Chat endpoint
 app.include_router(ai_readiness_router)
 app.include_router(embedding_models_router)
 app.include_router(data_quality_router)

@@ -19,7 +19,7 @@ Pipeline Flow:
 
 from datetime import timedelta
 from airflow import DAG
-from airflow.operators.python import BranchPythonOperator, PythonOperator
+from airflow.operators.python import PythonOperator
 from airflow.utils.dates import days_ago
 
 # Import task functions from modular dag_tasks module
@@ -33,16 +33,14 @@ from primedata.ingestion_pipeline.dag_tasks import (
     task_validation,
     task_policy,
     task_reporting,
-    task_decide_vector_indexing,
     task_indexing,
-    task_record_vectors_skipped,
     task_validate_data_quality,
     task_finalize,
 )
 
 # Define DAG
 dag = DAG(
-    'primedata_simple',
+    'data_ingestion_pipeline',
     default_args={
         'owner': 'primedata',
         'depends_on_past': False,
@@ -102,18 +100,6 @@ indexing_task = PythonOperator(
     dag=dag,
 )
 
-vector_gate_task = BranchPythonOperator(
-    task_id='vector_gate',
-    python_callable=task_decide_vector_indexing,
-    dag=dag,
-)
-
-skip_indexing_task = PythonOperator(
-    task_id='skip_indexing',
-    python_callable=task_record_vectors_skipped,
-    dag=dag,
-)
-
 validate_data_quality_task = PythonOperator(
     task_id='validate_data_quality',
     python_callable=task_validate_data_quality,
@@ -130,11 +116,11 @@ finalize_task = PythonOperator(
 # Define task dependencies
 # Flow: preprocess -> scoring -> [fingerprint, validation, reporting (parallel)]
 #       fingerprint -> policy
-#       [validation, reporting, policy] -> vector_gate -> [indexing, skip_indexing] -> validate_data_quality -> finalize
+#       [validation, reporting, policy] -> indexing -> validate_data_quality -> finalize
+# Note: indexing task handles skip logic internally if vector_creation_enabled is False
 preprocess_task >> scoring_task
 scoring_task >> [fingerprint_task, validation_task, reporting_task]
 fingerprint_task >> policy_task
-[validation_task, reporting_task, policy_task] >> vector_gate_task
-vector_gate_task >> [indexing_task, skip_indexing_task]
-[indexing_task, skip_indexing_task] >> validate_data_quality_task
+[validation_task, reporting_task, policy_task] >> indexing_task
+indexing_task >> validate_data_quality_task
 validate_data_quality_task >> finalize_task

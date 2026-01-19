@@ -121,9 +121,14 @@ interface ResultModalProps {
   title: string
   message: string
   type: 'success' | 'error' | 'warning' | 'info'
+  actionButton?: {
+    label: string
+    onClick: () => void
+    variant?: 'primary' | 'secondary'
+  }
 }
 
-export function ResultModal({ isOpen, onClose, title, message, type }: ResultModalProps) {
+export function ResultModal({ isOpen, onClose, title, message, type, actionButton }: ResultModalProps) {
   const typeConfig = {
     success: {
       icon: (
@@ -204,12 +209,24 @@ export function ResultModal({ isOpen, onClose, title, message, type }: ResultMod
             </div>
           </div>
         </div>
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-3">
+          {actionButton && (
+            <Button 
+              onClick={actionButton.onClick}
+              className={
+                actionButton.variant === 'secondary'
+                  ? "bg-gray-600 hover:bg-gray-700 text-white shadow-md hover:shadow-lg"
+                  : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg"
+              }
+            >
+              {actionButton.label}
+            </Button>
+          )}
           <Button 
             onClick={onClose}
-            className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg"
+            className={actionButton ? "border-2 border-gray-300 hover:border-gray-400 hover:bg-gray-50" : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg"}
           >
-            OK
+            {actionButton ? 'Cancel' : 'OK'}
           </Button>
         </div>
       </div>

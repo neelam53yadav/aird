@@ -309,10 +309,61 @@ class ApiClient {
         return { data: blob as any, status }
       }
 
+      // Handle 204 No Content responses (DELETE, etc.)
+      if (status === 204) {
+        // 204 No Content has no body
+        if (!response.ok) {
+          return {
+            error: `Request failed with status ${status}`,
+            status,
+          }
+        }
+        return { data: undefined as any, status }
+      }
+
       // Handle JSON responses
       const contentType = response.headers.get('content-type')
       if (contentType && contentType.includes('application/json')) {
-        const data = await response.json()
+        // Check if there's content to parse
+        const contentLength = response.headers.get('content-length')
+        if (contentLength === '0') {
+          // No content
+          if (!response.ok) {
+            return {
+              error: `Request failed with status ${status}`,
+              status,
+            }
+          }
+          return { data: undefined as any, status }
+        }
+
+        // Try to parse JSON, but handle empty responses gracefully
+        let data
+        try {
+          const text = await response.text()
+          if (text.trim()) {
+            data = JSON.parse(text)
+          } else {
+            // Empty response body
+            if (!response.ok) {
+              return {
+                error: `Request failed with status ${status}`,
+                status,
+              }
+            }
+            return { data: undefined as any, status }
+          }
+        } catch (e) {
+          // JSON parsing failed
+          if (!response.ok) {
+            return {
+              error: `Request failed with status ${status}`,
+              status,
+            }
+          }
+          // For successful responses with parse errors, return undefined
+          return { data: undefined as any, status }
+        }
 
         if (!response.ok) {
           // Handle FastAPI validation errors (array of error objects)
@@ -695,6 +746,226 @@ class ApiClient {
   // Playground API
   async getPlaygroundStatus(productId: string): Promise<ApiResponse> {
     return this.get(`/api/v1/playground/status/${productId}`)
+  }
+
+  // RAG Evaluation API - Datasets
+  async createEvaluationDataset(productId: string, data: {
+    name: string
+    description?: string
+    dataset_type: 'golden_qa' | 'golden_retrieval' | 'adversarial'
+    version?: number
+    metadata?: Record<string, any>
+  }): Promise<ApiResponse> {
+    return this.post(`/api/v1/rag-evaluation/datasets?product_id=${productId}`, data)
+  }
+
+  async getEvaluationDataset(datasetId: string): Promise<ApiResponse> {
+    return this.get(`/api/v1/rag-evaluation/datasets/${datasetId}`)
+  }
+
+  async listEvaluationDatasets(productId: string, datasetType?: string, status?: string): Promise<ApiResponse> {
+    const params = new URLSearchParams({ product_id: productId })
+    if (datasetType) params.append('dataset_type', datasetType)
+    if (status) params.append('status', status)
+    return this.get(`/api/v1/rag-evaluation/datasets?${params.toString()}`)
+  }
+
+  async deleteEvaluationDataset(datasetId: string): Promise<ApiResponse> {
+    return this.delete(`/api/v1/rag-evaluation/datasets/${datasetId}`)
+  }
+
+  async addDatasetItems(datasetId: string, items: Array<{
+    query: string
+    expected_answer?: string
+    expected_chunks?: string[]
+    expected_docs?: string[]
+    question_type?: string
+    metadata?: Record<string, any>
+  }>): Promise<ApiResponse> {
+    return this.post(`/api/v1/rag-evaluation/datasets/${datasetId}/items`, { items })
+  }
+
+  async listDatasetItems(datasetId: string): Promise<ApiResponse> {
+    return this.get(`/api/v1/rag-evaluation/datasets/${datasetId}/items`)
+  }
+
+  async deleteDatasetItem(datasetId: string, itemId: string): Promise<ApiResponse> {
+    return this.delete(`/api/v1/rag-evaluation/datasets/${datasetId}/items/${itemId}`)
+  }
+
+  async bulkImportDatasetItems(datasetId: string, file: File): Promise<ApiResponse> {
+    const formData = new FormData()
+    formData.append('file', file)
+    
+    const url = `/api/v1/rag-evaluation/datasets/${datasetId}/items/bulk-import`
+    const fullUrl = url.startsWith('http') ? url : url.startsWith('/') ? `${this.baseUrl}${url}` : `${this.baseUrl}/api/v1/${url}`
+    
+    const cookieToken = (() => {
+      const cookie = document.cookie
+        .split('; ')
+        .find(row => row.startsWith('primedata_api_token='))
+      if (!cookie) return null
+      const value = cookie.split('=').slice(1).join('=')
+      return value ? decodeURIComponent(value) : null
+    })()
+
+    const headers: Record<string, string> = {}
+    if (cookieToken) {
+      headers['Authorization'] = `Bearer ${cookieToken}`
+    }
+
+    try {
+      const response = await fetch(fullUrl, {
+        method: 'POST',
+        headers,
+        body: formData,
+      })
+
+      const status = response.status
+
+      if (status === 204) {
+        return { data: undefined as any, status }
+      }
+
+      const contentType = response.headers.get('content-type')
+      if (contentType && contentType.includes('application/json')) {
+        const text = await response.text()
+        if (text.trim()) {
+          const data = JSON.parse(text)
+          if (!response.ok) {
+            let errorMessage: string
+            if (Array.isArray(data.detail)) {
+              errorMessage = data.detail.map((err: any) => {
+                const field = err.loc?.slice(1).join('.') || 'field'
+                return `${field}: ${err.msg}`
+              }).join('; ')
+            } else if (typeof data.detail === 'string') {
+              errorMessage = data.detail
+            } else if (data.detail?.message) {
+              errorMessage = data.detail.message
+            } else {
+              errorMessage = `Request failed with status ${status}`
+            }
+            return { error: errorMessage, status, errorData: data.detail || data }
+          }
+          return { data, status }
+        }
+        if (!response.ok) {
+          return { error: `Request failed with status ${status}`, status }
+        }
+        return { data: undefined as any, status }
+      }
+
+      const text = await response.text()
+      if (!response.ok) {
+        return { error: text || `Request failed with status ${status}`, status }
+      }
+      return { data: text as any, status }
+    } catch (error) {
+      console.error('API request failed:', error)
+      return {
+        error: error instanceof Error ? error.message : 'Network error',
+        status: 0,
+      }
+    }
+  }
+
+  async downloadDatasetTemplate(datasetType: string): Promise<void> {
+    const url = `/api/v1/rag-evaluation/datasets/templates/${datasetType}`
+    const fullUrl = url.startsWith('http') ? url : url.startsWith('/') ? `${this.baseUrl}${url}` : `${this.baseUrl}/api/v1/${url}`
+    
+    const cookieToken = (() => {
+      const cookie = document.cookie
+        .split('; ')
+        .find(row => row.startsWith('primedata_api_token='))
+      if (!cookie) return null
+      const value = cookie.split('=').slice(1).join('=')
+      return value ? decodeURIComponent(value) : null
+    })()
+
+    const headers: Record<string, string> = {}
+    if (cookieToken) {
+      headers['Authorization'] = `Bearer ${cookieToken}`
+    }
+
+    try {
+      const response = await fetch(fullUrl, { headers })
+      if (!response.ok) {
+        throw new Error(`Failed to download template: ${response.statusText}`)
+      }
+      const blob = await response.blob()
+      const downloadUrl = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = downloadUrl
+      link.download = `${datasetType}_template.csv`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(downloadUrl)
+    } catch (error) {
+      console.error('Failed to download template:', error)
+      throw error
+    }
+  }
+
+  // RAG Evaluation API - Runs
+  async createEvaluationRun(productId: string, data: {
+    dataset_id: string
+    version?: number
+  }): Promise<ApiResponse> {
+    return this.post(`/api/v1/rag-evaluation/runs?product_id=${productId}`, data)
+  }
+
+  async getEvaluationRun(runId: string): Promise<ApiResponse> {
+    return this.get(`/api/v1/rag-evaluation/runs/${runId}`)
+  }
+
+  async listEvaluationRuns(productId: string, version?: number): Promise<ApiResponse> {
+    const params = new URLSearchParams({ product_id: productId })
+    if (version) params.append('version', version.toString())
+    return this.get(`/api/v1/rag-evaluation/products/${productId}/runs?${params.toString()}`)
+  }
+
+  async downloadEvaluationReport(runId: string): Promise<Blob | null> {
+    const response = await this.get<Blob>(`/api/v1/rag-evaluation/runs/${runId}/report`)
+    return response.data || null
+  }
+
+  // RAG Quality Gates
+  async getRAGQualityGates(productId: string): Promise<ApiResponse> {
+    return this.get(`/api/v1/products/${productId}/rag-quality-gates`)
+  }
+
+  async updateRAGQualityThresholds(productId: string, thresholds: Record<string, number>): Promise<ApiResponse> {
+    return this.post(`/api/v1/products/${productId}/rag-quality-thresholds`, thresholds)
+  }
+
+  // RAG Recommendations
+  async getRAGRecommendations(productId: string): Promise<ApiResponse> {
+    return this.get(`/api/v1/products/${productId}/rag-recommendations`)
+  }
+
+  async applyRAGRecommendation(productId: string, recommendationType: string, config: Record<string, any>): Promise<ApiResponse> {
+    return this.post(`/api/v1/products/${productId}/apply-rag-recommendation`, {
+      recommendation_type: recommendationType,
+      config
+    })
+  }
+
+  // Chat API
+  async chatQuery(productId: string, data: {
+    query: string
+    version?: number
+    use?: 'current' | 'prod'
+    top_k?: number
+    temperature?: number
+    max_tokens?: number
+    model?: string
+  }): Promise<ApiResponse> {
+    return this.post(`/api/v1/chat/query`, {
+      product_id: productId,
+      ...data
+    })
   }
 
   async queryPlayground(productId: string, query: string, topK: number = 5, useVersion: 'current' | 'prod' = 'current'): Promise<ApiResponse> {
