@@ -671,22 +671,27 @@ class QdrantClient:
         try:
             from qdrant_client.http import models
 
-            # Create collection name - use product name if provided, otherwise use product_id
+            # Create alias name - keep readable alias based on product name if available
             if product_name:
                 sanitized_name = self._sanitize_collection_name(product_name)
-                collection_name = f"ws_{workspace_id}__{sanitized_name}__v_{version}"
                 alias_name = f"prod_ws_{workspace_id}__{sanitized_name}"
             else:
                 # Fallback to product_id for backward compatibility
-                collection_name = f"ws_{workspace_id}__prod_{product_id}__v_{version}"
                 alias_name = f"prod_ws_{workspace_id}__prod_{product_id}"
 
-            # Check if the target collection exists
-            collections = self.client.get_collections()
-            collection_exists = any(col.name == collection_name for col in collections.collections)
+            # Find the actual collection name (supports both name- and id-based naming)
+            collection_name = self.find_collection_name(
+                workspace_id=workspace_id,
+                product_id=product_id,
+                version=version,
+                product_name=product_name,
+            )
 
-            if not collection_exists:
-                logger.error(f"Collection {collection_name} does not exist")
+            if not collection_name:
+                logger.error(
+                    f"No Qdrant collection found for workspace={workspace_id} product={product_id} "
+                    f"version={version} (tried name- and id-based naming)"
+                )
                 return False
 
             # Create or update the alias using direct HTTP API

@@ -12,6 +12,7 @@ from primedata.db.database import get_db
 from primedata.db.models import Workspace
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
 router = APIRouter(prefix="/api/v1/settings", tags=["Settings"])
 
@@ -97,6 +98,9 @@ async def update_workspace_settings(
                     detail="Invalid OpenAI API key format. OpenAI keys should start with 'sk-'",
                 )
             workspace.settings["openai_api_key"] = request_body.openai_api_key.strip()
+
+        # Ensure SQLAlchemy persists JSON changes
+        flag_modified(workspace, "settings")
 
     db.commit()
     db.refresh(workspace)

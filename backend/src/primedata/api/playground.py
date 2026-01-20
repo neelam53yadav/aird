@@ -236,9 +236,8 @@ async def query_playground(
                 # Unknown dimension - try to find matching model from registry
                 logger.warning(f"Dimension {stored_dimension} not in standard mapping. Searching registry...")
                 from ..core.embedding_config import EmbeddingModelRegistry
-                registry = EmbeddingModelRegistry()
                 matching_model = None
-                for model_id, model_config in registry.models.items():
+                for model_id, model_config in EmbeddingModelRegistry.MODELS.items():
                     if model_config.dimension == stored_dimension:
                         matching_model = model_id
                         break
