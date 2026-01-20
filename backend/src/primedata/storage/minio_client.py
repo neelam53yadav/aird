@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 from loguru import logger
 from minio import Minio
 from minio.error import S3Error
+from primedata.core.settings import get_settings
 
 # Try to import google-cloud-storage (optional, only needed for GCS)
 try:
@@ -43,7 +44,8 @@ class MinIOClient:
 
         Supports both MinIO (local) and GCS (Google Cloud Storage) via Application Default Credentials.
         """
-        self.use_gcs = os.getenv("USE_GCS", "false").lower() == "true"
+        settings = get_settings()
+        self.use_gcs = settings.USE_GCS
 
         if self.use_gcs:
             # Initialize GCS client using Application Default Credentials
@@ -65,8 +67,8 @@ class MinIOClient:
                     del os.environ["GOOGLE_APPLICATION_CREDENTIALS"]
 
             try:
-                # Get project ID from environment or let GCS client detect it
-                project_id = os.getenv("GCS_PROJECT_ID")
+                # Get project ID from settings or let GCS client detect it
+                project_id = settings.GCS_PROJECT_ID
 
                 # Initialize GCS client - it will use:
                 # 1. GOOGLE_APPLICATION_CREDENTIALS file if set and exists
@@ -88,18 +90,20 @@ class MinIOClient:
             self.client = None  # MinIO client not used for GCS
         else:
             # Initialize MinIO client for local development
-            # ⚠️ WARNING: In production, always set MINIO_SECRET_KEY via environment variable!
-            self.host = os.getenv("MINIO_HOST", "localhost:9000")
-            self.access_key = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
-            self.secret_key = os.getenv("MINIO_SECRET_KEY")  # Must be set via environment variable
-            if not self.secret_key:
+            # Use settings instance already loaded above (loads from .env.local, .env, or environment variables)
+            self.host = settings.MINIO_HOST.strip()
+            self.access_key = settings.MINIO_ACCESS_KEY.strip()
+            self.secret_key = settings.MINIO_SECRET_KEY.strip()
+            
+            if not self.secret_key or self.secret_key == "CHANGE_ME":
                 # Only allow default for local development
                 if self.host == "localhost:9000" or "localhost" in self.host:
                     logger.warning("MINIO_SECRET_KEY not set, using development default. This is unsafe for production!")
                     self.secret_key = "CHANGE_ME"  # Placeholder that will fail in production
                 else:
                     raise ValueError("MINIO_SECRET_KEY environment variable must be set for production MinIO")
-            self.secure = os.getenv("MINIO_SECURE", "false").lower() == "true"
+            
+            self.secure = settings.MINIO_SECURE
             self.client = Minio(self.host, access_key=self.access_key, secret_key=self.secret_key, secure=self.secure)
             self.gcs_client = None  # GCS client not used for MinIO
             logger.info(f"Initialized MinIO client for local MinIO at {self.host}")
@@ -187,6 +191,12 @@ class MinIOClient:
                 return True
         except S3Error as e:
             logger.error(f"Failed to upload to {bucket}/{key}: {e}")
+            logger.error(f"S3 Error details - Code: {e.code}, Message: {e.message}")
+            if hasattr(e, 'resource'):
+                logger.error(f"S3 Error Resource: {e.resource}")
+            if hasattr(e, 'request_id'):
+                logger.error(f"S3 Error Request ID: {e.request_id}")
+            logger.error(f"MinIO connection details - Host: {self.host}, Access Key: {self.access_key[:4]}... (first 4 chars), Secure: {self.secure}")
             return False
         except Exception as e:
             logger.error(f"Failed to upload to {bucket}/{key}: {e}")

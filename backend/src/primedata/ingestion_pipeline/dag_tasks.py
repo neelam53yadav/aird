@@ -39,6 +39,7 @@ from primedata.ingestion_pipeline.pipeline_config import (
     resolve_effective_pipeline_config,
     should_skip_vectors,
 )
+from primedata.config import resolve_effective_config
 from primedata.ingestion_pipeline.artifact_registry import (
     calculate_checksum,
     get_artifact_summary_for_run,
@@ -1257,11 +1258,30 @@ def task_preprocess(**context) -> Dict[str, Any]:
         if product:
             db.refresh(product)
 
-        effective_config = resolve_effective_pipeline_config(product, params, aird_context.get("pipeline_run"))
+        # Use new resolver with precedence-based resolution
+        run_conf = params or {}
+        detected_playbook = None  # Could extract from auto-detection if available
+        
+        effective = resolve_effective_config(
+            run_conf=run_conf,
+            product_row=product,
+            detected_playbook=detected_playbook,
+        )
+        
+        # Convert to legacy format for backward compatibility
+        effective_config = effective.to_legacy_dict(product_row=product)
         chunking_config = effective_config.get("chunking_config")
         playbook_id = effective_config.get("playbook_id") or playbook_id
         playbook_selection = effective_config.get("playbook_selection")
 
+        # Log new resolver usage and resolution trace
+        logger.info("✅ Using NEW resolver: resolve_effective_config()")
+        logger.info("Resolution trace: %s", effective.resolution_trace.dict() if effective.resolution_trace else None)
+        logger.info("Effective chunking: chunk_size=%s, chunk_overlap=%s, strategy=%s",
+                    effective.chunking_config.chunk_size,
+                    effective.chunking_config.chunk_overlap,
+                    effective.chunking_config.chunking_strategy)
+        logger.info("Effective playbook: %s", effective.playbook_id)
         logger.info(f"Effective chunking config (preprocess): {chunking_config}")
         logger.info(f"Effective playbook (preprocess): {playbook_selection or {'playbook_id': playbook_id}}")
 
@@ -1500,11 +1520,26 @@ def task_scoring(**context) -> Dict[str, Any]:
             }
 
         product = db.query(Product).filter(Product.id == product_id).first()
-        effective_config = resolve_effective_pipeline_config(product, params, aird_context.get("pipeline_run"))
+        
+        # Use new resolver with precedence-based resolution
+        run_conf = params or {}
+        detected_playbook = None
+        
+        effective = resolve_effective_config(
+            run_conf=run_conf,
+            product_row=product,
+            detected_playbook=detected_playbook,
+        )
+        
+        # Convert to legacy format for backward compatibility
+        effective_config = effective.to_legacy_dict(product_row=product)
         chunking_config = effective_config.get("chunking_config")
         playbook_selection = effective_config.get("playbook_selection")
         playbook_id = effective_config.get("playbook_id")
 
+        # Log new resolver usage
+        logger.info("✅ Using NEW resolver: resolve_effective_config() (scoring)")
+        logger.info("Resolution trace: %s", effective.resolution_trace.dict() if effective.resolution_trace else None)
         logger.info(f"Effective chunking config (scoring): {chunking_config}")
         logger.info(f"Effective playbook (scoring): {playbook_selection or {'playbook_id': playbook_id}}")
 
@@ -2195,10 +2230,24 @@ def task_indexing(**context) -> Dict[str, Any]:
         # Continue with indexing if we can't check the flag (fallback to default behavior)
 
     try:
-        effective_config = resolve_effective_pipeline_config(product, params, pipeline_run)
+        # Use new resolver with precedence-based resolution
+        run_conf = params or {}
+        detected_playbook = None
+        
+        effective = resolve_effective_config(
+            run_conf=run_conf,
+            product_row=product,
+            detected_playbook=detected_playbook,
+        )
+        
+        # Convert to legacy format for backward compatibility
+        effective_config = effective.to_legacy_dict(product_row=product)
         chunking_config = effective_config.get("chunking_config")
         playbook_selection = effective_config.get("playbook_selection")
 
+        # Log new resolver usage
+        logger.info("✅ Using NEW resolver: resolve_effective_config() (indexing)")
+        logger.info("Resolution trace: %s", effective.resolution_trace.dict() if effective.resolution_trace else None)
         logger.info(f"Effective chunking config (indexing): {chunking_config}")
         logger.info(f"Effective playbook (indexing): {playbook_selection or {'playbook_id': product.playbook_id}}")
 

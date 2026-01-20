@@ -296,6 +296,20 @@ class Product(Base):
     embedding_config = Column(JSON, nullable=True, default=lambda: {"embedder_name": "minilm", "embedding_dimension": 384})
     # Vector creation configuration
     vector_creation_enabled = Column(Boolean, nullable=False, default=True)  # Enable vector/embedding creation and indexing
+    # RAG quality thresholds (per-product configuration)
+    rag_quality_thresholds = Column(
+        JSON,
+        nullable=True,
+        default=lambda: {
+            "groundedness_min": 0.80,
+            "hallucination_rate_max": 0.05,
+            "acl_leakage_max": 0.0,
+            "citation_coverage_min": 0.90,
+            "refusal_correctness_min": 0.95,
+            "context_relevance_min": 0.75,
+            "answer_relevance_min": 0.80,
+        },
+    )
     use_case_description = Column(Text, nullable=True, default=None)  # Use case description (only set during creation)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -674,13 +688,18 @@ class EvalRun(Base):
     
     __tablename__ = "eval_runs"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
     product_id = Column(UUID(as_uuid=True), ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
     version = Column(Integer, nullable=False)
     pipeline_run_id = Column(UUID(as_uuid=True), ForeignKey("pipeline_runs.id", ondelete="SET NULL"), nullable=True)
+    dataset_id = Column(UUID(as_uuid=True), ForeignKey("eval_datasets.id", ondelete="SET NULL"), nullable=True, index=True)  # Dataset used for evaluation
+    dag_run_id = Column(String(255), nullable=True)  # Airflow DAG run ID for tracking
     status = Column(String(50), nullable=False, server_default='pending')  # 'pending', 'running', 'completed', 'failed'
-    metrics = Column(JSONB, nullable=True)  # Store Recall@k, MRR, nDCG, etc.
+    metrics = Column(JSONB, nullable=True)  # Per-query and aggregate metrics (kept in DB for recent runs)
+    metrics_path = Column(String(1000), nullable=True)  # Path to metrics JSON in S3 (date-partitioned structure)
+    report_path = Column(String(1000), nullable=True)  # Path to generated report in storage
+    trend_data = Column(JSONB, nullable=True)  # Trend analysis results
     started_at = Column(DateTime(timezone=True), nullable=True)
     finished_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -689,8 +708,161 @@ class EvalRun(Base):
     product = relationship("Product", back_populates="eval_runs")
     workspace = relationship("Workspace", back_populates="eval_runs")
     pipeline_run = relationship("PipelineRun", back_populates="eval_runs")
+    dataset = relationship("EvalDataset")
     
     # Indexes
     __table_args__ = (
         Index('idx_eval_runs_product_version', 'product_id', 'version'),
+        Index('idx_eval_runs_dataset', 'dataset_id'),
+        Index('idx_eval_runs_status', 'status'),
+        Index('idx_eval_runs_dag_run_id', 'dag_run_id'),
+    )
+
+
+class EvalDatasetStatus(str, Enum):
+    """Evaluation dataset status enum."""
+
+    DRAFT = "draft"
+    ACTIVE = "active"
+    ARCHIVED = "archived"
+
+
+class EvalDataset(Base):
+    """Evaluation dataset model for RAG quality assessment."""
+
+    __tablename__ = "eval_datasets"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
+    workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    dataset_type = Column(String(50), nullable=False)  # 'golden_qa', 'golden_retrieval', 'adversarial'
+    version = Column(Integer, nullable=True)  # Product version this dataset is for (null = all versions)
+    status = Column(SQLEnum(EvalDatasetStatus), nullable=False, default=EvalDatasetStatus.DRAFT)
+    extra_metadata = Column(JSON, nullable=True, default=dict)  # Additional metadata
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    workspace = relationship("Workspace")
+    product = relationship("Product")
+    items = relationship("EvalDatasetItem", back_populates="dataset", cascade="all, delete-orphan")
+
+    # Indexes
+    __table_args__ = (
+        Index("idx_eval_datasets_product", "product_id"),
+        Index("idx_eval_datasets_workspace", "workspace_id"),
+        Index("idx_eval_datasets_type", "dataset_type"),
+        Index("idx_eval_datasets_status", "status"),
+    )
+
+
+class EvalDatasetItem(Base):
+    """Individual evaluation dataset item."""
+
+    __tablename__ = "eval_dataset_items"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
+    dataset_id = Column(UUID(as_uuid=True), ForeignKey("eval_datasets.id", ondelete="CASCADE"), nullable=False, index=True)
+    query = Column(Text, nullable=False)
+    expected_answer = Column(Text, nullable=True)  # For golden_qa datasets
+    expected_chunks = Column(JSON, nullable=True)  # List of expected chunk IDs
+    expected_docs = Column(JSON, nullable=True)  # List of expected document IDs
+    question_type = Column(String(50), nullable=True)  # 'factual', 'summarization', 'policy', etc.
+    extra_metadata = Column(JSON, nullable=True, default=dict)  # Additional metadata (tags, difficulty, etc.)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    dataset = relationship("EvalDataset", back_populates="items")
+
+    # Indexes
+    __table_args__ = (
+        Index("idx_eval_dataset_items_dataset", "dataset_id"),
+    )
+
+
+class RAGRequestLog(Base):
+    """Structured logging for RAG requests."""
+
+    __tablename__ = "rag_request_logs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
+    workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    version = Column(Integer, nullable=False)
+    
+    # Query and context
+    query = Column(Text, nullable=False)
+    policy_context = Column(JSON, nullable=True)  # Policy context applied
+    acl_applied = Column(Boolean, nullable=False, default=False)
+    acl_denied = Column(Boolean, nullable=False, default=False)
+    
+    # Retrieval details
+    retrieved_chunk_ids = Column(JSON, nullable=True)  # List of retrieved chunk IDs
+    retrieved_doc_ids = Column(JSON, nullable=True)  # List of retrieved document IDs
+    retrieval_scores = Column(JSON, nullable=True)  # Retrieval similarity scores
+    filters_applied = Column(JSON, nullable=True)  # Filters applied during retrieval
+    
+    # Generation details
+    prompt_hash = Column(String(64), nullable=True)  # Hash of the prompt used
+    model = Column(String(100), nullable=True)  # LLM model used
+    temperature = Column(Float, nullable=True)
+    max_tokens = Column(Integer, nullable=True)
+    
+    # Response details
+    response = Column(Text, nullable=True)  # Generated response
+    response_tokens = Column(Integer, nullable=True)
+    latency_ms = Column(Float, nullable=True)  # Total latency in milliseconds
+    
+    # Evaluation sampling
+    sampled_for_eval = Column(Boolean, nullable=False, default=False)  # Whether sampled for evaluation
+    
+    timestamp = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    # Relationships
+    workspace = relationship("Workspace")
+    product = relationship("Product")
+    user = relationship("User")
+
+    # Indexes
+    __table_args__ = (
+        Index("idx_rag_logs_product_version", "product_id", "version"),
+        Index("idx_rag_logs_workspace", "workspace_id"),
+        Index("idx_rag_logs_timestamp", "timestamp"),
+        Index("idx_rag_logs_sampled", "sampled_for_eval"),
+    )
+
+
+class RAGQualityMetric(Base):
+    """Time-series RAG quality metrics for evaluation history."""
+
+    __tablename__ = "rag_quality_metrics"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
+    workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id", ondelete="CASCADE"), nullable=False, index=True)
+    eval_run_id = Column(UUID(as_uuid=True), ForeignKey("eval_runs.id", ondelete="CASCADE"), nullable=True, index=True)
+    version = Column(Integer, nullable=False)
+    
+    metric_name = Column(String(100), nullable=False, index=True)  # 'groundedness', 'relevance', etc.
+    value = Column(Float, nullable=False)  # Metric value (0-1 scale)
+    threshold = Column(Float, nullable=True)  # Threshold for this metric
+    passed = Column(Boolean, nullable=False)  # Whether metric passed threshold
+    
+    extra_metadata = Column(JSON, nullable=True, default=dict)  # Additional metric details
+    timestamp = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    # Relationships
+    workspace = relationship("Workspace")
+    product = relationship("Product")
+    eval_run = relationship("EvalRun")
+
+    # Indexes
+    __table_args__ = (
+        Index("idx_rag_metrics_product_version", "product_id", "version"),
+        Index("idx_rag_metrics_eval_run", "eval_run_id"),
+        Index("idx_rag_metrics_name_timestamp", "metric_name", "timestamp"),
     )

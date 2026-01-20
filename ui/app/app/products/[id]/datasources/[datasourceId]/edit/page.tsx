@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Database, Globe, HardDrive, FileText, Folder, Share, Cloud } from 'lucide-react'
+import { ArrowLeft, Database, Globe, HardDrive, FileText, Folder, Share, Cloud, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -77,11 +77,12 @@ const DATA_SOURCE_TYPES = [
   {
     id: 'folder',
     name: 'Local Folder',
-    description: 'Import files from local directory',
+    description: 'Import files from local directory or upload files',
     icon: Folder,
     configFields: [
-      { name: 'path', label: 'Folder Path', type: 'text', required: false, placeholder: 'Optional - leave empty for upload mode' },
+      { name: 'path', label: 'Folder Path', type: 'text', required: false, placeholder: 'Enter full server folder path (optional - leave empty to upload files)' },
       { name: 'file_types', label: 'File Types (comma-separated)', type: 'text', required: false },
+      { name: 'recursive', label: 'Include Subfolders', type: 'checkbox', required: false },
     ]
   },
   {
@@ -146,6 +147,9 @@ export default function EditDataSourcePage() {
   const [error, setError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
+  const [uploadMode, setUploadMode] = useState<'path' | 'upload'>('path')
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+  const [isUploadOnlyMode, setIsUploadOnlyMode] = useState(false)
   
   // Modal states
   const [showResultModal, setShowResultModal] = useState(false)
@@ -167,6 +171,7 @@ export default function EditDataSourcePage() {
     }
   }, [status, router, productId, datasourceId])
 
+
   const loadProduct = async () => {
     try {
       const response = await apiClient.getProduct(productId)
@@ -177,6 +182,7 @@ export default function EditDataSourcePage() {
       console.error('Failed to load product:', err)
     }
   }
+
 
   const loadDataSource = async () => {
     try {
@@ -191,7 +197,16 @@ export default function EditDataSourcePage() {
         const data = response.data as DataSource
         console.log('Data source data:', data)
         setDataSource(data)
-        setConfig(data.config || {})
+        const loadedConfig = data.config || {}
+        setConfig(loadedConfig)
+        
+        // Detect upload mode for folder datasources: if no path is set, it's upload mode
+        if (data.type === 'folder') {
+          const hasPath = loadedConfig.path && loadedConfig.path.trim() !== ''
+          const isUpload = !hasPath
+          setUploadMode(isUpload ? 'upload' : 'path')
+          setIsUploadOnlyMode(isUpload) // If created in upload mode, lock it to upload only
+        }
       } else {
         console.error('No data in response:', response)
         setError('No data received from server')
@@ -327,6 +342,70 @@ export default function EditDataSourcePage() {
     // Clear previous errors
     setFieldErrors({})
     setError(null)
+    
+    // Special validation for folder datasource with file upload
+    if (dataSource?.type === 'folder' && uploadMode === 'upload') {
+      // In upload mode, path is not required, but we should allow updating files
+      // If new files are selected, they will be uploaded
+      const updateConfig = {
+        ...config,
+        path: '' // Clear path in upload mode
+      }
+      
+      try {
+        const response = await apiClient.updateDataSource(datasourceId, updateConfig)
+        
+        // If new files are selected, upload them
+        if (selectedFiles.length > 0) {
+          const uploadResponse = await apiClient.uploadFilesToDataSource(
+            datasourceId,
+            selectedFiles
+          )
+          
+          if (uploadResponse.error) {
+            setResultModalData({
+              type: 'error',
+              title: 'Update Failed',
+              message: `Data source updated but file upload failed: ${uploadResponse.error}`
+            })
+            setShowResultModal(true)
+            setSaving(false)
+            return
+          }
+        }
+        
+        if (response.error) {
+          setResultModalData({
+            type: 'error',
+            title: 'Update Failed',
+            message: response.error
+          })
+          setShowResultModal(true)
+        } else {
+          setResultModalData({
+            type: 'success',
+            title: 'Data Source Updated',
+            message: selectedFiles.length > 0 
+              ? `Data source updated and ${selectedFiles.length} file(s) uploaded successfully`
+              : 'Data source has been successfully updated'
+          })
+          setShowResultModal(true)
+          setTimeout(() => {
+            router.push(`/app/products/${productId}`)
+          }, 1500)
+        }
+      } catch (err) {
+        setResultModalData({
+          type: 'error',
+          title: 'Update Failed',
+          message: 'Failed to update data source'
+        })
+        setShowResultModal(true)
+      } finally {
+        setSaving(false)
+      }
+      return
+    }
     
     // Basic validation for required fields
     const requiredFields = selectedDataSourceType?.configFields.filter(field => field.required) || []
@@ -493,20 +572,110 @@ export default function EditDataSourcePage() {
               </div>
             </div>
 
-            {selectedDataSourceType?.configFields.map((field) => (
-              <div key={field.name} className="mb-4">
-                <Label htmlFor={field.name} className="block text-sm font-medium text-gray-700">
-                  {field.label} {field.required && <span className="text-red-500">*</span>}
+            {/* Folder datasource: Mode selector - only show if not upload-only mode */}
+            {dataSource?.type === 'folder' && !isUploadOnlyMode && (
+              <div className="mb-4">
+                <Label className="block text-sm font-medium text-gray-700 mb-2">
+                  Data Source Mode
                 </Label>
-                {renderConfigField(field)}
-                {fieldErrors[field.name] && (
-                  <p className="text-sm text-red-600 mt-1">{fieldErrors[field.name]}</p>
+                <div className="flex space-x-4">
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      name="folderMode"
+                      value="upload"
+                      checked={uploadMode === 'upload'}
+                      onChange={(e) => {
+                        setUploadMode('upload')
+                        // Clear path when switching to upload mode
+                        handleConfigChange('path', '')
+                        // Clear selected files when switching modes
+                        setSelectedFiles([])
+                      }}
+                      className="mr-2"
+                    />
+                    Upload Files from Local System
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      name="folderMode"
+                      value="path"
+                      checked={uploadMode === 'path'}
+                      onChange={(e) => {
+                        setUploadMode('path')
+                        // Clear selected files when switching to path mode
+                        setSelectedFiles([])
+                      }}
+                      className="mr-2"
+                    />
+                    Server Folder Path
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {/* Folder datasource: File upload UI */}
+            {dataSource?.type === 'folder' && uploadMode === 'upload' ? (
+              <div className="mb-4">
+                <Label htmlFor="files" className="block text-sm font-medium text-gray-700 mb-2">
+                  Select Files {selectedFiles.length === 0 && <span className="text-gray-500">(optional - add more files)</span>}
+                </Label>
+                <input
+                  type="file"
+                  id="files"
+                  multiple
+                  onChange={(e) => {
+                    if (e.target.files) {
+                      setSelectedFiles(Array.from(e.target.files))
+                    }
+                  }}
+                  className="block w-full text-sm text-gray-500
+                    file:mr-4 file:py-2 file:px-4
+                    file:rounded-full file:border-0
+                    file:text-sm file:font-semibold
+                    file:bg-blue-50 file:text-blue-700
+                    hover:file:bg-blue-100"
+                />
+                {selectedFiles.length > 0 && (
+                  <div className="mt-2">
+                    <p className="text-sm text-gray-600 font-medium">
+                      {selectedFiles.length} new file(s) selected
+                    </p>
+                    <ul className="mt-1 text-sm text-gray-500 list-disc list-inside max-h-32 overflow-y-auto">
+                      {selectedFiles.map((file, idx) => (
+                        <li key={idx}>{file.name} ({(file.size / 1024).toFixed(2)} KB)</li>
+                      ))}
+                    </ul>
+                  </div>
                 )}
-                {(field as any).description && (
-                  <p className="mt-2 text-sm text-gray-500">{(field as any).description}</p>
+                {/* Show existing files info */}
+                {isUploadOnlyMode && (
+                  <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm text-blue-800">
+                      <strong>Upload Mode:</strong> This data source was created with file upload mode. 
+                      Previously uploaded files are still available. You can add more files by selecting them above.
+                    </p>
+                  </div>
                 )}
               </div>
-            ))}
+            ) : (
+              /* Configuration Fields */
+              selectedDataSourceType?.configFields.map((field) => (
+                <div key={field.name} className="mb-4">
+                  <Label htmlFor={field.name} className="block text-sm font-medium text-gray-700">
+                    {field.label} {field.required && <span className="text-red-500">*</span>}
+                  </Label>
+                  {renderConfigField(field)}
+                  {fieldErrors[field.name] && (
+                    <p className="text-sm text-red-600 mt-1">{fieldErrors[field.name]}</p>
+                  )}
+                  {(field as any).description && (
+                    <p className="mt-2 text-sm text-gray-500">{(field as any).description}</p>
+                  )}
+                </div>
+              ))
+            )}
           </div>
 
           {error && (

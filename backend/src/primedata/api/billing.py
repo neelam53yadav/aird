@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 from ..core.plan_limits import get_plan_limits, get_plan_limit
 from ..core.security import get_current_user
 from ..db.database import get_db
-from ..db.models import BillingPlan, BillingProfile, DataSource, PipelineRun, Product, RawFile, Workspace
+from ..db.models import BillingPlan, BillingProfile, DataSource, EvalRun, PipelineRun, Product, RawFile, Workspace
 
 logger = logging.getLogger(__name__)
 
@@ -226,6 +226,7 @@ async def get_billing_limits(workspace_id: str, db: Session = Depends(get_db), c
             "max_products": plan_limits_dict.get("max_products", -1),
             "max_data_sources_per_product": plan_limits_dict.get("max_data_sources_per_product", -1),
             "max_pipeline_runs_per_month": plan_limits_dict.get("max_pipeline_runs_per_month", -1),
+            "max_evaluation_runs_per_month": plan_limits_dict.get("max_evaluation_runs_per_month", -1),
             "max_raw_files_size_mb": plan_limits_dict.get("max_raw_files_size_mb", -1),
         }
 
@@ -322,6 +323,14 @@ def calculate_workspace_usage(workspace_id: str, db: Session) -> Dict[str, Any]:
         or 0
     )
 
+    # Count evaluation runs in current month
+    eval_runs_count = (
+        db.query(func.count(EvalRun.id))
+        .filter(and_(EvalRun.workspace_id == workspace_uuid, EvalRun.started_at >= month_start))
+        .scalar()
+        or 0
+    )
+
     # Calculate total raw files size in bytes (sum across all raw files in workspace)
     raw_files_size_bytes = (
         db.query(func.sum(RawFile.file_size))
@@ -335,6 +344,7 @@ def calculate_workspace_usage(workspace_id: str, db: Session) -> Dict[str, Any]:
         "products": products_count,
         "data_sources": data_sources_count,
         "pipeline_runs_this_month": pipeline_runs_count,
+        "evaluation_runs_this_month": eval_runs_count,
         "raw_files_size_mb": round(raw_files_size_mb, 2),  # Round to 2 decimal places
     }
 

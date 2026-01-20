@@ -102,6 +102,13 @@ class Settings(BaseSettings):
     QDRANT_PORT: int = 6333
     QDRANT_GRPC_PORT: int = 6334
 
+    # Airflow Configuration
+    AIRFLOW_URL: str = "http://localhost:8080"
+    AIRFLOW_USERNAME: Optional[str] = None
+    AIRFLOW_PASSWORD: Optional[str] = None
+    AIRFLOW_HOST: str = "localhost"  # For internal service communication
+    AIRFLOW_PORT: int = 8080
+
     # OpenAI Configuration
     OPENAI_API_KEY: Optional[str] = None  # OpenAI API key for embedding models
 
@@ -122,7 +129,7 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "https://airdops.com"  # Frontend URL for email links
 
     class Config:
-        env_file = ".env"
+        env_file = [".env.local", ".env"]  # Try .env.local first, then .env
         case_sensitive = True
         extra = "ignore"  # Ignore extra fields from .env (for backward compatibility during migration)
 
