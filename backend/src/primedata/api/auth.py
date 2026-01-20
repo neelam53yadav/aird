@@ -214,7 +214,7 @@ async def validate_email_endpoint(request: EmailValidationRequest, db: Session =
 async def signup(request: SignupRequest, db: Session = Depends(get_db)):
     """
     Register a new user with email and password.
-    Creates account but requires email verification.
+    Email verification is disabled - users are automatically verified.
     """
     # Check if user already exists
     existing_user = db.query(User).filter(User.email == request.email).first()
@@ -228,10 +228,8 @@ async def signup(request: SignupRequest, db: Session = Depends(get_db)):
     except EmailNotValidError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-    # Create new user (marked as unverified)
+    # Create new user (auto-verified, no verification token needed)
     password_hash = hash_password(request.password)
-    verification_token = secrets.token_urlsafe(32)  # Generate unique token
-    verification_expires = datetime.now(timezone.utc) + timedelta(hours=24)  # 24 hour expiry
     
     # Construct full name from first and last name
     full_name = f"{request.first_name} {request.last_name}".strip()
@@ -244,9 +242,9 @@ async def signup(request: SignupRequest, db: Session = Depends(get_db)):
         password_hash=password_hash,
         auth_provider=AuthProvider.SIMPLE,
         roles=["viewer"],
-        email_verified=False,
-        verification_token=verification_token,
-        verification_token_expires=verification_expires,
+        email_verified=True,  # Auto-verify users (email verification disabled)
+        verification_token=None,  # No verification token needed
+        verification_token_expires=None,  # No expiry needed
     )
     db.add(user)
     db.commit()
@@ -263,15 +261,13 @@ async def signup(request: SignupRequest, db: Session = Depends(get_db)):
     db.add(membership)
     db.commit()
 
-    # Send verification email (use first name for personalization)
-    email_sent = send_verification_email(user.email, verification_token, user.first_name)
-    if not email_sent:
-        logger.warning(f"Failed to send verification email to {user.email}, but account created")
+    # Skip sending verification email (email verification disabled)
+    logger.info(f"User {user.email} created and auto-verified (email verification disabled)")
 
     return SignupResponse(
-        message="Account created successfully. Please check your email to verify your account.",
+        message="Account created successfully. You can now sign in.",
         email=user.email,
-        requires_verification=True
+        requires_verification=False  # No verification required
     )
 
 
@@ -371,26 +367,13 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User account is inactive")
     
-    # Check if email is verified (only for email/password auth)
+    # SKIP EMAIL VERIFICATION CHECK - Auto-verify users on login if not already verified
     if user.auth_provider == AuthProvider.SIMPLE and not user.email_verified:
-        # Check if verification token expired
-        token_expired = (
-            user.verification_token_expires and 
-            user.verification_token_expires < datetime.now(timezone.utc)
-        )
-        
-        if token_expired:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Your verification link has expired. Please request a new verification email.",
-                headers={"X-Verification-Expired": "true"}  # Flag for frontend
-            )
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Please verify your email address before logging in. Check your inbox for the verification email.",
-                headers={"X-Verification-Pending": "true"}  # Flag for frontend
-            )
+        logger.info(f"Auto-verifying email for user: {user.email} on login (verification disabled)")
+        user.email_verified = True
+        user.verification_token = None
+        user.verification_token_expires = None
+        db.commit()
 
     # Get workspace memberships
     workspace_memberships = db.query(WorkspaceMember).filter(WorkspaceMember.user_id == user.id).all()
@@ -454,13 +437,14 @@ async def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(
             detail="Password reset is not available for accounts signed in with Google. Please use Google sign-in instead."
         )
     
-    # Check if email is verified
+    # SKIP EMAIL VERIFICATION CHECK - Email verification disabled
+    # Auto-verify user if not already verified (allow password reset for all users)
     if not user.email_verified:
-        logger.warning(f"Password reset requested for unverified email: {email}")
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Please verify your email address before resetting your password. Check your inbox for the verification email."
-        )
+        logger.info(f"Auto-verifying email for user: {email} on password reset (verification disabled)")
+        user.email_verified = True
+        user.verification_token = None
+        user.verification_token_expires = None
+        db.commit()
     
     # Generate reset token
     reset_token = secrets.token_urlsafe(32)

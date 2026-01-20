@@ -155,7 +155,7 @@ export default function BillingPage() {
       case 'free':
         return <Zap className="h-5 w-5 text-gray-500" />
       case 'pro':
-        return <Shield className="h-5 w-5 text-blue-500" />
+        return <Shield className="h-5 w-5 text-[#C8102E]" />
       case 'enterprise':
         return <Infinity className="h-5 w-5 text-purple-500" />
       default:
@@ -168,7 +168,7 @@ export default function BillingPage() {
       case 'free':
         return 'bg-gray-100 text-gray-800'
       case 'pro':
-        return 'bg-blue-100 text-blue-800'
+        return 'bg-[#F5E6E8] text-[#C8102E]'
       case 'enterprise':
         return 'bg-purple-100 text-purple-800'
       default:
@@ -180,7 +180,7 @@ export default function BillingPage() {
     return (
       <AppLayout>
         <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#C8102E]"></div>
         </div>
       </AppLayout>
     )
@@ -282,8 +282,8 @@ export default function BillingPage() {
           <div className="bg-white shadow rounded-lg p-6">
             <div className="flex items-center">
               <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-blue-100 rounded-md flex items-center justify-center">
-                  <span className="text-blue-600 font-semibold text-sm">P</span>
+                <div className="w-8 h-8 bg-[#F5E6E8] rounded-md flex items-center justify-center">
+                  <span className="text-[#C8102E] font-semibold text-sm">P</span>
                 </div>
               </div>
               <div className="ml-4 flex-1">
@@ -294,7 +294,7 @@ export default function BillingPage() {
                 <div className="mt-2">
                   <div className="bg-gray-200 rounded-full h-2">
                     <div 
-                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                      className="bg-[#C8102E] h-2 rounded-full transition-all duration-300"
                       style={{ width: `${getUsagePercentage(limits?.usage?.products || 0, limits?.limits?.max_products || 0)}%` }}
                     />
                   </div>
@@ -425,7 +425,7 @@ export default function BillingPage() {
           <div className={`bg-white shadow rounded-lg ${limits?.plan === 'pro' ? 'ring-2 ring-blue-300' : ''}`}>
             <div className="px-6 py-4 border-b border-gray-200">
               <div className="flex items-center space-x-2">
-                <Shield className="h-5 w-5 text-blue-500" />
+                <Shield className="h-5 w-5 text-[#C8102E]" />
                 <h3 className="text-lg font-semibold text-gray-900">Pro</h3>
               </div>
               <p className="text-sm text-gray-600 mt-1">For growing teams</p>

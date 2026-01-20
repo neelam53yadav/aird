@@ -69,12 +69,12 @@ export default function VerifyEmailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center px-4 py-12">
+    <div className="min-h-screen bg-gradient-to-br from-white via-white to-rose-100 flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-md">
         <div className="bg-white rounded-2xl shadow-2xl border-2 border-gray-100 p-8">
           {isLoading ? (
             <div className="text-center">
-              <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto mb-4" />
+              <Loader2 className="h-12 w-12 animate-spin text-[#C8102E] mx-auto mb-4" />
               <h2 className="text-2xl font-bold text-gray-900 mb-2">Verifying your email...</h2>
               <p className="text-gray-600">Please wait while we verify your email address.</p>
             </div>
@@ -85,7 +85,7 @@ export default function VerifyEmailPage() {
               <p className="text-gray-600 mb-6">{message}</p>
               <Button
                 onClick={() => router.push("/signin")}
-                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold py-3 rounded-lg shadow-md hover:shadow-lg transition-all duration-200"
+                className="w-full bg-[#C8102E] hover:bg-[#A00D24] text-white font-semibold py-3 rounded-lg shadow-md hover:shadow-lg transition-all duration-200"
               >
                 Sign In
               </Button>
@@ -98,7 +98,7 @@ export default function VerifyEmailPage() {
               <div className="space-y-3">
                 <Button
                   onClick={() => router.push("/signin")}
-                  className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold py-3 rounded-lg shadow-md hover:shadow-lg transition-all duration-200"
+                  className="w-full bg-[#C8102E] hover:bg-[#A00D24] text-white font-semibold py-3 rounded-lg shadow-md hover:shadow-lg transition-all duration-200"
                 >
                   Go to Sign In
                 </Button>
@@ -115,13 +115,13 @@ export default function VerifyEmailPage() {
               <div className="space-y-3">
                 <Button
                   onClick={() => router.push("/signin")}
-                  className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold py-3 rounded-lg shadow-md hover:shadow-lg transition-all duration-200"
+                  className="w-full bg-[#C8102E] hover:bg-[#A00D24] text-white font-semibold py-3 rounded-lg shadow-md hover:shadow-lg transition-all duration-200"
                 >
                   Go to Sign In
                 </Button>
                 <Link
                   href="/"
-                  className="block text-center text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors"
+                  className="block text-center text-sm text-[#C8102E] hover:text-[#A00D24] font-medium transition-colors"
                 >
                   Back to Home
                 </Link>
@@ -133,7 +133,7 @@ export default function VerifyEmailPage() {
         <div className="mt-6 text-center">
           <Link
             href="/"
-            className="inline-block text-2xl font-bold bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent hover:from-blue-500 hover:via-indigo-500 hover:to-purple-500 transition-all duration-200"
+            className="inline-block text-2xl font-bold bg-gradient-to-r from-[#C8102E] via-[#C8102E] to-[#A00D24] bg-clip-text text-transparent hover:from-blue-500 hover:via-indigo-500 hover:to-purple-500 transition-all duration-200"
           >
             PrimeData
           </Link>

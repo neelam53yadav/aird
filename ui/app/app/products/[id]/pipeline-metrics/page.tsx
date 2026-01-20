@@ -114,7 +114,7 @@ export default function PipelineMetricsPage() {
       case 'partial_success':
         return 'bg-orange-100 text-orange-800'
       case 'running':
-        return 'bg-blue-100 text-blue-800'
+        return 'bg-[#F5E6E8] text-[#C8102E]'
       case 'queued':
         return 'bg-yellow-100 text-yellow-800'
       default:
@@ -127,7 +127,7 @@ export default function PipelineMetricsPage() {
       <AppLayout>
         <div className="p-6 flex items-center justify-center min-h-96">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#C8102E] mx-auto mb-4"></div>
             <p className="text-gray-600">Loading pipeline metrics...</p>
           </div>
         </div>
@@ -137,7 +137,7 @@ export default function PipelineMetricsPage() {
 
   return (
     <AppLayout>
-      <div className="p-6 bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-50/30 min-h-screen">
+      <div className="p-6 bg-gradient-to-br from-white via-white to-rose-100 min-h-screen">
         <div className="max-w-7xl mx-auto">
         {/* Breadcrumb Navigation */}
         <div className="flex items-center mb-6">
@@ -157,7 +157,7 @@ export default function PipelineMetricsPage() {
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center">
-              <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl p-3 mr-4 shadow-lg">
+              <div className="bg-[#C8102E] rounded-xl p-3 mr-4 shadow-lg">
                 <BarChart3 className="h-6 w-6 text-white" />
               </div>
               <div>
@@ -195,7 +195,7 @@ export default function PipelineMetricsPage() {
                       key={run.id}
                       className={`p-4 border rounded-lg cursor-pointer transition-colors ${
                         selectedVersion === run.version
-                          ? 'border-blue-500 bg-blue-50'
+                          ? 'border-[#C8102E] bg-[#F5E6E8]'
                           : 'border-gray-200 hover:border-gray-300'
                       }`}
                       onClick={() => loadVersionMetrics(run.version)}

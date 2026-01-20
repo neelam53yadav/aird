@@ -61,7 +61,7 @@ function UsageMeter({ label, current, limit, icon: Icon, color }: UsageMeterProp
             className={`h-2.5 rounded-full transition-all ${
               isOverLimit ? 'bg-gradient-to-r from-red-500 to-rose-600' :
               isNearLimit ? 'bg-gradient-to-r from-yellow-500 to-amber-600' :
-              'bg-gradient-to-r from-blue-500 to-indigo-600'
+              'bg-[#C8102E]'
             }`}
             style={{ width: `${percentage}%` }}
           ></div>
@@ -210,7 +210,7 @@ export default function BillingPage() {
   if (loading) {
     return (
       <AppLayout>
-        <div className="p-6 bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-50/30 min-h-screen">
+        <div className="p-6 bg-gradient-to-br from-white via-white to-rose-100 min-h-screen">
           <div className="max-w-7xl mx-auto">
             <div className="mb-8">
               <div className="h-10 bg-gray-200 rounded-xl w-1/3 mb-2 animate-pulse"></div>
@@ -263,7 +263,7 @@ export default function BillingPage() {
 
   return (
     <AppLayout>
-      <div className="p-6 bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-50/30 min-h-screen">
+      <div className="p-6 bg-gradient-to-br from-white via-white to-rose-100 min-h-screen">
         <div className="max-w-7xl mx-auto">
           {/* Header */}
           <div className="mb-8">
@@ -278,7 +278,7 @@ export default function BillingPage() {
                 ? 'bg-gradient-to-r from-emerald-50 via-teal-50 to-cyan-50 border-emerald-200'
                 : message.includes('Error')
                 ? 'bg-gradient-to-r from-red-50 to-rose-50 border-red-200'
-                : 'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200'
+                : 'bg-gradient-to-r from-blue-50 to-indigo-50 border-[#C8102E]/30'
             }`}>
               <div className="flex items-start">
                 {message.includes('beta') || message.includes('explore') || message.includes('try') || message.includes('free') || message.includes('🚀') ? (
@@ -302,8 +302,8 @@ export default function BillingPage() {
                   </>
                 ) : (
                   <>
-                    <CheckCircle className="h-5 w-5 text-blue-500 mr-3 flex-shrink-0" />
-                    <p className="text-sm font-medium text-blue-800">{message}</p>
+                    <CheckCircle className="h-5 w-5 text-[#C8102E] mr-3 flex-shrink-0" />
+                    <p className="text-sm font-medium text-[#C8102E]">{message}</p>
                   </>
                 )}
               </div>
@@ -319,7 +319,7 @@ export default function BillingPage() {
                 current={usage.products}
                 limit={limits.max_products}
                 icon={Package}
-                color="bg-gradient-to-br from-blue-500 to-indigo-600"
+                color="bg-[#C8102E]"
               />
               <UsageMeter
                 label="Data Sources"
@@ -345,7 +345,7 @@ export default function BillingPage() {
               {/* Free Plan */}
               <div className={`bg-white rounded-xl shadow-md border-2 transition-all duration-200 ${
                 currentPlan === 'free' 
-                  ? 'border-blue-500 shadow-lg scale-105' 
+                  ? 'border-[#C8102E] shadow-lg scale-105' 
                   : 'border-gray-200 hover:shadow-lg hover:-translate-y-0.5'
               }`}>
                 <div className="px-6 py-4 border-b-2 border-gray-100 bg-gradient-to-r from-gray-50 to-blue-50/30">
@@ -355,7 +355,7 @@ export default function BillingPage() {
                       <p className="text-sm text-gray-600 mt-1">Perfect for getting started</p>
                     </div>
                     {currentPlan === 'free' && (
-                      <span className="bg-blue-100 text-blue-800 text-xs font-semibold px-2.5 py-1 rounded-full">
+                      <span className="bg-[#F5E6E8] text-[#C8102E] text-xs font-semibold px-2.5 py-1 rounded-full">
                         Current
                       </span>
                     )}
@@ -395,12 +395,12 @@ export default function BillingPage() {
               {/* Pro Plan */}
               <div className={`bg-white rounded-xl shadow-md border-2 transition-all duration-200 relative ${
                 currentPlan === 'pro' 
-                  ? 'border-blue-500 shadow-lg scale-105' 
+                  ? 'border-[#C8102E] shadow-lg scale-105' 
                   : 'border-gray-200 hover:shadow-lg hover:-translate-y-0.5'
               }`}>
                 {currentPlan !== 'pro' && (
                   <div className="absolute -top-3 right-4">
-                    <span className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs font-bold px-3 py-1 rounded-full flex items-center space-x-1">
+                    <span className="bg-[#C8102E] text-white text-xs font-bold px-3 py-1 rounded-full flex items-center space-x-1">
                       <Sparkles className="h-3 w-3" />
                       <span>POPULAR</span>
                     </span>
@@ -413,7 +413,7 @@ export default function BillingPage() {
                       <p className="text-sm text-gray-600 mt-1">For growing teams</p>
                     </div>
                     {currentPlan === 'pro' && (
-                      <span className="bg-blue-100 text-blue-800 text-xs font-semibold px-2.5 py-1 rounded-full">
+                      <span className="bg-[#F5E6E8] text-[#C8102E] text-xs font-semibold px-2.5 py-1 rounded-full">
                         Current
                       </span>
                     )}
@@ -441,7 +441,7 @@ export default function BillingPage() {
                     className={`w-full ${
                       currentPlan === 'pro' 
                         ? 'bg-gray-100 text-gray-600 cursor-not-allowed' 
-                        : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg'
+                        : 'bg-[#C8102E] hover:bg-[#A00D24] shadow-md hover:shadow-lg'
                     }`}
                     onClick={() => handleUpgrade('pro')}
                     disabled={currentPlan === 'pro'}
@@ -517,7 +517,7 @@ export default function BillingPage() {
             <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-4">
-                  <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg p-3">
+                  <div className="bg-[#C8102E] rounded-lg p-3">
                     <CreditCard className="h-6 w-6 text-white" />
                   </div>
                   <div>
@@ -527,7 +527,7 @@ export default function BillingPage() {
                 </div>
                 <Button
                   onClick={handleManageBilling}
-                  className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg"
+                  className="bg-[#C8102E] hover:bg-[#A00D24] shadow-md hover:shadow-lg"
                 >
                   Open Billing Portal
                 </Button>

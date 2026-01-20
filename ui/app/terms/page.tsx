@@ -39,7 +39,7 @@ function TermsSection({ id, title, children }: TermsSectionProps) {
  */
 export default function TermsPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex flex-col">
+    <div className="min-h-screen bg-gradient-to-br from-white via-white to-rose-100 flex flex-col">
 
       {/* Header */}
       <header className="bg-white border-b border-gray-200">
@@ -49,7 +49,7 @@ export default function TermsPage() {
               <ArrowLeft className="h-5 w-5 text-gray-600 hover:text-gray-900 transition-colors" />
               <span className="text-sm text-gray-600 hover:text-gray-900 transition-colors">Back to Home</span>
             </Link>
-            <Link href="/" className="text-2xl font-bold bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent">
+            <Link href="/" className="text-2xl font-bold bg-gradient-to-r from-[#C8102E] via-[#C8102E] to-[#A00D24] bg-clip-text text-transparent">
               PrimeData
             </Link>
             <div className="w-24"></div> {/* Spacer for centering */}
@@ -62,7 +62,7 @@ export default function TermsPage() {
         <article className="bg-white rounded-2xl shadow-lg border-2 border-gray-100 p-8 md:p-12">
           {/* Header */}
           <header className="flex items-center mb-8">
-            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center mr-4">
+            <div className="w-12 h-12 bg-gradient-to-br from-[#C8102E] to-[#A00D24] rounded-xl flex items-center justify-center mr-4">
               <FileText className="h-6 w-6 text-white" aria-hidden="true" />
             </div>
             <div>
@@ -118,7 +118,7 @@ export default function TermsPage() {
             <TermsSection id="data-privacy" title="5. Data and Privacy">
               <p>
                 Your use of PrimeData is also governed by our Privacy Policy. Please review our{' '}
-                <Link href="/privacy" className="text-blue-600 hover:text-blue-700 underline">
+                <Link href="/privacy" className="text-[#C8102E] hover:text-[#A00D24] underline">
                   Privacy Policy
                 </Link>, which also governs your use of the Service, 
                 to understand our practices. You retain all rights to your data, and we will not use your data except as necessary to provide the Service.
@@ -163,7 +163,7 @@ export default function TermsPage() {
             <TermsSection id="contact" title="11. Contact Information">
               <p>
                 If you have any questions about these Terms and Conditions, please contact us at{' '}
-                <Link href="/contact" className="text-blue-600 hover:text-blue-700 underline">
+                <Link href="/contact" className="text-[#C8102E] hover:text-[#A00D24] underline">
                   our contact page
                 </Link>.
               </p>

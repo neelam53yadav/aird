@@ -145,7 +145,7 @@ export function ACLManagement({ productId, showTitle = true }: ACLManagementProp
       case 'FULL':
         return 'bg-green-100 text-green-800'
       case 'INDEX':
-        return 'bg-blue-100 text-blue-800'
+        return 'bg-[#F5E6E8] text-[#C8102E]'
       case 'DOCUMENT':
         return 'bg-purple-100 text-purple-800'
       case 'FIELD':
@@ -211,7 +211,7 @@ export function ACLManagement({ productId, showTitle = true }: ACLManagementProp
                 onChange={(e) => setFormData({ ...formData, user_id: e.target.value })}
                 required
                 placeholder="Enter user UUID"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#C8102E]"
               />
             </div>
             <div>
@@ -222,7 +222,7 @@ export function ACLManagement({ productId, showTitle = true }: ACLManagementProp
                 value={formData.access_type}
                 onChange={(e) => setFormData({ ...formData, access_type: e.target.value as any })}
                 required
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#C8102E]"
               >
                 <option value="FULL">Full Access</option>
                 <option value="INDEX">Index Scope</option>
@@ -240,7 +240,7 @@ export function ACLManagement({ productId, showTitle = true }: ACLManagementProp
                   value={formData.index_scope}
                   onChange={(e) => setFormData({ ...formData, index_scope: e.target.value })}
                   placeholder="e.g., collection1, collection2"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#C8102E]"
                 />
               </div>
             )}
@@ -254,7 +254,7 @@ export function ACLManagement({ productId, showTitle = true }: ACLManagementProp
                   value={formData.doc_scope}
                   onChange={(e) => setFormData({ ...formData, doc_scope: e.target.value })}
                   placeholder="e.g., doc1, doc2"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#C8102E]"
                 />
               </div>
             )}
@@ -268,7 +268,7 @@ export function ACLManagement({ productId, showTitle = true }: ACLManagementProp
                   value={formData.field_scope}
                   onChange={(e) => setFormData({ ...formData, field_scope: e.target.value })}
                   placeholder="e.g., field1, field2"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#C8102E]"
                 />
               </div>
             )}
@@ -349,7 +349,7 @@ export function ACLManagement({ productId, showTitle = true }: ACLManagementProp
                     <div className="space-y-1">
                       {acl.index_scope && (
                         <div className="flex items-center gap-1 text-xs">
-                          <Package className="h-3 w-3 text-blue-500" />
+                          <Package className="h-3 w-3 text-[#C8102E]" />
                           <span className="text-gray-600">Index: {acl.index_scope}</span>
                         </div>
                       )}

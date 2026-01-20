@@ -183,7 +183,7 @@ export default function NewProductPage() {
       <AppLayout>
         <div className="p-6 flex items-center justify-center min-h-96">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#C8102E] mx-auto mb-4"></div>
             <p className="text-gray-600">Loading...</p>
           </div>
         </div>
@@ -198,7 +198,7 @@ export default function NewProductPage() {
 
   return (
     <AppLayout>
-      <div className="p-6 bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-50/30 min-h-screen">
+      <div className="p-6 bg-gradient-to-br from-white via-white to-rose-100 min-h-screen">
         {/* Enhanced Breadcrumb Navigation */}
         <div className="flex items-center mb-6">
           <Link href="/app/products" className="flex items-center text-sm text-gray-500 hover:text-gray-700 transition-colors font-medium">
@@ -221,7 +221,7 @@ export default function NewProductPage() {
         <div className="max-w-2xl">
         <div className="bg-white rounded-xl shadow-md border border-gray-100 p-8">
           <div className="flex items-center mb-8">
-            <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl p-3 mr-4 shadow-sm">
+            <div className="bg-[#C8102E] rounded-xl p-3 mr-4 shadow-sm">
               <Package className="h-6 w-6 text-white" />
             </div>
             <div>
@@ -271,7 +271,7 @@ export default function NewProductPage() {
                   checked={vectorCreationEnabled}
                   onChange={(e) => setVectorCreationEnabled(e.target.checked)}
                   disabled={loading}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  className="w-4 h-4 text-[#C8102E] border-gray-300 rounded focus:ring-[#C8102E]"
                 />
                 <span className="font-medium">Enable Vector Creation</span>
               </Label>
@@ -321,11 +321,11 @@ export default function NewProductPage() {
               />
             )}
             {documentType !== 'auto' && playbookId && (
-              <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
-                <p className="text-sm text-blue-800">
+              <div className="bg-[#F5E6E8] border border-[#C8102E]/30 rounded-md p-3">
+                <p className="text-sm text-[#C8102E]">
                   <strong>Selected Playbook:</strong> {playbookId}
                 </p>
-                <p className="text-xs text-blue-600 mt-1">
+                <p className="text-xs text-[#C8102E] mt-1">
                   Playbook automatically selected based on document type. You can switch to "Auto-detect" to manually select a playbook.
                 </p>
               </div>
@@ -343,7 +343,7 @@ export default function NewProductPage() {
                       checked={chunkingMode === 'auto'}
                       onChange={(e) => setChunkingMode(e.target.value as 'auto' | 'manual')}
                       disabled={loading}
-                      className="w-4 h-4 text-blue-600"
+                      className="w-4 h-4 text-[#C8102E]"
                     />
                     <Label htmlFor="chunking-auto" className="font-normal cursor-pointer">Auto (Recommended)</Label>
                   </div>
@@ -355,7 +355,7 @@ export default function NewProductPage() {
                       checked={chunkingMode === 'manual'}
                       onChange={(e) => setChunkingMode(e.target.value as 'auto' | 'manual')}
                       disabled={loading}
-                      className="w-4 h-4 text-blue-600"
+                      className="w-4 h-4 text-[#C8102E]"
                     />
                     <Label htmlFor="chunking-manual" className="font-normal cursor-pointer">Manual Configuration</Label>
                   </div>
@@ -480,7 +480,7 @@ export default function NewProductPage() {
               <Button 
                 type="submit" 
                 disabled={loading || !name.trim() || !workspaceId}
-                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg disabled:opacity-50"
+                className="bg-[#C8102E] hover:bg-[#A00D24] shadow-md hover:shadow-lg disabled:opacity-50"
               >
                 {loading ? (
                   <>

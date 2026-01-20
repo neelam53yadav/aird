@@ -34,7 +34,7 @@ export default function ChunkingConfigModal({
         <div className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75" onClick={onClose} />
         
         <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
-          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4 flex items-center justify-between">
+          <div className="bg-[#C8102E] px-6 py-4 flex items-center justify-between">
             <h3 className="text-lg font-semibold text-white">Chunking Configuration</h3>
             <button
               onClick={onClose}
@@ -75,7 +75,7 @@ export default function ChunkingConfigModal({
                 <div>
                   <dt className="text-sm font-medium text-gray-500">Strategy</dt>
                   <dd className="mt-1">
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[#F5E6E8] text-[#C8102E]">
                       {config.chunking_strategy.replace(/_/g, ' ')}
                     </span>
                   </dd>

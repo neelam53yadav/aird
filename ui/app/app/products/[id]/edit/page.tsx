@@ -746,7 +746,7 @@ export default function EditProductPage() {
       <AppLayout>
         <div className="p-6 flex items-center justify-center min-h-96">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#C8102E] mx-auto mb-4"></div>
             <p className="text-gray-600">Loading product...</p>
           </div>
         </div>
@@ -794,12 +794,12 @@ export default function EditProductPage() {
         {/* Page Header */}
         <div className="mb-8">
           <div className="flex items-center">
-            <div className="bg-blue-100 rounded-lg p-2 mr-4">
-              <Package className="h-6 w-6 text-blue-600" />
+            <div className="bg-[#C8102E] rounded-lg p-2.5 mr-4">
+              <Package className="h-5 w-5 text-white" />
             </div>
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Edit Product</h1>
-              <p className="text-sm text-gray-500 mt-1">Update product settings and configuration</p>
+              <p className="text-sm text-gray-600 mt-1">Update product settings and configuration</p>
             </div>
           </div>
         </div>
@@ -906,51 +906,51 @@ export default function EditProductPage() {
               };
               
               return (
-                <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                  <h4 className="text-sm font-medium text-gray-700 mb-3">Configuration Summary</h4>
+                <div className="mb-6 p-5 bg-white rounded-lg border-2 border-gray-200">
+                  <h4 className="text-base font-semibold text-gray-900 mb-4">Configuration Summary</h4>
                   
                   {/* Compact Summary - Always Visible */}
-                  <div className="bg-white rounded-md p-3 mb-3 border border-gray-200">
-                    <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div className="bg-gray-50 rounded-lg p-4 mb-4 border border-gray-200">
+                    <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
-                        <span className="text-gray-500">Playbook:</span>
-                        <span className="ml-2 font-medium">{(product as any).playbook_id || 'Auto-Detect'}</span>
+                        <span className="text-gray-600">Playbook:</span>
+                        <span className="ml-2 font-semibold text-gray-900">{(product as any).playbook_id || 'Auto-Detect'}</span>
                       </div>
                       <div>
-                        <span className="text-gray-500">Chunking Mode:</span>
-                        <span className="ml-2 font-medium capitalize">{mode}</span>
+                        <span className="text-gray-600">Chunking Mode:</span>
+                        <span className="ml-2 font-semibold text-gray-900 capitalize">{mode}</span>
                       </div>
                       <div>
-                        <span className="text-gray-500">Optimization:</span>
-                        <span className="ml-2 font-medium">{chunkingConfig?.optimization_mode || formData.optimization_mode || 'pattern'}</span>
+                        <span className="text-gray-600">Optimization:</span>
+                        <span className="ml-2 font-semibold text-gray-900">{chunkingConfig?.optimization_mode || formData.optimization_mode || 'pattern'}</span>
                       </div>
                       {embeddingConfig && (
                         <div>
-                          <span className="text-gray-500">Embedding:</span>
-                          <span className="ml-2 font-medium">{embeddingConfig.embedder_name} ({embeddingConfig.embedding_dimension}D)</span>
+                          <span className="text-gray-600">Embedding:</span>
+                          <span className="ml-2 font-semibold text-[#C8102E]">{embeddingConfig.embedder_name} ({embeddingConfig.embedding_dimension}D)</span>
                         </div>
                       )}
                     </div>
                     
                     {/* Effective Chunking Settings */}
                     {effective && (
-                      <div className="mt-3 pt-3 border-t border-gray-200">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-xs font-medium text-gray-700">
+                      <div className="mt-4 pt-4 border-t border-gray-300">
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="text-sm font-semibold text-gray-900">
                             Effective Chunking (Used by Pipeline)
                           </span>
                           {usingManual && (
-                            <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
+                            <span className="text-xs bg-[#F5E6E8] text-[#C8102E] px-2.5 py-1 rounded font-semibold">
                               Manual Override
                             </span>
                           )}
                         </div>
-                        <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
-                          <div>Size: <strong>{effective.chunk_size ?? 'N/A'}</strong> {mode === 'manual' ? 'chars' : 'tokens'}</div>
-                          <div>Overlap: <strong>{effective.chunk_overlap ?? 'N/A'}</strong> {mode === 'manual' ? 'chars' : 'tokens'}</div>
-                          <div>Strategy: <strong>{effective.chunking_strategy ?? 'N/A'}</strong></div>
+                        <div className="grid grid-cols-2 gap-3 text-sm">
+                          <div className="text-gray-700">Size: <span className="font-semibold text-[#C8102E]">{effective.chunk_size ?? 'N/A'}</span> {mode === 'manual' ? 'chars' : 'tokens'}</div>
+                          <div className="text-gray-700">Overlap: <span className="font-semibold text-[#C8102E]">{effective.chunk_overlap ?? 'N/A'}</span> {mode === 'manual' ? 'chars' : 'tokens'}</div>
+                          <div className="text-gray-700">Strategy: <span className="font-semibold text-[#C8102E]">{effective.chunking_strategy ?? 'N/A'}</span></div>
                           {effective.content_type && (
-                            <div>Type: <strong className="capitalize">{effective.content_type}</strong></div>
+                            <div className="text-gray-700">Type: <span className="font-semibold text-[#C8102E] capitalize">{effective.content_type}</span></div>
                           )}
                         </div>
                       </div>
@@ -959,8 +959,8 @@ export default function EditProductPage() {
                   
                   {/* Expandable Debug Sections */}
                   <details className="mb-2">
-                    <summary className="cursor-pointer text-xs font-medium text-gray-600 hover:text-gray-800">
-                      📋 Show Manual Settings {manual && `(${Object.keys(manual).length} fields)`}
+                    <summary className="cursor-pointer text-xs font-medium text-gray-700 hover:text-gray-900 py-2">
+                      Show Manual Settings {manual && `(${Object.keys(manual).length} fields)`}
                     </summary>
                     <div className="mt-2 p-2 bg-white rounded border border-gray-200">
                       {manual ? (
@@ -986,8 +986,8 @@ export default function EditProductPage() {
                   
                   {hasResolved && (
                     <details className="mb-2">
-                      <summary className="cursor-pointer text-xs font-medium text-gray-600 hover:text-gray-800">
-                        🔍 Show Detected Settings {resolved && `(${usingManual ? 'not used' : 'effective'})`}
+                      <summary className="cursor-pointer text-xs font-medium text-gray-700 hover:text-gray-900 py-2">
+                        Show Detected Settings {resolved && `(${usingManual ? 'not used' : 'effective'})`}
                       </summary>
                       <div className="mt-2 p-2 bg-white rounded border border-gray-200">
                         <div className="flex justify-between items-center mb-2">
@@ -1035,8 +1035,8 @@ export default function EditProductPage() {
                         {/* Level 2: Evidence (collapsible) */}
                         {resolved.evidence && (
                           <details className="mt-2">
-                            <summary className="cursor-pointer text-xs font-medium text-gray-600 hover:text-gray-800">
-                              📊 Show Evidence Details
+                            <summary className="cursor-pointer text-xs font-medium text-gray-700 hover:text-gray-900 py-1">
+                              Show Evidence Details
                             </summary>
                             <div className="mt-2 p-2 bg-gray-50 rounded text-xs">
                               {resolved.evidence.all_scores && (
@@ -1046,7 +1046,7 @@ export default function EditProductPage() {
                                     {Object.entries(resolved.evidence.all_scores).map(([type, score]: [string, any]) => (
                                       <div key={type} className="flex justify-between">
                                         <span className="capitalize">{type}:</span>
-                                        <span className={type === resolved.evidence.final_type ? 'font-bold text-blue-600' : ''}>
+                                        <span className={type === resolved.evidence.final_type ? 'font-bold text-[#C8102E]' : ''}>
                                           {(score * 100).toFixed(1)}%
                                         </span>
                                       </div>
@@ -1060,7 +1060,7 @@ export default function EditProductPage() {
                                   <strong className="text-gray-700">Matched Patterns:</strong>
                                   <div className="mt-1 flex flex-wrap gap-1">
                                     {resolved.evidence.matched_patterns.slice(0, 10).map((pattern: string, idx: number) => (
-                                      <span key={idx} className="px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded text-xs">
+                                      <span key={idx} className="px-1.5 py-0.5 bg-[#F5E6E8] text-[#C8102E] rounded text-xs font-medium">
                                         {pattern}
                                       </span>
                                     ))}
@@ -1078,8 +1078,8 @@ export default function EditProductPage() {
                         
                         {/* Level 3: Full JSON (collapsible) */}
                         <details className="mt-2">
-                          <summary className="cursor-pointer text-xs font-medium text-gray-600 hover:text-gray-800">
-                            📄 Show Raw JSON
+                          <summary className="cursor-pointer text-xs font-medium text-gray-700 hover:text-gray-900 py-1">
+                            Show Raw JSON
                           </summary>
                           <pre className="mt-2 text-xs overflow-auto max-h-60 p-2 bg-gray-50 rounded border border-gray-200">
                             {JSON.stringify(resolved, null, 2)}
@@ -1091,8 +1091,8 @@ export default function EditProductPage() {
                   
                   {auto && !resolved && (
                     <details className="mb-2">
-                      <summary className="cursor-pointer text-xs font-medium text-gray-600 hover:text-gray-800">
-                        ⚙️ Show Auto Settings
+                      <summary className="cursor-pointer text-xs font-medium text-gray-700 hover:text-gray-900 py-2">
+                        Show Auto Settings
                       </summary>
                       <div className="mt-2 p-2 bg-white rounded border border-gray-200">
                         <div className="flex justify-between items-center mb-2">
@@ -1113,8 +1113,8 @@ export default function EditProductPage() {
                   
                   {embeddingConfig && (
                     <details className="mb-2">
-                      <summary className="cursor-pointer text-xs font-medium text-gray-600 hover:text-gray-800">
-                        🤖 Show Embedding Config
+                      <summary className="cursor-pointer text-xs font-medium text-gray-700 hover:text-gray-900 py-2">
+                        Show Embedding Config
                       </summary>
                       <div className="mt-2 p-2 bg-white rounded border border-gray-200">
                         <div className="flex justify-between items-center mb-2">
@@ -1145,138 +1145,144 @@ export default function EditProductPage() {
             })()}
 
             {/* Text Optimization Mode Section */}
-            <div className="border-t border-gray-200 pt-6">
-              <div className="flex items-center mb-4">
-                <div className="bg-purple-100 rounded-lg p-2 mr-3">
-                  <Sparkles className="h-5 w-5 text-purple-600" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-medium text-gray-900">Text Optimization Mode</h3>
-                  <p className="text-sm text-gray-500">Choose how text is optimized for AI processing</p>
-                </div>
+            <div className="border-t-2 border-gray-200 pt-8">
+              <div className="mb-6">
+                <h3 className="text-xl font-bold text-gray-900 mb-1">Text Optimization Mode</h3>
+                <p className="text-sm text-gray-600">Choose how text is optimized for AI processing</p>
               </div>
 
-              <div className="space-y-4 mb-6">
+              <div className="space-y-3 mb-6">
                 {/* Standard (Pattern-Based) */}
-                <label className="flex items-start p-4 border-2 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors"
-                  style={{ borderColor: formData.optimization_mode === 'pattern' ? '#3b82f6' : '#e5e7eb' }}>
+                <label className={`flex items-start p-5 border-2 rounded-lg cursor-pointer transition-all ${
+                  formData.optimization_mode === 'pattern' 
+                    ? 'border-[#C8102E] bg-[#F5E6E8]' 
+                    : 'border-gray-200 bg-white hover:border-gray-300'
+                }`}>
                   <input
                     type="radio"
                     name="optimization_mode"
                     value="pattern"
                     checked={formData.optimization_mode === 'pattern'}
                     onChange={(e) => handleInputChange('optimization_mode', e.target.value)}
-                    className="mt-1 mr-3"
+                    className="mt-1 mr-3 w-4 h-4 text-[#C8102E] border-gray-300 focus:ring-[#C8102E]"
                   />
                   <div className="flex-1">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium text-gray-900">Standard (Pattern-Based)</span>
-                      <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Free, Fast</span>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-semibold text-gray-900">Standard (Pattern-Based)</span>
+                      <span className="text-xs bg-green-100 text-green-700 px-2.5 py-1 rounded font-medium">Free, Fast</span>
                     </div>
-                    <p className="text-sm text-gray-600 mt-1">
+                    <p className="text-sm text-gray-700 mb-2">
                       Fast, free optimization using pattern matching. Handles 90% of common issues.
                     </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      ✅ Recommended for most documents • ✅ No API costs • ✅ Instant processing
-                    </p>
+                    <div className="flex flex-wrap gap-2 text-xs text-gray-600">
+                      <span>Recommended for most documents</span>
+                      <span>•</span>
+                      <span>No API costs</span>
+                      <span>•</span>
+                      <span>Instant processing</span>
+                    </div>
                   </div>
                 </label>
 
                 {/* Hybrid (Auto) */}
-                <label className="flex items-start p-4 border-2 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors"
-                  style={{ borderColor: formData.optimization_mode === 'hybrid' ? '#3b82f6' : '#e5e7eb' }}>
+                <label className={`flex items-start p-5 border-2 rounded-lg cursor-pointer transition-all ${
+                  formData.optimization_mode === 'hybrid' 
+                    ? 'border-[#C8102E] bg-[#F5E6E8]' 
+                    : 'border-gray-200 bg-white hover:border-gray-300'
+                }`}>
                   <input
                     type="radio"
                     name="optimization_mode"
                     value="hybrid"
                     checked={formData.optimization_mode === 'hybrid'}
                     onChange={(e) => handleInputChange('optimization_mode', e.target.value)}
-                    className="mt-1 mr-3"
+                    className="mt-1 mr-3 w-4 h-4 text-[#C8102E] border-gray-300 focus:ring-[#C8102E]"
                   />
                   <div className="flex-1">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium text-gray-900">Hybrid (Auto)</span>
-                      <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">~$0.01/doc</span>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-semibold text-gray-900">Hybrid (Auto)</span>
+                      <span className="text-xs bg-[#F5E6E8] text-[#C8102E] px-2.5 py-1 rounded font-semibold">~$0.01/doc</span>
                     </div>
-                    <p className="text-sm text-gray-600 mt-1">
+                    <p className="text-sm text-gray-700 mb-2">
                       Pattern-based first, then AI enhancement when quality &lt; 75%. Best balance of speed, cost, and quality.
                     </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      ✅ Pattern-based for most docs • ✅ AI only when needed • ✅ Cost-optimized
-                    </p>
+                    <div className="flex flex-wrap gap-2 text-xs text-gray-600">
+                      <span>Pattern-based for most docs</span>
+                      <span>•</span>
+                      <span>AI only when needed</span>
+                      <span>•</span>
+                      <span>Cost-optimized</span>
+                    </div>
                   </div>
                 </label>
 
                 {/* AI Enhancement (LLM) */}
-                <label className="flex items-start p-4 border-2 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors"
-                  style={{ borderColor: formData.optimization_mode === 'llm' ? '#3b82f6' : '#e5e7eb' }}>
+                <label className={`flex items-start p-5 border-2 rounded-lg cursor-pointer transition-all ${
+                  formData.optimization_mode === 'llm' 
+                    ? 'border-[#C8102E] bg-[#F5E6E8]' 
+                    : 'border-gray-200 bg-white hover:border-gray-300'
+                }`}>
                   <input
                     type="radio"
                     name="optimization_mode"
                     value="llm"
                     checked={formData.optimization_mode === 'llm'}
                     onChange={(e) => handleInputChange('optimization_mode', e.target.value)}
-                    className="mt-1 mr-3"
+                    className="mt-1 mr-3 w-4 h-4 text-[#C8102E] border-gray-300 focus:ring-[#C8102E]"
                   />
                   <div className="flex-1">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium text-gray-900">AI Enhancement (LLM)</span>
-                      <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded">~$0.02/doc</span>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-semibold text-gray-900">AI Enhancement (LLM)</span>
+                      <span className="text-xs bg-[#F5E6E8] text-[#C8102E] px-2.5 py-1 rounded font-semibold">~$0.02/doc</span>
                     </div>
-                    <p className="text-sm text-gray-600 mt-1">
+                    <p className="text-sm text-gray-700 mb-2">
                       Best quality with semantic understanding. Uses OpenAI to enhance all documents.
                     </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      ⚡ Best quality • 💰 Higher cost • 🎯 For complex documents
-                    </p>
+                    <div className="flex flex-wrap gap-2 text-xs text-gray-600">
+                      <span>Best quality</span>
+                      <span>•</span>
+                      <span>Higher cost</span>
+                      <span>•</span>
+                      <span>For complex documents</span>
+                    </div>
                   </div>
                 </label>
               </div>
 
               {formData.optimization_mode !== 'pattern' && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                  <div className="flex items-start">
-                    <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5 mr-2 flex-shrink-0" />
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-blue-900 mb-1">
-                        OpenAI API Key Required
-                      </p>
-                      <p className="text-sm text-blue-700">
-                        {formData.optimization_mode === 'hybrid' 
-                          ? 'Hybrid mode requires an OpenAI API key configured in Workspace Settings. AI enhancement will be used automatically when quality score is below 75%.'
-                          : 'LLM mode requires an OpenAI API key configured in Workspace Settings. All documents will be enhanced using AI.'}
-                      </p>
-                      <p className="text-xs text-blue-600 mt-2">
-                        💡 Go to <Link href="/app/settings" className="underline font-medium">Settings</Link> → Workspace Settings to configure your OpenAI API key.
-                      </p>
-                    </div>
-                  </div>
+                <div className="bg-[#F5E6E8] border-l-4 border-[#C8102E] rounded-lg p-4 mb-6">
+                  <p className="text-sm font-semibold text-[#C8102E] mb-2">
+                    OpenAI API Key Required
+                  </p>
+                  <p className="text-sm text-gray-700 mb-3">
+                    {formData.optimization_mode === 'hybrid' 
+                      ? 'Hybrid mode requires an OpenAI API key configured in Workspace Settings. AI enhancement will be used automatically when quality score is below 75%.'
+                      : 'LLM mode requires an OpenAI API key configured in Workspace Settings. All documents will be enhanced using AI.'}
+                  </p>
+                  <p className="text-xs text-gray-700">
+                    Go to <Link href="/app/settings" className="text-[#C8102E] underline font-medium hover:text-[#A00D24]">Settings</Link> → Workspace Settings to configure your OpenAI API key.
+                  </p>
                 </div>
               )}
             </div>
 
             {/* Chunking Configuration Section */}
-            <div className="border-t border-gray-200 pt-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center">
-                  <div className="bg-green-100 rounded-lg p-2 mr-3">
-                    <FileText className="h-5 w-5 text-green-600" />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-medium text-gray-900">Chunking Configuration</h3>
-                    <p className="text-sm text-gray-500">Configure how documents are split into chunks for processing</p>
-                  </div>
+            <div className="border-t-2 border-gray-200 pt-8">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900 mb-1">Chunking Configuration</h3>
+                  <p className="text-sm text-gray-600">Configure how documents are split into chunks for processing</p>
                 </div>
                 <Button
                   type="button"
                   variant="outline"
                   onClick={handleAutoConfigure}
                   disabled={autoConfiguring}
-                  className="ml-4"
+                  className="border-[#C8102E] text-[#C8102E] hover:bg-[#F5E6E8]"
                 >
                   {autoConfiguring ? (
                     <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#C8102E] mr-2"></div>
                       Analyzing...
                     </>
                   ) : (
@@ -1339,46 +1345,40 @@ export default function EditProductPage() {
 
               {/* Auto Mode Settings */}
               {formData.chunking_mode === 'auto' && (
-                <div className="mb-6 p-4 bg-blue-50 rounded-lg">
-                  <h4 className="text-sm font-medium text-blue-900 mb-3">Auto Configuration Settings</h4>
+                <div className="mb-6 p-5 bg-[#F5E6E8] border-l-4 border-[#C8102E] rounded-lg">
+                  <h4 className="text-sm font-semibold text-[#C8102E] mb-4">Auto Configuration Settings</h4>
                   {(product as any)?.chunking_config?.resolved_settings ? (
-                    <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-md">
-                      <div className="flex items-start">
-                        <Sparkles className="h-4 w-4 text-green-600 mt-0.5 mr-2 flex-shrink-0" />
-                        <div className="flex-1">
-                          <p className="text-sm font-medium text-green-900 mb-2">
-                            ✅ Content Type Detected: <strong className="capitalize">{(product as any).chunking_config.resolved_settings.content_type}</strong>
-                            {(product as any).chunking_config.resolved_settings.confidence && (
-                              <span className="ml-2 text-xs text-green-700">
-                                ({(Math.round((product as any).chunking_config.resolved_settings.confidence * 100))}% confidence)
-                              </span>
-                            )}
-                          </p>
-                          <div className="text-xs text-green-800 space-y-1 mt-2">
-                            <p><strong>Detected Settings:</strong></p>
-                            <ul className="list-disc list-inside ml-2 space-y-0.5">
-                              <li>Chunk Size: {(product as any).chunking_config.resolved_settings.chunk_size} tokens</li>
-                              <li>Chunk Overlap: {(product as any).chunking_config.resolved_settings.chunk_overlap} tokens</li>
-                              <li>Strategy: {(product as any).chunking_config.resolved_settings.chunking_strategy}</li>
-                              <li>Min Size: {(product as any).chunking_config.resolved_settings.min_chunk_size} tokens</li>
-                              <li>Max Size: {(product as any).chunking_config.resolved_settings.max_chunk_size} tokens</li>
-                            </ul>
-                            {(product as any).chunking_config.resolved_settings.reasoning && (
-                              <p className="mt-2 italic text-green-700">
-                                {(product as any).chunking_config.resolved_settings.reasoning}
-                              </p>
-                            )}
+                    <div className="mb-4 p-4 bg-white border border-gray-200 rounded-lg">
+                      <div className="mb-3">
+                        <p className="text-sm font-semibold text-gray-900 mb-1">
+                          Content Type Detected: <span className="text-[#C8102E] capitalize">{(product as any).chunking_config.resolved_settings.content_type}</span>
+                          {(product as any).chunking_config.resolved_settings.confidence && (
+                            <span className="ml-2 text-xs text-gray-600 font-normal">
+                              ({(Math.round((product as any).chunking_config.resolved_settings.confidence * 100))}% confidence)
+                            </span>
+                          )}
+                        </p>
+                        <div className="text-sm text-gray-700 space-y-1.5 mt-3">
+                          <p className="font-medium text-gray-900 mb-2">Detected Settings:</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>Chunk Size: <span className="font-medium text-[#C8102E]">{(product as any).chunking_config.resolved_settings.chunk_size} tokens</span></div>
+                            <div>Chunk Overlap: <span className="font-medium text-[#C8102E]">{(product as any).chunking_config.resolved_settings.chunk_overlap} tokens</span></div>
+                            <div>Strategy: <span className="font-medium text-[#C8102E]">{(product as any).chunking_config.resolved_settings.chunking_strategy}</span></div>
+                            <div>Min Size: <span className="font-medium text-[#C8102E]">{(product as any).chunking_config.resolved_settings.min_chunk_size} tokens</span></div>
+                            <div>Max Size: <span className="font-medium text-[#C8102E]">{(product as any).chunking_config.resolved_settings.max_chunk_size} tokens</span></div>
                           </div>
-                          <p className="text-xs text-green-700 mt-2">
-                            These values were automatically detected from your content analysis. The settings below can be used to override defaults if needed.
-                          </p>
-                          {(product as any).chunking_config?.last_analyzed && (
-                            <p className="text-xs text-green-600 mt-1">
-                              Last analyzed: {new Date((product as any).chunking_config.last_analyzed).toLocaleString()}
+                          {(product as any).chunking_config.resolved_settings.reasoning && (
+                            <p className="mt-3 text-xs text-gray-600 italic border-t border-gray-200 pt-2">
+                              {(product as any).chunking_config.resolved_settings.reasoning}
                             </p>
                           )}
+                        </div>
+                        <div className="mt-3 pt-3 border-t border-gray-200">
+                          <p className="text-xs text-gray-600 mb-1">
+                            Last analyzed: {new Date((product as any).chunking_config.last_analyzed).toLocaleString()}
+                          </p>
                           {(product as any).chunking_config?.sample_files_analyzed && (product as any).chunking_config.sample_files_analyzed.length > 0 && (
-                            <p className="text-xs text-green-600 mt-1">
+                            <p className="text-xs text-gray-600">
                               Analyzed {((product as any).chunking_config.sample_files_analyzed as any[]).length} sample file{((product as any).chunking_config.sample_files_analyzed as any[]).length !== 1 ? 's' : ''}
                             </p>
                           )}
@@ -1386,18 +1386,13 @@ export default function EditProductPage() {
                       </div>
                     </div>
                   ) : (
-                    <div className="mb-3 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
-                      <div className="flex items-start">
-                        <AlertCircle className="h-4 w-4 text-yellow-600 mt-0.5 mr-2 flex-shrink-0" />
-                        <div className="flex-1">
-                          <p className="text-sm font-medium text-yellow-900">
-                            Auto-Detection Pending
-                          </p>
-                          <p className="text-xs text-yellow-700 mt-1">
-                            Chunking configuration will be automatically detected during the next pipeline run by analyzing sample files from your data sources.
-                          </p>
-                        </div>
-                      </div>
+                    <div className="mb-4 p-4 bg-yellow-50 border-l-4 border-yellow-400 rounded-lg">
+                      <p className="text-sm font-semibold text-yellow-900 mb-1">
+                        Auto-Detection Pending
+                      </p>
+                      <p className="text-xs text-yellow-800">
+                        Chunking configuration will be automatically detected during the next pipeline run by analyzing sample files from your data sources.
+                      </p>
                     </div>
                   )}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1409,7 +1404,7 @@ export default function EditProductPage() {
                         id="content_type"
                         value={formData.content_type}
                         onChange={(e) => handleInputChange('content_type', e.target.value)}
-                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                        className="mt-1 block w-full px-3 py-2 border-2 border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#C8102E] focus:border-[#C8102E] sm:text-sm"
                       >
                         <option value="general">General</option>
                         <option value="legal">Legal Documents</option>
@@ -1456,7 +1451,7 @@ export default function EditProductPage() {
                     value={formData.chunking_strategy}
                     onChange={(e) => handleInputChange('chunking_strategy', e.target.value)}
                     disabled={formData.chunking_mode === 'auto'}
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#C8102E] focus:border-[#C8102E] sm:text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                   >
                     <option value="fixed_size">Fixed Size</option>
                     <option value="semantic">Semantic</option>
@@ -1566,15 +1561,10 @@ export default function EditProductPage() {
             </div>
 
             {/* Embedding Configuration Section */}
-            <div className="border-t border-gray-200 pt-6">
-              <div className="flex items-center mb-4">
-                <div className="bg-purple-100 rounded-lg p-2 mr-3">
-                  <Settings className="h-5 w-5 text-purple-600" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-medium text-gray-900">Embedding Configuration</h3>
-                  <p className="text-sm text-gray-500">Configure how text is converted to vector embeddings</p>
-                </div>
+            <div className="border-t-2 border-gray-200 pt-8">
+              <div className="mb-6">
+                <h3 className="text-xl font-bold text-gray-900 mb-1">Embedding Configuration</h3>
+                <p className="text-sm text-gray-600">Configure how text is converted to vector embeddings</p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1586,7 +1576,7 @@ export default function EditProductPage() {
                     id="embedder_name"
                     value={formData.embedder_name}
                     onChange={(e) => handleInputChange('embedder_name', e.target.value)}
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                    className="mt-1 block w-full px-3 py-2 border-2 border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#C8102E] focus:border-[#C8102E] sm:text-sm"
                   >
                     {embeddingModelOptions.length > 0 ? (
                       embeddingModelOptions.map((option) => (
@@ -1630,15 +1620,10 @@ export default function EditProductPage() {
             </div>
 
             {/* Vector Creation Configuration Section */}
-            <div className="border-t border-gray-200 pt-6">
-              <div className="flex items-center mb-4">
-                <div className="bg-green-100 rounded-lg p-2 mr-3">
-                  <Sparkles className="h-5 w-5 text-green-600" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-medium text-gray-900">Vector Creation</h3>
-                  <p className="text-sm text-gray-500">Control whether vectors/embeddings are created and indexed</p>
-                </div>
+            <div className="border-t-2 border-gray-200 pt-8">
+              <div className="mb-6">
+                <h3 className="text-xl font-bold text-gray-900 mb-1">Vector Creation</h3>
+                <p className="text-sm text-gray-600">Control whether vectors/embeddings are created and indexed</p>
               </div>
 
               <div className="space-y-4">
@@ -1650,7 +1635,7 @@ export default function EditProductPage() {
                       checked={formData.vector_creation_enabled}
                       onChange={(e) => handleInputChange('vector_creation_enabled', e.target.checked)}
                       disabled={saving}
-                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                      className="w-4 h-4 text-[#C8102E] border-gray-300 rounded focus:ring-[#C8102E]"
                     />
                     <span className="font-medium">Enable Vector Creation</span>
                   </Label>

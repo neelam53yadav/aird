@@ -103,7 +103,7 @@ export default function ContactPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex flex-col">
+    <div className="min-h-screen bg-gradient-to-br from-white via-white to-rose-100 flex flex-col">
       {/* Header */}
       <header className="bg-white border-b border-gray-200">
         <div className="container mx-auto px-4 py-4">
@@ -112,7 +112,7 @@ export default function ContactPage() {
               <ArrowLeft className="h-5 w-5 text-gray-600 hover:text-gray-900 transition-colors" />
               <span className="text-sm text-gray-600 hover:text-gray-900 transition-colors">Back to Home</span>
             </Link>
-            <Link href="/" className="text-2xl font-bold bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent">
+            <Link href="/" className="text-2xl font-bold bg-gradient-to-r from-[#C8102E] via-[#C8102E] to-[#A00D24] bg-clip-text text-transparent">
               PrimeData
             </Link>
             <div className="w-24"></div> {/* Spacer for centering */}
@@ -125,7 +125,7 @@ export default function ContactPage() {
         <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-8 md:p-12">
           {/* Header */}
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full mb-4">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-[#C8102E] to-[#A00D24] rounded-full mb-4">
               <Mail className="h-8 w-8 text-white" />
             </div>
             <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-3">
@@ -226,7 +226,7 @@ export default function ContactPage() {
               <Button
                 type="submit"
                 disabled={submitting}
-                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full bg-[#C8102E] hover:bg-[#A00D24] text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {submitting ? (
                   <>

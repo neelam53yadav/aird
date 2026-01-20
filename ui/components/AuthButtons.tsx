@@ -363,7 +363,7 @@ export function AuthButtons({ className }: AuthButtonsProps) {
                   placeholder="John"
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-transparent transition-all"
                   required={isSignUp}
                 />
               </div>
@@ -381,7 +381,7 @@ export function AuthButtons({ className }: AuthButtonsProps) {
                   placeholder="Doe"
                   value={lastName}
                   onChange={(e) => setLastName(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-transparent transition-all"
                   required={isSignUp}
                 />
               </div>
@@ -401,7 +401,7 @@ export function AuthButtons({ className }: AuthButtonsProps) {
               placeholder="you@example.com"
               value={email}
               onChange={handleEmailChange}
-              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-transparent transition-all"
               required
             />
           </div>
@@ -419,7 +419,7 @@ export function AuthButtons({ className }: AuthButtonsProps) {
               placeholder={isSignUp ? "Create a strong password" : "Enter your password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
+              className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-transparent transition-all ${
                 isSignUp && password && !isPasswordValid
                   ? "border-red-300"
                   : "border-gray-300"
@@ -492,7 +492,7 @@ export function AuthButtons({ className }: AuthButtonsProps) {
                 placeholder="Confirm your password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
+                className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-transparent transition-all ${
                   confirmPassword && !passwordsMatch
                     ? "border-red-300"
                     : confirmPassword && passwordsMatch
@@ -519,7 +519,7 @@ export function AuthButtons({ className }: AuthButtonsProps) {
             !password ||
             (isSignUp && (!firstName || !lastName || !isPasswordValid || !passwordsMatch || !confirmPassword))
           }
-          className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold py-3 rounded-lg shadow-md hover:shadow-lg transition-all duration-200"
+          className="w-full bg-[#C8102E] hover:bg-[#A00D24] text-white font-semibold py-3 rounded-lg shadow-md hover:shadow-lg transition-all duration-200"
           size="lg"
         >
           {isLoading
@@ -536,7 +536,7 @@ export function AuthButtons({ className }: AuthButtonsProps) {
             <div>
               <Link
                 href="/forgot-password"
-                className="text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors"
+                className="text-sm text-[#C8102E] hover:text-[#A00D24] font-medium transition-colors"
               >
                 Forgot your password?
               </Link>
@@ -556,7 +556,7 @@ export function AuthButtons({ className }: AuthButtonsProps) {
                 setResendSuccess(false)
                 setSignupSuccess(false)  // Clear success state when toggling
               }}
-              className="text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors"
+              className="text-sm text-[#C8102E] hover:text-[#A00D24] font-medium transition-colors"
             >
               {isSignUp
                 ? "Already have an account? Sign in"

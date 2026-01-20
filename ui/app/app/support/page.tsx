@@ -120,7 +120,7 @@ export default function SupportPage() {
         <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-8 md:p-12">
           {/* Header */}
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full mb-4">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-[#C8102E] rounded-full mb-4">
               <HelpCircle className="h-8 w-8 text-white" />
             </div>
             <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-3">
@@ -221,7 +221,7 @@ export default function SupportPage() {
               <Button
                 type="submit"
                 disabled={submitting}
-                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full bg-[#C8102E] hover:bg-[#A00D24] text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {submitting ? (
                   <>

@@ -127,14 +127,14 @@ function PricingCard({ plan, index }: { plan: PricingPlan; index: number }) {
     <article
       className={`bg-white rounded-2xl p-8 shadow-lg border-2 transition-all hover:shadow-2xl hover:-translate-y-1 ${
         plan.popular
-          ? 'border-blue-500 scale-105 relative'
+          ? 'border-[#C8102E] scale-105 relative'
           : 'border-gray-100'
       }`}
       aria-labelledby={`plan-${index}-title`}
     >
       {plan.popular && (
         <div 
-          className="absolute -top-4 left-1/2 -translate-x-1/2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-4 py-1 rounded-full text-sm font-semibold"
+          className="absolute -top-4 left-1/2 -translate-x-1/2 bg-[#C8102E] text-white px-4 py-1 rounded-full text-sm font-semibold"
           aria-label="Most popular plan"
         >
           Most Popular
@@ -155,7 +155,7 @@ function PricingCard({ plan, index }: { plan: PricingPlan; index: number }) {
         href={plan.ctaHref}
         className={`w-full block text-center py-3 px-6 rounded-xl font-semibold transition-all duration-200 mb-6 focus:outline-none focus:ring-2 focus:ring-offset-2 ${
           plan.popular
-            ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 shadow-lg hover:shadow-xl focus:ring-blue-500'
+            ? 'bg-[#C8102E] text-white hover:from-blue-700 hover:to-indigo-700 shadow-lg hover:shadow-xl focus:ring-[#C8102E]'
             : 'bg-gray-100 text-gray-900 hover:bg-gray-200 focus:ring-gray-500'
         }`}
         aria-label={`${plan.cta} for ${plan.name} plan`}
@@ -166,7 +166,7 @@ function PricingCard({ plan, index }: { plan: PricingPlan; index: number }) {
         {plan.features.map((feature, idx) => (
           <li key={idx} className="flex items-start text-gray-700">
             <CheckCircle2 
-              className="h-5 w-5 text-blue-600 mr-2 flex-shrink-0 mt-0.5" 
+              className="h-5 w-5 text-[#C8102E] mr-2 flex-shrink-0 mt-0.5" 
               aria-hidden="true"
             />
             <span className="text-sm">{feature}</span>
@@ -229,7 +229,7 @@ export default function PricingPage() {
       {/* Hero Section */}
       <header className="container mx-auto px-4 py-16">
         <div className="text-center max-w-4xl mx-auto mb-16">
-          <div className="inline-flex items-center space-x-2 bg-blue-100 text-blue-700 px-4 py-2 rounded-full text-sm font-semibold mb-6">
+          <div className="inline-flex items-center space-x-2 bg-[#F5E6E8] text-[#C8102E] px-4 py-2 rounded-full text-sm font-semibold mb-6">
             <Shield className="h-4 w-4" aria-hidden="true" />
             <span>Simple, Transparent Pricing</span>
           </div>

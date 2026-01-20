@@ -155,7 +155,7 @@ export function ChunkMetadataDisplay({ productId, productVersion, showTitle = tr
             <Filter className="h-4 w-4" />
             Filters
             {hasActiveFilters && (
-              <span className="ml-1 inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 text-blue-800 text-xs">
+              <span className="ml-1 inline-flex items-center justify-center w-5 h-5 rounded-full bg-[#F5E6E8] text-[#C8102E] text-xs">
                 {[filters.section, filters.field_name].filter(Boolean).length}
               </span>
             )}
@@ -190,7 +190,7 @@ export function ChunkMetadataDisplay({ productId, productVersion, showTitle = tr
                 value={filters.section}
                 onChange={(e) => handleFilterChange('section', e.target.value)}
                 placeholder="Filter by section..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#C8102E]"
               />
             </div>
             <div>
@@ -202,7 +202,7 @@ export function ChunkMetadataDisplay({ productId, productVersion, showTitle = tr
                 value={filters.field_name}
                 onChange={(e) => handleFilterChange('field_name', e.target.value)}
                 placeholder="Filter by field name..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#C8102E]"
               />
             </div>
             <div>
@@ -212,7 +212,7 @@ export function ChunkMetadataDisplay({ productId, productVersion, showTitle = tr
               <select
                 value={filters.limit}
                 onChange={(e) => handleFilterChange('limit', parseInt(e.target.value))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#C8102E]"
               >
                 <option value={50}>50</option>
                 <option value={100}>100</option>
@@ -307,7 +307,7 @@ export function ChunkMetadataDisplay({ productId, productVersion, showTitle = tr
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-900">
                       {item.section ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-[#F5E6E8] text-[#C8102E]">
                           {item.section}
                         </span>
                       ) : (

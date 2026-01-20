@@ -276,7 +276,7 @@ export default function PipelineRunsPage() {
       case 'queued':
         return <Clock className="h-4 w-4 text-gray-500" />
       case 'running':
-        return <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />
+        return <Loader2 className="h-4 w-4 text-[#C8102E] animate-spin" />
       case 'succeeded':
         return <CheckCircle className="h-4 w-4 text-green-500" />
       case 'failed':
@@ -295,7 +295,7 @@ export default function PipelineRunsPage() {
       case 'queued':
         return 'bg-gray-100 text-gray-800'
       case 'running':
-        return 'bg-blue-100 text-blue-800'
+        return 'bg-[#F5E6E8] text-[#C8102E]'
       case 'succeeded':
         return 'bg-green-100 text-green-800'
       case 'failed':
@@ -694,7 +694,7 @@ export default function PipelineRunsPage() {
                                     ? 'bg-green-100 text-green-800 hover:bg-green-100 cursor-default'
                                     : promotingVersion === run.version
                                     ? 'bg-gray-100 text-gray-500 cursor-not-allowed'
-                                    : 'bg-blue-100 text-blue-800 hover:bg-blue-200'
+                                    : 'bg-[#F5E6E8] text-[#C8102E] hover:bg-[#F5E6E8]'
                                 }
                               >
                                 {product?.promoted_version === run.version

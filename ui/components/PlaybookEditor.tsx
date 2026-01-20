@@ -255,7 +255,7 @@ quality_gates:
           <div className="flex-1 overflow-y-auto p-6 space-y-4">
             {loading ? (
               <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                <Loader2 className="h-8 w-8 animate-spin text-[#C8102E]" />
               </div>
             ) : error ? (
               <div className="flex items-center gap-2 p-4 bg-red-50 border border-red-200 rounded-lg">
@@ -332,7 +332,7 @@ quality_gates:
                     value={yamlContent}
                     onChange={(e) => setYamlContent(e.target.value)}
                     disabled={isReadOnly || saving}
-                    className="w-full h-96 font-mono text-sm border border-gray-300 rounded-md p-3 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full h-96 font-mono text-sm border border-gray-300 rounded-md p-3 resize-none focus:outline-none focus:ring-2 focus:ring-[#C8102E]"
                     placeholder="Enter playbook YAML content..."
                   />
                   <p className="text-xs text-gray-500 mt-1">
@@ -341,8 +341,8 @@ quality_gates:
                 </div>
 
                 {basePlaybookId && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <p className="text-sm text-blue-800">
+                  <div className="bg-[#F5E6E8] border border-[#C8102E]/30 rounded-lg p-4">
+                    <p className="text-sm text-[#C8102E]">
                       <strong>Note:</strong> This playbook is based on <strong>{basePlaybookId}</strong>. 
                       You can customize the name, ID, and YAML configuration before saving as your own custom playbook.
                     </p>

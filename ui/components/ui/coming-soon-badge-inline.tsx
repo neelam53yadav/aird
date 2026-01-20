@@ -25,7 +25,7 @@ interface ComingSoonBadgeInlineProps {
  */
 export function ComingSoonBadgeInline({ className = "ml-2" }: ComingSoonBadgeInlineProps) {
   return (
-    <span className={`${className} inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 text-white shadow-sm flex-shrink-0`}>
+    <span className={`${className} inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-[#C8102E] text-white shadow-sm flex-shrink-0`}>
       Coming Soon
     </span>
   )

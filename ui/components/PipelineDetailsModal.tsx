@@ -98,7 +98,7 @@ export default function PipelineDetailsModal({
       case 'failed':
         return <XCircle className="h-4 w-4 text-red-500" />
       case 'running':
-        return <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />
+        return <Loader2 className="h-4 w-4 text-[#C8102E] animate-spin" />
       case 'skipped':
         return <MinusCircle className="h-4 w-4 text-yellow-500" />
       default:
@@ -114,7 +114,7 @@ export default function PipelineDetailsModal({
       case 'failed':
         return 'bg-red-100 text-red-800'
       case 'running':
-        return 'bg-blue-100 text-blue-800'
+        return 'bg-[#F5E6E8] text-[#C8102E]'
       case 'skipped':
         return 'bg-yellow-100 text-yellow-800'
       default:
@@ -158,10 +158,10 @@ export default function PipelineDetailsModal({
 
         <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
           {/* Header */}
-          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4 flex items-center justify-between">
+          <div className="bg-[#C8102E] px-6 py-4 flex items-center justify-between">
             <div>
               <h3 className="text-lg font-semibold text-white">Pipeline Run Details</h3>
-              <p className="text-sm text-blue-100 mt-1">Version {runVersion} • {runStatus}</p>
+              <p className="text-sm text-white/90 mt-1">Version {runVersion} • {runStatus}</p>
             </div>
             <button
               onClick={onClose}
@@ -175,7 +175,7 @@ export default function PipelineDetailsModal({
           <div className="px-6 py-4 max-h-[70vh] overflow-y-auto">
             {loading ? (
               <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                <Loader2 className="h-8 w-8 animate-spin text-[#C8102E]" />
               </div>
             ) : (
               <div className="space-y-4">

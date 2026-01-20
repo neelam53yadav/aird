@@ -103,7 +103,7 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex flex-col">
+    <div className="min-h-screen bg-gradient-to-br from-white via-white to-rose-100 flex flex-col">
       {/* Header */}
       <header className="bg-white border-b border-gray-200">
         <div className="container mx-auto px-4 py-4">
@@ -119,7 +119,7 @@ export default function ResetPasswordPage() {
         <div className="w-full max-w-md">
           <div className="bg-white rounded-2xl shadow-2xl border-2 border-gray-100 p-8">
             <div className="text-center mb-8">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full mb-4">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-[#C8102E] to-[#A00D24] rounded-full mb-4">
                 <Lock className="h-8 w-8 text-white" />
               </div>
               <h1 className="text-3xl font-bold text-gray-900 mb-2">Reset Your Password</h1>
@@ -211,7 +211,7 @@ export default function ResetPasswordPage() {
               <Button
                 type="submit"
                 disabled={submitting || !token || password !== confirmPassword}
-                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold py-3 rounded-lg shadow-md hover:shadow-lg transition-all duration-200"
+                className="w-full bg-[#C8102E] hover:bg-[#A00D24] text-white font-semibold py-3 rounded-lg shadow-md hover:shadow-lg transition-all duration-200"
               >
                 {submitting ? 'Resetting Password...' : 'Reset Password'}
               </Button>
@@ -220,7 +220,7 @@ export default function ResetPasswordPage() {
             <div className="mt-6 text-center">
               <Link
                 href="/signin"
-                className="text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors"
+                className="text-sm text-[#C8102E] hover:text-[#A00D24] font-medium transition-colors"
               >
                 Back to Sign In
               </Link>

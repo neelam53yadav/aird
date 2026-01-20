@@ -35,7 +35,7 @@ const navigation = [
   { name: 'Data Sources', href: '/app/datasources', icon: Database },
   { name: 'Analytics', href: '/app/analytics', icon: BarChart3 },
   { name: 'Team', href: '/app/team', icon: Users, comingSoon: true },
-  { name: 'Support', href: '/app/support', icon: HelpCircle },
+  { name: 'Help', href: '/help', icon: HelpCircle },
   { name: 'Settings', href: '/app/settings', icon: Settings },
 ]
 
@@ -76,7 +76,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#C8102E] mx-auto mb-4"></div>
           <p className="text-gray-600">Loading...</p>
         </div>
       </div>
@@ -88,7 +88,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
   }
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-gray-50">
+    <div className="h-screen flex flex-col overflow-hidden bg-gradient-to-br from-white via-white to-rose-100">
       <div className="flex-1 flex overflow-hidden">
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
@@ -105,17 +105,17 @@ export default function AppLayout({ children }: AppLayoutProps) {
         sidebarOpen ? 'translate-x-0' : '-translate-x-full'
       } ${sidebarCollapsed ? 'w-20 lg:w-20' : 'w-64'}`}>
         {/* Enhanced Sidebar header */}
-        <div className="flex items-center justify-between h-16 px-4 border-b-2 border-gray-100 bg-gradient-to-r from-blue-50/50 to-indigo-50/50">
+        <div className="flex items-center justify-between h-16 px-4 border-b-2 border-gray-100 bg-white">
           {!sidebarCollapsed && (
             <div>
-              <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+              <h1 className="text-xl font-bold text-[#C8102E]">
                 PrimeData
               </h1>
               <p className="text-xs text-gray-500 mt-0.5">Making Data AI-Ready</p>
             </div>
           )}
           {sidebarCollapsed && (
-            <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center mx-auto">
+            <div className="w-8 h-8 bg-[#C8102E] rounded-lg flex items-center justify-center mx-auto">
               <span className="text-white font-bold text-sm">A</span>
             </div>
           )}
@@ -147,14 +147,14 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   href={item.href}
                   className={`group flex items-center px-3 py-3 text-sm font-medium rounded-lg transition-all duration-200 ${
                     isActive
-                      ? 'bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 border-l-4 border-blue-600 shadow-sm'
-                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                      ? 'bg-[#F5E6E8] text-[#C8102E] border-l-4 border-[#C8102E] shadow-sm'
+                      : 'text-gray-700 hover:bg-[#F5E6E8] hover:text-[#C8102E]'
                   }`}
                   onClick={() => setSidebarOpen(false)}
                   title={sidebarCollapsed ? item.name : undefined}
                 >
                   <item.icon className={`h-5 w-5 flex-shrink-0 ${
-                    isActive ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'
+                    isActive ? 'text-[#C8102E]' : 'text-gray-400 group-hover:text-[#C8102E]'
                   } ${sidebarCollapsed ? 'mx-auto' : 'mr-3'}`} />
                   {!sidebarCollapsed && (
                     <div className="flex items-center flex-1 min-w-0">
@@ -197,7 +197,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                       window.dispatchEvent(new CustomEvent('startTour'))
                     }
                   }}
-                  className="hidden md:flex items-center gap-2 px-3 py-2 text-sm font-medium text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition-colors border border-indigo-200 hover:border-indigo-300"
+                  className="hidden md:flex items-center gap-2 px-3 py-2 text-sm font-medium text-[#C8102E] hover:text-[#A00D24] hover:bg-[#F5E6E8] rounded-lg transition-colors border border-[#C8102E] hover:border-[#A00D24]"
                   title="Take Product Tour"
                 >
                   <Play className="h-4 w-4" />
@@ -235,7 +235,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                       alt="Profile"
                     />
                   ) : (
-                    <div className="h-9 w-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center ring-2 ring-gray-200">
+                    <div className="h-9 w-9 rounded-full bg-[#C8102E] flex items-center justify-center ring-2 ring-gray-200">
                       <span className="text-white text-sm font-semibold">
                         {session.user?.name?.charAt(0)?.toUpperCase() || 'U'}
                       </span>
@@ -249,16 +249,16 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 </button>
                 
                 {userMenuOpen && (
-                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border-2 border-gray-100 z-50 overflow-hidden">
+                    <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border-2 border-gray-100 z-50 overflow-hidden">
                     <div className="py-2">
-                      <div className="px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-blue-50/30">
+                      <div className="px-4 py-3 border-b border-gray-100 bg-[#F5E6E8]">
                         <p className="text-sm font-semibold text-gray-900">{session.user?.name}</p>
                         <p className="text-xs text-gray-500 truncate">{session.user?.email}</p>
                       </div>
                       <Link
                         href="/app/settings"
                         onClick={() => setUserMenuOpen(false)}
-                        className="flex items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                        className="flex items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-[#F5E6E8] transition-colors"
                       >
                         <Settings className="h-4 w-4 mr-3 text-gray-400" />
                         Settings

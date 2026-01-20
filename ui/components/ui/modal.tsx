@@ -34,7 +34,7 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
         {/* Enhanced Modal with animation */}
         <div className={`relative w-full ${sizeClasses[size]} bg-white rounded-xl shadow-2xl transform transition-all duration-300 scale-100`}>
           {/* Enhanced Header */}
-          <div className="flex items-center justify-between p-6 border-b-2 border-gray-100 bg-gradient-to-r from-gray-50 to-blue-50/30">
+          <div className="flex items-center justify-between p-6 border-b-2 border-gray-100 bg-gradient-to-r from-gray-50 to-[#F5E6E8]">
             <h3 className="text-xl font-semibold text-gray-900">{title}</h3>
             <button
               onClick={onClose}
@@ -79,7 +79,7 @@ export function ConfirmModal({
   const variantClasses = {
     danger: 'bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 shadow-md hover:shadow-lg',
     warning: 'bg-gradient-to-r from-yellow-600 to-amber-600 hover:from-yellow-700 hover:to-amber-700 shadow-md hover:shadow-lg',
-    info: 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg'
+    info: 'bg-[#C8102E] hover:bg-[#A00D24] shadow-md hover:shadow-lg'
   }
 
   const iconConfig = {
@@ -163,15 +163,15 @@ export function ResultModal({ isOpen, onClose, title, message, type }: ResultMod
     },
     info: {
       icon: (
-        <div className="flex-shrink-0 h-8 w-8 text-blue-400">
+        <div className="flex-shrink-0 h-8 w-8 text-[#C8102E]/60">
           <svg fill="currentColor" viewBox="0 0 20 20">
             <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
           </svg>
         </div>
       ),
-      bgColor: 'bg-blue-50',
-      borderColor: 'border-blue-200',
-      textColor: 'text-blue-800'
+      bgColor: 'bg-[#F5E6E8]',
+      borderColor: 'border-[#C8102E]/30',
+      textColor: 'text-[#C8102E]'
     }
   }
 
@@ -181,7 +181,7 @@ export function ResultModal({ isOpen, onClose, title, message, type }: ResultMod
     success: { icon: '✅', bg: 'bg-green-100' },
     error: { icon: '❌', bg: 'bg-red-100' },
     warning: { icon: '⚠️', bg: 'bg-yellow-100' },
-    info: { icon: 'ℹ️', bg: 'bg-blue-100' }
+    info: { icon: 'ℹ️', bg: 'bg-[#F5E6E8]' }
   }
 
   const icon = iconConfig[type]
@@ -207,7 +207,7 @@ export function ResultModal({ isOpen, onClose, title, message, type }: ResultMod
         <div className="flex justify-end">
           <Button 
             onClick={onClose}
-            className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg"
+            className="bg-[#C8102E] hover:bg-[#A00D24] shadow-md hover:shadow-lg"
           >
             OK
           </Button>

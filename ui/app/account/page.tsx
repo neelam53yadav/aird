@@ -129,7 +129,7 @@ export default function AccountPage() {
                   {(user?.roles || ["viewer"]).map((role) => (
                     <span
                       key={role}
-                      className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                      className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[#F5E6E8] text-[#C8102E]"
                     >
                       {role}
                     </span>

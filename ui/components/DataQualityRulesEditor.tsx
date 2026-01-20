@@ -248,7 +248,7 @@ export function DataQualityRulesEditor({
               id={`${baseKey}_severity`}
               value={rule.severity}
               onChange={(e) => updateRule(ruleType, index, 'severity', e.target.value)}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#C8102E] focus:border-[#C8102E] sm:text-sm"
             >
               <option value="error">Error</option>
               <option value="warning">Warning</option>
@@ -277,7 +277,7 @@ export function DataQualityRulesEditor({
             id={`${baseKey}_enabled`}
             checked={rule.enabled}
             onChange={(e) => updateRule(ruleType, index, 'enabled', e.target.checked)}
-            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+            className="h-4 w-4 text-[#C8102E] focus:ring-[#C8102E] border-gray-300 rounded"
           />
           <Label htmlFor={`${baseKey}_enabled`} className="ml-2">Enabled</Label>
         </div>
@@ -435,13 +435,13 @@ export function DataQualityRulesEditor({
                   onClick={() => setActiveTab(tab.id)}
                   className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${
                     activeTab === tab.id
-                      ? 'border-blue-500 text-blue-600'
+                      ? 'border-[#C8102E] text-[#C8102E]'
                       : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                   }`}
                 >
                   {tab.label}
                   {hasRules && (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#F5E6E8] text-[#C8102E]">
                       {ruleCount}
                     </span>
                   )}
@@ -468,7 +468,7 @@ export function DataQualityRulesEditor({
                 return (
                   <span
                     key={tab.id}
-                    className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-blue-100 text-blue-800 cursor-pointer hover:bg-blue-200"
+                    className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-[#F5E6E8] text-[#C8102E] cursor-pointer hover:bg-[#F5E6E8]"
                     onClick={() => setActiveTab(tab.id)}
                   >
                     {tab.label}: {ruleCount} rule{ruleCount !== 1 ? 's' : ''}

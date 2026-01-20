@@ -181,7 +181,7 @@ export default function NewDataSourcePage() {
       <AppLayout>
         <div className="p-6 flex items-center justify-center min-h-96">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#C8102E] mx-auto mb-4"></div>
             <p className="text-gray-600">Loading...</p>
           </div>
         </div>
@@ -472,7 +472,7 @@ export default function NewDataSourcePage() {
             id={field.name}
             checked={value}
             onChange={(e) => handleConfigChange(field.name, e.target.checked)}
-            className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+            className="mt-1 h-4 w-4 text-[#C8102E] focus:ring-[#C8102E] border-gray-300 rounded"
           />
         )
       case 'number':
@@ -546,7 +546,7 @@ export default function NewDataSourcePage() {
                       disabled={!isImplemented}
                       className={`text-left border rounded-lg p-6 transition-colors relative ${
                         isImplemented
-                          ? 'border-gray-200 hover:bg-gray-50 hover:border-blue-300 cursor-pointer'
+                          ? 'border-gray-200 hover:bg-gray-50 hover:border-[#C8102E] cursor-pointer'
                           : 'border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed'
                       }`}
                     >
@@ -555,10 +555,10 @@ export default function NewDataSourcePage() {
                       )}
                       <div className="flex items-center mb-3">
                         <div className={`rounded-lg p-2 mr-3 ${
-                          isImplemented ? 'bg-blue-100' : 'bg-gray-200'
+                          isImplemented ? 'bg-[#F5E6E8]' : 'bg-gray-200'
                         }`}>
                           <IconComponent className={`h-6 w-6 ${
-                            isImplemented ? 'text-blue-600' : 'text-gray-400'
+                            isImplemented ? 'text-[#C8102E]' : 'text-gray-400'
                           }`} />
                         </div>
                         <div>
@@ -585,9 +585,9 @@ export default function NewDataSourcePage() {
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
               <div className="flex items-center mb-6">
-                <div className="bg-blue-100 rounded-lg p-2 mr-3">
+                <div className="bg-[#F5E6E8] rounded-lg p-2 mr-3">
                   {selectedDataSourceType && (
-                    <selectedDataSourceType.icon className="h-6 w-6 text-blue-600" />
+                    <selectedDataSourceType.icon className="h-6 w-6 text-[#C8102E]" />
                   )}
                 </div>
                 <div>
@@ -670,8 +670,8 @@ export default function NewDataSourcePage() {
                         file:mr-4 file:py-2 file:px-4
                         file:rounded-full file:border-0
                         file:text-sm file:font-semibold
-                        file:bg-blue-50 file:text-blue-700
-                        hover:file:bg-blue-100"
+                        file:bg-[#F5E6E8] file:text-[#C8102E]
+                        hover:file:bg-[#F5E6E8]"
                     />
                     {selectedFiles.length > 0 && (
                       <div className="mt-2">

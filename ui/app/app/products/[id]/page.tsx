@@ -264,7 +264,7 @@ export default function ProductDetailPage() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'draft': return 'bg-gray-100 text-gray-800'
-      case 'running': return 'bg-blue-100 text-blue-800'
+      case 'running': return 'bg-[#F5E6E8] text-[#C8102E]'
       case 'ready': return 'bg-green-100 text-green-800'
       case 'failed': return 'bg-red-100 text-red-800'
       case 'failed_policy': return 'bg-red-100 text-red-800'  // M2
@@ -873,7 +873,7 @@ export default function ProductDetailPage() {
       <AppLayout>
         <div className="p-6 flex items-center justify-center min-h-96">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#C8102E] mx-auto mb-4"></div>
             <p className="text-gray-600">Loading product...</p>
           </div>
         </div>
@@ -898,7 +898,7 @@ export default function ProductDetailPage() {
 
   return (
     <AppLayout>
-      <div className="p-6 bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-50/30 min-h-screen">
+      <div className="p-6 bg-gradient-to-br from-white via-white to-rose-100 min-h-screen">
         {/* Enhanced Breadcrumb Navigation */}
         <div className="flex items-center mb-6">
           <Link href="/app/products" className="flex items-center text-sm text-gray-500 hover:text-gray-700 transition-colors font-medium">
@@ -913,7 +913,7 @@ export default function ProductDetailPage() {
         <div className="mb-8 bg-white rounded-xl shadow-md border border-gray-100 p-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center">
-              <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl p-3 mr-4 shadow-sm">
+              <div className="bg-[#C8102E] rounded-xl p-3 mr-4 shadow-sm">
                 <Package className="h-6 w-6 text-white" />
               </div>
               <div>
@@ -932,7 +932,7 @@ export default function ProductDetailPage() {
                 variant="outline" 
                 size="sm"
                 onClick={() => router.push(`/app/products/${productId}/edit`)}
-                className="border-2 hover:border-blue-300 hover:bg-blue-50"
+                className="border-2 hover:border-[#C8102E] hover:bg-[#F5E6E8]"
               >
                 <Settings className="h-4 w-4 mr-2" />
                 Settings
@@ -941,7 +941,7 @@ export default function ProductDetailPage() {
                 size="sm"
                 onClick={() => setShowPipelineModal(true)}
                 disabled={runningPipeline || dataSources.length === 0}
-                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg"
+                className="bg-[#C8102E] hover:bg-[#A00D24] shadow-md hover:shadow-lg"
               >
                 <Play className="h-4 w-4 mr-2" />
                 Run Pipeline
@@ -967,7 +967,7 @@ export default function ProductDetailPage() {
               onClick={() => setActiveTab('overview')}
               className={`flex items-center gap-2 py-4 px-4 border-b-2 font-medium text-sm transition-all whitespace-nowrap ${
                 activeTab === 'overview'
-                  ? 'border-blue-600 text-blue-600 bg-blue-50/50'
+                  ? 'border-[#C8102E] text-[#C8102E] bg-[#F5E6E8]/50'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
               }`}
             >
@@ -978,7 +978,7 @@ export default function ProductDetailPage() {
               onClick={() => setActiveTab('ai-trust-score')}
               className={`flex items-center gap-2 py-4 px-4 border-b-2 font-medium text-sm transition-all whitespace-nowrap ${
                 activeTab === 'ai-trust-score'
-                  ? 'border-blue-600 text-blue-600 bg-blue-50/50'
+                  ? 'border-[#C8102E] text-[#C8102E] bg-[#F5E6E8]/50'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
               }`}
             >
@@ -1004,7 +1004,7 @@ export default function ProductDetailPage() {
               onClick={() => setActiveTab('chunk-metadata')}
               className={`flex items-center gap-2 py-4 px-4 border-b-2 font-medium text-sm transition-all whitespace-nowrap ${
                 activeTab === 'chunk-metadata'
-                  ? 'border-blue-600 text-blue-600 bg-blue-50/50'
+                  ? 'border-[#C8102E] text-[#C8102E] bg-[#F5E6E8]/50'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
               }`}
             >
@@ -1015,7 +1015,7 @@ export default function ProductDetailPage() {
               onClick={() => setActiveTab('acl')}
               className={`flex items-center gap-2 py-4 px-4 border-b-2 font-medium text-sm transition-all whitespace-nowrap ${
                 activeTab === 'acl'
-                  ? 'border-blue-600 text-blue-600 bg-blue-50/50'
+                  ? 'border-[#C8102E] text-[#C8102E] bg-[#F5E6E8]/50'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
               }`}
             >
@@ -1026,7 +1026,7 @@ export default function ProductDetailPage() {
               onClick={() => setActiveTab('datasources')}
               className={`flex items-center gap-2 py-4 px-4 border-b-2 font-medium text-sm transition-all whitespace-nowrap ${
                 activeTab === 'datasources'
-                  ? 'border-blue-600 text-blue-600 bg-blue-50/50'
+                  ? 'border-[#C8102E] text-[#C8102E] bg-[#F5E6E8]/50'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
               }`}
             >
@@ -1040,7 +1040,7 @@ export default function ProductDetailPage() {
               onClick={() => setActiveTab('data-quality')}
               className={`flex items-center gap-2 py-4 px-4 border-b-2 font-medium text-sm transition-all whitespace-nowrap ${
                 activeTab === 'data-quality'
-                  ? 'border-blue-600 text-blue-600 bg-blue-50/50'
+                  ? 'border-[#C8102E] text-[#C8102E] bg-[#F5E6E8]/50'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
               }`}
             >
@@ -1056,7 +1056,7 @@ export default function ProductDetailPage() {
               onClick={() => setActiveTab('exports')}
               className={`flex items-center gap-2 py-4 px-4 border-b-2 font-medium text-sm transition-all whitespace-nowrap ${
                 activeTab === 'exports'
-                  ? 'border-blue-600 text-blue-600 bg-blue-50/50'
+                  ? 'border-[#C8102E] text-[#C8102E] bg-[#F5E6E8]/50'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
               }`}
             >
@@ -1091,26 +1091,29 @@ export default function ProductDetailPage() {
         )}
 
         {activeTab === 'overview' && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Product Information</h2>
-              <dl className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
+            <div className="space-y-6">
+          <div className="bg-white rounded-xl shadow-sm border border-[#C8102E]/10 p-6">
+              <div className="flex items-baseline justify-between mb-6">
+                <h2 className="text-lg font-semibold text-gray-900">Product Information</h2>
+                <p className="text-xs text-gray-500">Overview of status, configuration, and readiness</p>
+              </div>
+              <dl className="grid grid-cols-1 gap-x-10 gap-y-8 sm:grid-cols-2">
                 <div>
-                  <dt className="text-sm font-medium text-gray-500">Status</dt>
-                  <dd className="mt-1">
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">Status</dt>
+                  <dd className="mt-2">
                     <StatusBadge status={product.status as any} />
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-sm font-medium text-gray-500">Created</dt>
-                  <dd className="mt-1 text-sm text-gray-900">
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">Created</dt>
+                  <dd className="mt-2 text-sm font-medium text-gray-900">
                     {new Date(product.created_at).toLocaleString()}
                   </dd>
                 </div>
                 {product.updated_at && (
                   <div>
-                    <dt className="text-sm font-medium text-gray-500">Last Updated</dt>
-                    <dd className="mt-1 text-sm text-gray-900">
+                    <dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">Last Updated</dt>
+                    <dd className="mt-2 text-sm font-medium text-gray-900">
                       {new Date(product.updated_at).toLocaleString()}
                     </dd>
                   </div>
@@ -1138,12 +1141,12 @@ export default function ProductDetailPage() {
                             </span>
                           ) : playbookId ? (
                             <>
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[#F5E6E8] text-[#C8102E]">
                                 {playbookId}
                               </span>
                               {isAutoDetected && (
-                                <span 
-                                  className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"
+                              <span 
+                                className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#F5E6E8] text-[#C8102E] border border-[#C8102E]/30"
                                   title={detectionReason ? `Auto-detected: ${detectionReason}` : 'Auto-detected'}
                                 >
                                   Auto-Detected
@@ -1205,7 +1208,7 @@ export default function ProductDetailPage() {
                     <dt className="text-sm font-medium text-gray-500">Policy Status</dt>
                     <dd className="mt-1">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        product.policy_status === 'passed' ? 'bg-green-100 text-green-800' :
+                        product.policy_status === 'passed' ? 'bg-[#F5E6E8] text-[#C8102E] border border-[#C8102E]/30' :
                         product.policy_status === 'failed' ? 'bg-red-100 text-red-800' :
                         'bg-yellow-100 text-yellow-800'
                       }`}>
@@ -1244,90 +1247,112 @@ export default function ProductDetailPage() {
                   const usingManual = mode === "manual" && !!manual;
 
                   return (
-                    <div>
-                      <dt className="text-sm font-medium text-gray-500">
+                    <div className="sm:col-span-2">
+                      <dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">
                         Chunking Configuration
                       </dt>
 
-                      <dd className="mt-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 capitalize">
-                            {contentType}
-                          </span>
-
-                          {usingManual ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                              Manual (Effective)
+                      <dd className="mt-2">
+                        <div className="rounded-lg border border-gray-200 bg-white p-4">
+                          {/* Tags row */}
+                          <div className="flex items-center gap-2 flex-wrap mb-3">
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-[#F5E6E8] text-[#C8102E] border border-[#C8102E]/30 capitalize">
+                              {contentType}
                             </span>
-                          ) : resolved ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                              Auto-Detected (Effective)
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                              Auto (Pending Detection)
-                            </span>
-                          )}
-                        </div>
 
-                        <div className="mt-2 text-xs text-gray-600 space-y-1">
-                          <p>
-                            Chunk Size: {effective.chunk_size ?? "N/A"} {units}
-                          </p>
-                          <p>
-                            Chunk Overlap: {effective.chunk_overlap ?? "N/A"} {units}
-                          </p>
-                          <p>Strategy: {effective.chunking_strategy ?? "N/A"}</p>
+                            {usingManual ? (
+                              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-[#F5E6E8] text-[#C8102E] border border-[#C8102E]/30">
+                                Manual (Effective)
+                              </span>
+                            ) : resolved ? (
+                              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-[#F5E6E8] text-[#C8102E] border border-[#C8102E]/30">
+                                Auto-Detected (Effective)
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700">
+                                Auto (Pending)
+                              </span>
+                            )}
+                          </div>
 
-                          {effective.confidence != null && (
-                            <p>Confidence: {(effective.confidence * 100).toFixed(0)}%</p>
-                          )}
+                          {/* Clean details grid */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-2 text-sm">
+                            <div className="flex justify-between sm:justify-start sm:gap-2">
+                              <span className="text-gray-600">Chunk Size</span>
+                              <span className="font-semibold text-gray-900">
+                                {effective.chunk_size ?? "N/A"}{" "}
+                                <span className="text-gray-500 font-normal">{units}</span>
+                              </span>
+                            </div>
+
+                            <div className="flex justify-between sm:justify-start sm:gap-2">
+                              <span className="text-gray-600">Chunk Overlap</span>
+                              <span className="font-semibold text-gray-900">
+                                {effective.chunk_overlap ?? "N/A"}{" "}
+                                <span className="text-gray-500 font-normal">{units}</span>
+                              </span>
+                            </div>
+
+                            <div className="flex justify-between sm:justify-start sm:gap-2">
+                              <span className="text-gray-600">Strategy</span>
+                              <span className="font-semibold text-gray-900">
+                                {effective.chunking_strategy ?? "N/A"}
+                              </span>
+                            </div>
+
+                            {effective.confidence != null && (
+                              <div className="flex justify-between sm:justify-start sm:gap-2">
+                                <span className="text-gray-600">Confidence</span>
+                                <span className="font-semibold text-gray-900">
+                                  {(effective.confidence * 100).toFixed(0)}%
+                                </span>
+                              </div>
+                            )}
+                          </div>
 
                           {usingManual && (
-                            <p className="mt-1 text-xs text-gray-500 italic">
+                            <p className="mt-3 text-xs text-gray-500 italic">
                               Using manual settings (overrides playbook defaults)
                             </p>
                           )}
-                        </div>
 
-                        {/* Show auto-analysis metadata ONLY if it's relevant */}
-                        {!usingManual && chunkingConfig.last_analyzed && (
-                          <p className="mt-1 text-xs text-gray-400">
-                            Last analyzed: {new Date(chunkingConfig.last_analyzed).toLocaleString()}
-                          </p>
-                        )}
-
-                        {!usingManual &&
-                          Array.isArray(chunkingConfig.sample_files_analyzed) &&
-                          chunkingConfig.sample_files_analyzed.length > 0 && (
-                            <p className="mt-1 text-xs text-gray-400">
-                              Analyzed {chunkingConfig.sample_files_analyzed.length} sample file
-                              {chunkingConfig.sample_files_analyzed.length !== 1 ? "s" : ""}
-                            </p>
-                          )}
-
-                        {/* Optional: show detected config as "not used" when manual */}
-                        {usingManual && resolved && (
-                          <details className="mt-2 text-xs text-gray-500">
-                            <summary className="cursor-pointer">
-                              Auto-detected suggestion (not used)
-                            </summary>
-                            <div className="mt-1 space-y-1">
-                              <p>Chunk Size: {resolved.chunk_size ?? "N/A"} {resolved.units ?? "tokens"}</p>
-                              <p>Chunk Overlap: {resolved.chunk_overlap ?? "N/A"} {resolved.units ?? "tokens"}</p>
-                              <p>Strategy: {resolved.chunking_strategy ?? "N/A"}</p>
-                              {resolved.confidence != null && (
-                                <p>Confidence: {(resolved.confidence * 100).toFixed(0)}%</p>
-                              )}
+                          {/* Meta (de-emphasized) */}
+                          {!usingManual && (chunkingConfig.last_analyzed || (Array.isArray(chunkingConfig.sample_files_analyzed) && chunkingConfig.sample_files_analyzed.length > 0)) && (
+                            <div className="mt-3 pt-3 border-t border-gray-200 text-xs text-gray-500 space-y-1">
                               {chunkingConfig.last_analyzed && (
-                                <p>
-                                  Auto-detection last analyzed:{" "}
-                                  {new Date(chunkingConfig.last_analyzed).toLocaleString()}
-                                </p>
+                                <div>Last analyzed: {new Date(chunkingConfig.last_analyzed).toLocaleString()}</div>
+                              )}
+                              {Array.isArray(chunkingConfig.sample_files_analyzed) && chunkingConfig.sample_files_analyzed.length > 0 && (
+                                <div>
+                                  Analyzed {chunkingConfig.sample_files_analyzed.length} sample file
+                                  {chunkingConfig.sample_files_analyzed.length !== 1 ? "s" : ""}
+                                </div>
                               )}
                             </div>
-                          </details>
-                        )}
+                          )}
+
+                          {/* Optional: show detected config as "not used" when manual */}
+                          {usingManual && resolved && (
+                            <details className="mt-3 text-xs text-gray-500">
+                              <summary className="cursor-pointer select-none">
+                                Auto-detected suggestion (not used)
+                              </summary>
+                              <div className="mt-2 rounded-md bg-gray-50 border border-gray-200 p-3 space-y-1">
+                                <div>Chunk Size: {resolved.chunk_size ?? "N/A"} {resolved.units ?? "tokens"}</div>
+                                <div>Chunk Overlap: {resolved.chunk_overlap ?? "N/A"} {resolved.units ?? "tokens"}</div>
+                                <div>Strategy: {resolved.chunking_strategy ?? "N/A"}</div>
+                                {resolved.confidence != null && (
+                                  <div>Confidence: {(resolved.confidence * 100).toFixed(0)}%</div>
+                                )}
+                                {chunkingConfig.last_analyzed && (
+                                  <div>
+                                    Auto-detection last analyzed: {new Date(chunkingConfig.last_analyzed).toLocaleString()}
+                                  </div>
+                                )}
+                              </div>
+                            </details>
+                          )}
+                        </div>
                       </dd>
                     </div>
                   );
@@ -1349,7 +1374,7 @@ export default function ProductDetailPage() {
                     <div>
                       <dt className="text-sm font-medium text-gray-500">Chunking Strategy</dt>
                       <dd className="mt-1">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[#F5E6E8] text-[#C8102E] border border-[#C8102E]/30">
                           {formattedStrategy}
                         </span>
                       </dd>
@@ -1367,7 +1392,7 @@ export default function ProductDetailPage() {
                     <div>
                       <dt className="text-sm font-medium text-gray-500">Embedding Model</dt>
                       <dd className="mt-1">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[#F5E6E8] text-[#C8102E] border border-[#C8102E]/30">
                           {modelName}
                         </span>
                         {embeddingConfig?.embedding_dimension && (
@@ -1425,7 +1450,7 @@ export default function ProductDetailPage() {
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
                 <Link href={`/app/products/${product.id}/datasources/new`}>
                   <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer h-full flex flex-col">
-                    <Database className="h-8 w-8 text-blue-600 mb-2" />
+                    <Database className="h-8 w-8 text-[#C8102E] mb-2" />
                     <h3 className="font-medium text-gray-900">Add Data Source</h3>
                     <p className="text-sm text-gray-600">Connect a new data source to this product</p>
                   </div>
@@ -1485,7 +1510,7 @@ export default function ProductDetailPage() {
                 <Button
                   onClick={() => setShowPipelineModal(true)}
                   disabled={runningPipeline || dataSources.length === 0}
-                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                  className="bg-[#C8102E] hover:bg-[#A00D24] text-white"
                 >
                   {runningPipeline ? (
                     <>
@@ -1520,7 +1545,7 @@ export default function ProductDetailPage() {
                       {pipelineRunsTotal > 5 && (
                         <Link 
                           href={`/app/products/${productId}/pipeline-runs`}
-                          className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                          className="text-sm text-[#C8102E] hover:text-[#C8102E] font-medium"
                         >
                           View All ({pipelineRunsTotal})
                         </Link>
@@ -1535,7 +1560,7 @@ export default function ProductDetailPage() {
                     ) : (
                       <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
                         <table className="min-w-full divide-y divide-gray-200">
-                          <thead className="bg-gradient-to-r from-gray-50 to-blue-50">
+                          <thead className="bg-gradient-to-r from-gray-50 to-[#F5E6E8]">
                             <tr>
                               <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                                 Version
@@ -1556,7 +1581,7 @@ export default function ProductDetailPage() {
                           </thead>
                           <tbody className="bg-white divide-y divide-gray-200">
                             {pipelineRuns.map((run) => (
-                              <tr key={run.id} className="hover:bg-blue-50/50 transition-colors">
+                              <tr key={run.id} className="hover:bg-[#F5E6E8]/50 transition-colors">
                                 <td className="px-6 py-4 whitespace-nowrap">
                                   <div className="flex items-center space-x-2">
                                     <span className="text-sm font-semibold text-gray-900">v{run.version}</span>
@@ -1583,7 +1608,7 @@ export default function ProductDetailPage() {
                                   <div className="flex space-x-2">
                                     <Link
                                       href={`/app/products/${productId}/pipeline-runs`}
-                                      className="text-blue-600 hover:text-blue-900 text-sm font-medium"
+                                      className="text-[#C8102E] hover:text-[#A00D24] text-sm font-medium"
                                     >
                                       View Details
                                     </Link>
@@ -1596,7 +1621,7 @@ export default function ProductDetailPage() {
                                             ? 'bg-green-100 text-green-800 cursor-default'
                                             : promotingVersion === run.version
                                             ? 'bg-gray-100 text-gray-500 cursor-not-allowed'
-                                            : 'bg-blue-100 text-blue-800 hover:bg-blue-200'
+                                            : 'bg-[#F5E6E8] text-[#C8102E] hover:bg-[#F5E6E8]'
                                         }`}
                                       >
                                         {product?.promoted_version === run.version
@@ -1627,7 +1652,7 @@ export default function ProductDetailPage() {
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                      <Package className="h-5 w-5 text-blue-600" />
+                      <Package className="h-5 w-5 text-[#C8102E]" />
                       Pipeline Artifacts
                     </h2>
                     <p className="text-sm text-gray-600 mt-1">
@@ -1638,7 +1663,7 @@ export default function ProductDetailPage() {
                 
                 {loadingData.artifacts ? (
                   <div className="flex items-center justify-center py-12">
-                    <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                    <Loader2 className="h-8 w-8 animate-spin text-[#C8102E]" />
                   </div>
                 ) : pipelineArtifacts.length === 0 ? (
                   <div className="text-center py-12">
@@ -1701,7 +1726,7 @@ export default function ProductDetailPage() {
                                 </div>
                             </td>
                               <td className="px-6 py-4 whitespace-nowrap">
-                                <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
+                                <span className="px-2 py-1 text-xs font-medium rounded-full bg-[#F5E6E8] text-[#C8102E]">
                                   {artifact.artifact_type?.toUpperCase() || 'UNKNOWN'}
                                 </span>
                             </td>
@@ -1762,13 +1787,13 @@ export default function ProductDetailPage() {
 
             {dataSources.length === 0 ? (
               <div className="text-center py-12 bg-white rounded-xl shadow-md border border-gray-100">
-                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4">
-                  <Database className="h-10 w-10 text-blue-600" />
+                <div className="bg-[#F5E6E8] border-2 border-[#C8102E] rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4">
+                  <Database className="h-10 w-10 text-[#C8102E]" />
                 </div>
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">No data sources yet</h3>
                 <p className="text-gray-600 mb-6">Connect your first data source to get started.</p>
                 <Link href={`/app/products/${product.id}/datasources/new`}>
-                  <Button className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg">
+                  <Button className="bg-[#C8102E] hover:bg-[#A00D24] shadow-md hover:shadow-lg">
                     <Database className="h-4 w-4 mr-2" />
                     Add Data Source
                   </Button>
@@ -1779,13 +1804,13 @@ export default function ProductDetailPage() {
                 {dataSources.map((datasource) => {
                   const displayInfo = getDataSourceDisplayInfo(datasource)
                   return (
-                    <div key={datasource.id} className="bg-white rounded-xl shadow-md border-2 border-gray-100 p-6 hover:shadow-lg hover:border-blue-300 transition-all duration-200 group">
+                    <div key={datasource.id} className="bg-white rounded-xl shadow-md border-2 border-gray-100 p-6 hover:shadow-lg hover:border-[#C8102E] transition-all duration-200 group">
                       <div className="flex items-start mb-4">
-                        <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl p-2.5 mr-3 flex-shrink-0 shadow-sm group-hover:scale-110 transition-transform">
+                        <div className="bg-[#C8102E] rounded-xl p-2.5 mr-3 flex-shrink-0 shadow-sm group-hover:scale-110 transition-transform">
                           <span className="text-xl">{getDataSourceTypeIcon(datasource.type)}</span>
                         </div>
                         <div className="min-w-0 flex-1">
-                          <h3 className="font-semibold text-gray-900 text-sm mb-1 group-hover:text-blue-600 transition-colors">{displayInfo.title}</h3>
+                          <h3 className="font-semibold text-gray-900 text-sm mb-1 group-hover:text-[#C8102E] transition-colors">{displayInfo.title}</h3>
                           <p className="text-xs text-gray-600 truncate mb-1" title={displayInfo.fullSubtitle}>
                             {displayInfo.subtitle}
                           </p>
@@ -1806,7 +1831,7 @@ export default function ProductDetailPage() {
                           </div>
                         </div>
                         {datasource.last_cursor && (
-                          <p className="text-xs text-blue-600">
+                          <p className="text-xs text-[#C8102E]">
                             Last sync: {new Date(datasource.last_cursor.timestamp || datasource.updated_at).toLocaleDateString()}
                           </p>
                         )}
@@ -1817,14 +1842,14 @@ export default function ProductDetailPage() {
                           <Button 
                             variant="outline" 
                             size="sm" 
-                            className="flex-1 text-xs border-2 hover:border-blue-300 hover:bg-blue-50"
+                            className="flex-1 text-xs border-2 hover:border-[#C8102E] hover:bg-[#F5E6E8]"
                             onClick={() => handleEditDataSource(datasource.id)}
                           >
                             Edit
                           </Button>
                           <Button 
                             size="sm" 
-                            className="flex-1 text-xs bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-sm hover:shadow-md"
+                            className="flex-1 text-xs bg-[#C8102E] hover:bg-[#A00D24] shadow-sm hover:shadow-md"
                             onClick={() => handleTestConnection(datasource.id)}
                             disabled={testingConnection === datasource.id}
                           >
@@ -1958,7 +1983,7 @@ export default function ProductDetailPage() {
                 <Button
                   onClick={() => handleRunPipeline()}
                   disabled={runningPipeline}
-                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                  className="bg-[#C8102E] hover:bg-[#A00D24] text-white"
                 >
                   {runningPipeline ? (
                     <>
@@ -2096,7 +2121,7 @@ export default function ProductDetailPage() {
                       <div className="text-sm text-gray-600">Warnings</div>
                     </div>
                     <div className="text-center">
-                      <div className="text-2xl font-bold text-blue-600">
+                      <div className="text-2xl font-bold text-[#C8102E]">
                         {dataQualityViolations.filter(v => v.severity === 'info').length}
                       </div>
                       <div className="text-sm text-gray-600">Info</div>
@@ -2112,7 +2137,7 @@ export default function ProductDetailPage() {
                         <div className="flex items-center space-x-3">
                           <AlertTriangle className={`h-5 w-5 ${
                             violation.severity === 'error' ? 'text-red-600' :
-                            violation.severity === 'warning' ? 'text-orange-600' : 'text-blue-600'
+                            violation.severity === 'warning' ? 'text-orange-600' : 'text-[#C8102E]'
                           }`} />
                           <div>
                             <div className="font-medium text-gray-900">{violation.rule_name}</div>
@@ -2122,7 +2147,7 @@ export default function ProductDetailPage() {
                         <div className="text-right">
                           <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
                             violation.severity === 'error' ? 'bg-red-100 text-red-800' :
-                            violation.severity === 'warning' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'
+                            violation.severity === 'warning' ? 'bg-orange-100 text-orange-800' : 'bg-[#F5E6E8] text-[#C8102E]'
                           }`}>
                             {violation.severity}
                           </span>
@@ -2193,7 +2218,7 @@ export default function ProductDetailPage() {
                     name="export-version"
                     value="current"
                     defaultChecked
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                    className="h-4 w-4 text-[#C8102E] focus:ring-[#C8102E] border-gray-300"
                   />
                   <label htmlFor="current-version" className="text-sm font-medium text-gray-700">
                     Current Version (v{product?.current_version})
@@ -2207,7 +2232,7 @@ export default function ProductDetailPage() {
                       id="promoted-version"
                       name="export-version"
                       value="prod"
-                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                      className="h-4 w-4 text-[#C8102E] focus:ring-[#C8102E] border-gray-300"
                     />
                     <label htmlFor="promoted-version" className="text-sm font-medium text-gray-700">
                       Promoted Version (v{product.promoted_version})
@@ -2280,13 +2305,13 @@ export default function ProductDetailPage() {
 
             <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
               {/* Header */}
-              <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4 flex items-center justify-between">
+              <div className="bg-[#C8102E] px-6 py-4 flex items-center justify-between">
                 <div className="flex-1">
                   <h3 className="text-lg font-semibold text-white">
                     {viewingArtifact.display_name || viewingArtifact.artifact_name?.replace(/_/g, ' ') || 'Unknown Artifact'}
                   </h3>
                   <div className="flex items-center gap-3 mt-1">
-                    <p className="text-sm text-blue-100">
+                    <p className="text-sm text-white/90">
                       {viewingArtifact.artifact_type?.toUpperCase() || 'UNKNOWN'} • {(() => {
                         const formatFileSize = (bytes: number) => {
                           if (bytes < 1024) return `${bytes} B`
@@ -2297,7 +2322,7 @@ export default function ProductDetailPage() {
                       })()}
                     </p>
                     {viewingArtifact.stage_name && (
-                      <span className="text-xs text-blue-200 bg-blue-700/30 px-2 py-1 rounded">
+                      <span className="text-xs text-white/90 bg-white/20 px-2 py-1 rounded">
                         Stage: {viewingArtifact.stage_name.replace(/_/g, ' ')}
                       </span>
                     )}
@@ -2315,7 +2340,7 @@ export default function ProductDetailPage() {
               <div className="px-6 py-4 max-h-[70vh] overflow-y-auto">
                 {loadingArtifactContent ? (
                   <div className="flex items-center justify-center py-12">
-                    <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                    <Loader2 className="h-8 w-8 animate-spin text-[#C8102E]" />
                     <p className="ml-3 text-gray-600">Loading artifact content...</p>
                   </div>
                 ) : artifactContent ? (

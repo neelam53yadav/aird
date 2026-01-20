@@ -37,11 +37,11 @@ const variantConfig = {
   },
   info: {
     icon: AlertCircle,
-    iconColor: 'text-blue-500',
-    bgColor: 'bg-blue-50',
-    borderColor: 'border-blue-200',
-    titleColor: 'text-blue-900',
-    messageColor: 'text-blue-700',
+    iconColor: 'text-[#C8102E]',
+    bgColor: 'bg-[#F5E6E8]',
+    borderColor: 'border-[#C8102E]/30',
+    titleColor: 'text-[#A00D24]',
+    messageColor: 'text-[#C8102E]',
     defaultTitle: 'Information',
     defaultMessage: 'No information available at this time.',
   },
@@ -112,7 +112,7 @@ export function ErrorState({
           {onRetry && (
             <Button
               onClick={onRetry}
-              className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg"
+              className="bg-[#C8102E] hover:bg-[#A00D24] shadow-md hover:shadow-lg"
             >
               <RefreshCw className="h-4 w-4 mr-2" />
               Try Again

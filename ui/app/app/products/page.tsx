@@ -141,7 +141,7 @@ export default function ProductsPage() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#C8102E] mx-auto mb-4"></div>
           <p className="text-gray-600">Loading products...</p>
         </div>
       </div>
@@ -154,7 +154,7 @@ export default function ProductsPage() {
 
   return (
     <AppLayout>
-      <div className="p-6 bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-50/30 min-h-screen">
+      <div className="p-6 bg-gradient-to-br from-white via-white to-rose-100 min-h-screen">
         {/* Header */}
         <div className="mb-8">
           <div className="flex justify-between items-center">
@@ -163,7 +163,7 @@ export default function ProductsPage() {
               <p className="text-lg text-gray-600">Manage your data products and pipelines</p>
             </div>
             <Link href="/app/products/new">
-              <Button className="flex items-center bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg transition-all">
+              <Button className="flex items-center bg-[#C8102E] hover:bg-[#A00D24] shadow-md hover:shadow-lg transition-all">
                 <Plus className="h-4 w-4 mr-2" />
                 New Product
               </Button>
@@ -181,13 +181,13 @@ export default function ProductsPage() {
           />
         ) : products.length === 0 ? (
           <div className="text-center py-16">
-            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-full w-24 h-24 flex items-center justify-center mx-auto mb-6">
-              <Package className="h-12 w-12 text-blue-600" />
+            <div className="bg-[#F5E6E8] rounded-full w-24 h-24 flex items-center justify-center mx-auto mb-6">
+              <Package className="h-12 w-12 text-[#C8102E]" />
             </div>
             <h3 className="text-2xl font-semibold text-gray-900 mb-2">No products yet</h3>
             <p className="text-gray-600 mb-8 max-w-md mx-auto">Get started by creating your first data product to begin processing and analyzing your data.</p>
             <Link href="/app/products/new">
-              <Button className="flex items-center mx-auto bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg">
+              <Button className="flex items-center mx-auto bg-[#C8102E] hover:bg-[#A00D24] shadow-md hover:shadow-lg">
                 <Plus className="h-4 w-4 mr-2" />
                 Create Product
               </Button>
@@ -196,17 +196,17 @@ export default function ProductsPage() {
         ) : (
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {products.map((product) => (
-              <div key={product.id} className="bg-white rounded-xl shadow-md border-2 border-gray-100 p-6 hover:shadow-xl hover:border-blue-300 transition-all duration-200 hover:-translate-y-1 group">
+              <div key={product.id} className="bg-white rounded-xl shadow-md border-2 border-gray-100 p-6 hover:shadow-xl hover:border-[#C8102E] transition-all duration-200 hover:-translate-y-1 group">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-3">
-                      <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl p-2.5 shadow-sm group-hover:scale-110 transition-transform">
+                      <div className="bg-[#C8102E] rounded-xl p-2.5 shadow-sm group-hover:scale-110 transition-transform">
                         <Package className="h-5 w-5 text-white" />
                       </div>
-                      <h3 className="text-lg font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
+                      <h3 className="text-lg font-semibold text-gray-900 group-hover:text-[#C8102E] transition-colors">
                         <Link 
                           href={`/app/products/${product.id}`}
-                          className="hover:text-blue-600 transition-colors"
+                          className="hover:text-[#C8102E] transition-colors"
                         >
                           {product.name}
                         </Link>
@@ -237,7 +237,7 @@ export default function ProductsPage() {
                       <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border-2 border-gray-100 z-20 overflow-hidden">
                         <div className="py-1">
                           <button
-                            className="flex items-center w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                            className="flex items-center w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-[#F5E6E8] hover:text-[#C8102E] transition-colors"
                             onClick={() => {
                               setOpenDropdown(null)
                               router.push(`/app/products/${product.id}/edit`)
@@ -260,12 +260,12 @@ export default function ProductsPage() {
                 </div>
                 <div className="mt-6 pt-4 border-t border-gray-100 flex gap-2">
                   <Link href={`/app/products/${product.id}`} className="flex-1">
-                    <Button variant="outline" size="sm" className="w-full border-2 hover:border-blue-300 hover:bg-blue-50 transition-all">
+                    <Button variant="outline" size="sm" className="w-full border-2 hover:border-[#C8102E] hover:bg-[#F5E6E8] transition-all">
                       View Details
                     </Button>
                   </Link>
                   <Link href={`/app/products/${product.id}/datasources/new`} className="flex-1">
-                    <Button size="sm" className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-sm hover:shadow-md transition-all">
+                    <Button size="sm" className="w-full bg-[#C8102E] hover:bg-[#A00D24] shadow-sm hover:shadow-md transition-all">
                       Add Data Source
                     </Button>
                   </Link>

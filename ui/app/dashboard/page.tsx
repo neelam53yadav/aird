@@ -178,7 +178,7 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <AppLayout>
-        <div className="p-6 bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-50/30 min-h-screen">
+        <div className="p-6 bg-gradient-to-br from-white via-white to-rose-100 min-h-screen">
           <div className="mb-8">
             <div className="h-10 bg-gray-200 rounded-xl w-1/4 mb-2 animate-pulse"></div>
             <div className="h-6 bg-gray-200 rounded w-1/3 animate-pulse"></div>
@@ -200,7 +200,7 @@ export default function DashboardPage() {
 
   return (
     <AppLayout>
-      <div className="p-6 bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-50/30 min-h-screen">
+      <div className="p-6 bg-gradient-to-br from-white via-white to-rose-100 min-h-screen">
         {/* Welcome Section */}
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-gray-900 mb-2 tracking-tight">Dashboard</h1>
@@ -216,15 +216,15 @@ export default function DashboardPage() {
             <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5 cursor-pointer group">
               <div className="flex items-center justify-between">
                 <div className="flex items-center">
-                  <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl p-3 mr-4 shadow-sm group-hover:scale-110 transition-transform">
+                  <div className="bg-[#C8102E] rounded-xl p-3 mr-4 shadow-sm group-hover:scale-110 transition-transform">
                     <Package className="h-6 w-6 text-white" />
                   </div>
                   <div>
                     <p className="text-sm font-medium text-gray-600 mb-1">Total Products</p>
-                    <p className="text-3xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors">{stats.totalProducts}</p>
+                    <p className="text-3xl font-bold text-gray-900 group-hover:text-[#C8102E] transition-colors">{stats.totalProducts}</p>
                   </div>
                 </div>
-                <ArrowUpRight className="h-5 w-5 text-gray-400 group-hover:text-blue-600 transition-colors" />
+                <ArrowUpRight className="h-5 w-5 text-gray-400 group-hover:text-[#C8102E] transition-colors" />
               </div>
             </div>
           </Link>
@@ -270,15 +270,15 @@ export default function DashboardPage() {
             <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5 cursor-pointer group">
               <div className="flex items-center justify-between">
                 <div className="flex items-center">
-                  <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl p-3 mr-4 shadow-sm group-hover:scale-110 transition-transform">
+                  <div className="bg-[#C8102E] rounded-xl p-3 mr-4 shadow-sm group-hover:scale-110 transition-transform">
                     <Activity className="h-6 w-6 text-white" />
                   </div>
                   <div>
                     <p className="text-sm font-medium text-gray-600 mb-1">Running</p>
-                    <p className="text-3xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors">{stats.runningProducts}</p>
+                    <p className="text-3xl font-bold text-gray-900 group-hover:text-[#C8102E] transition-colors">{stats.runningProducts}</p>
                   </div>
                 </div>
-                <ArrowUpRight className="h-5 w-5 text-gray-400 group-hover:text-blue-600 transition-colors" />
+                <ArrowUpRight className="h-5 w-5 text-gray-400 group-hover:text-[#C8102E] transition-colors" />
               </div>
             </div>
           </Link>
@@ -299,12 +299,12 @@ export default function DashboardPage() {
                 </div>
               </Link>
               <Link href="/app/products?status=running" className="block">
-                <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-100 hover:bg-blue-100 hover:border-blue-200 transition-all cursor-pointer group">
+                <div className="flex items-center justify-between p-3 bg-[#F5E6E8] rounded-lg border border-[#C8102E]/20 hover:bg-[#F5E6E8] hover:border-[#C8102E]/40 transition-all cursor-pointer group">
                   <div className="flex items-center">
-                    <div className="w-4 h-4 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full mr-3 shadow-sm animate-pulse"></div>
-                    <span className="text-sm font-medium text-gray-700 group-hover:text-blue-700">Running</span>
+                    <div className="w-4 h-4 bg-[#C8102E] rounded-full mr-3 shadow-sm animate-pulse"></div>
+                    <span className="text-sm font-medium text-gray-700 group-hover:text-[#C8102E]">Running</span>
                   </div>
-                  <span className="text-lg font-bold text-gray-900 group-hover:text-blue-700">{stats.runningProducts}</span>
+                  <span className="text-lg font-bold text-gray-900 group-hover:text-[#C8102E]">{stats.runningProducts}</span>
                 </div>
               </Link>
               <Link href="/app/products?status=draft" className="block">
@@ -332,19 +332,19 @@ export default function DashboardPage() {
             <h3 className="text-lg font-semibold text-gray-900 mb-6">Quick Actions</h3>
             <div className="space-y-3">
               <Link href="/app/products/new" data-tour="create-product">
-                <Button className="w-full justify-start bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg transition-all">
+                <Button className="w-full justify-start bg-[#C8102E] hover:bg-[#A00D24] shadow-md hover:shadow-lg transition-all">
                   <Plus className="h-4 w-4 mr-2" />
                   Create New Product
                 </Button>
               </Link>
               <Link href="/app/products">
-                <Button variant="outline" className="w-full justify-start border-2 hover:border-blue-300 hover:bg-blue-50 transition-all">
+                <Button variant="outline" className="w-full justify-start border-2 hover:border-[#C8102E] hover:bg-[#F5E6E8] transition-all">
                   <Package className="h-4 w-4 mr-2" />
                   Manage Products
                 </Button>
               </Link>
               <Link href="/app/datasources">
-                <Button variant="outline" className="w-full justify-start border-2 hover:border-blue-300 hover:bg-blue-50 transition-all">
+                <Button variant="outline" className="w-full justify-start border-2 hover:border-[#C8102E] hover:bg-[#F5E6E8] transition-all">
                   <Database className="h-4 w-4 mr-2" />
                   Manage Data Sources
                 </Button>
@@ -359,7 +359,7 @@ export default function DashboardPage() {
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold text-gray-900">Recent Products</h3>
               <Link href="/app/products">
-                <Button variant="outline" size="sm" className="border-2 hover:border-blue-300 hover:bg-blue-50">
+                <Button variant="outline" size="sm" className="border-2 hover:border-[#C8102E] hover:bg-[#F5E6E8]">
                   View All
                 </Button>
               </Link>
@@ -368,13 +368,13 @@ export default function DashboardPage() {
           <div className="p-6">
             {products.length === 0 ? (
               <div className="text-center py-12">
-                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4">
-                  <Package className="h-10 w-10 text-blue-600" />
+                <div className="bg-[#F5E6E8] rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4 border-2 border-[#C8102E]">
+                  <Package className="h-10 w-10 text-[#C8102E]" />
                 </div>
                 <h4 className="text-xl font-semibold text-gray-900 mb-2">No products yet</h4>
                 <p className="text-gray-600 mb-6 max-w-md mx-auto">Get started by creating your first data product to begin processing and analyzing your data.</p>
                 <Link href="/app/products/new">
-                  <Button className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg">
+                  <Button className="bg-[#C8102E] hover:bg-[#A00D24] shadow-md hover:shadow-lg">
                     <Plus className="h-4 w-4 mr-2" />
                     Create Product
                   </Button>
@@ -389,13 +389,13 @@ export default function DashboardPage() {
                       href={`/app/products/${product.id}`}
                       className="block group"
                     >
-                      <div className="flex items-center justify-between p-4 border-2 border-gray-200 rounded-xl hover:border-blue-300 hover:bg-blue-50/50 transition-all duration-200 cursor-pointer group-hover:shadow-md">
+                      <div className="flex items-center justify-between p-4 border-2 border-gray-200 rounded-xl hover:border-[#C8102E] hover:bg-[#F5E6E8]/50 transition-all duration-200 cursor-pointer group-hover:shadow-md">
                         <div className="flex items-center">
-                          <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl p-2.5 mr-4 shadow-sm group-hover:scale-110 transition-transform">
+                          <div className="bg-[#C8102E] rounded-xl p-2.5 mr-4 shadow-sm group-hover:scale-110 transition-transform">
                             <Package className="h-5 w-5 text-white" />
                           </div>
                           <div>
-                            <h4 className="font-semibold text-gray-900 group-hover:text-blue-600 transition-colors mb-1">{product.name}</h4>
+                            <h4 className="font-semibold text-gray-900 group-hover:text-[#C8102E] transition-colors mb-1">{product.name}</h4>
                             <p className="text-sm text-gray-500">
                               Created {new Date(product.created_at).toLocaleDateString()}
                             </p>

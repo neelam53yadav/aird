@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { CheckCircle, XCircle, AlertTriangle, Loader2, AlertCircle, Lightbulb, BookOpen, TrendingUp, Sparkles } from 'lucide-react'
+import { CheckCircle, XCircle, AlertTriangle, Loader2, AlertCircle, Lightbulb, BookOpen, TrendingUp, Sparkles, Shield, FileText, Layers, Database, Search, ChevronDown, ChevronUp, Info } from 'lucide-react'
 import { apiClient, ProductInsightsResponse } from '@/lib/api-client'
 import { useToast } from './ui/toast'
 import { Button } from '@/components/ui/button'
@@ -26,12 +26,22 @@ const METRIC_NAMES: Record<string, string> = {
   Diversity: 'Diversity',
   Audience_Accessibility: 'Audience Accessibility',
   KnowledgeBase_Ready: 'Knowledge Base Ready',
-  // New AI-Ready metrics
+  // AI-Ready metrics
   Chunk_Coherence: 'Chunk Coherence',
   Noise_Free_Score: 'Noise-Free Score',
   Chunk_Boundary_Quality: 'Chunk Boundary Quality',
   Avg_Chunk_Coherence: 'Avg Chunk Coherence',
   Avg_Noise_Free_Score: 'Avg Noise-Free Score',
+  // Vector metrics
+  Embedding_Dimension_Consistency: 'Embedding Dimension Consistency',
+  Embedding_Success_Rate: 'Embedding Success Rate',
+  Vector_Quality_Score: 'Vector Quality Score',
+  Embedding_Model_Health: 'Embedding Model Health',
+  Semantic_Search_Readiness: 'Semantic Search Readiness',
+  // RAG metrics
+  Retrieval_Recall_At_K: 'Retrieval Recall@K',
+  Average_Precision_At_K: 'Average Precision@K',
+  Query_Coverage: 'Query Coverage',
 }
 
 const METRIC_DESCRIPTIONS: Record<string, string> = {
@@ -48,12 +58,66 @@ const METRIC_DESCRIPTIONS: Record<string, string> = {
   Diversity: 'Content diversity/variety',
   Audience_Accessibility: 'How accessible content is to audience',
   KnowledgeBase_Ready: 'Ready for knowledge base use',
-  // New AI-Ready metric descriptions
+  // AI-Ready metric descriptions
   Chunk_Coherence: 'Semantic cohesion within chunks',
   Noise_Free_Score: 'Percentage of content free from boilerplate/navigation noise',
   Chunk_Boundary_Quality: 'Quality of chunk boundaries (fewer mid-sentence breaks)',
   Avg_Chunk_Coherence: 'Average coherence across all chunks',
   Avg_Noise_Free_Score: 'Average noise-free score across all chunks',
+  // Vector metric descriptions
+  Embedding_Dimension_Consistency: 'Percentage of vectors with expected dimension',
+  Embedding_Success_Rate: 'Percentage of chunks successfully embedded and stored',
+  Vector_Quality_Score: 'Composite score for valid vectors (no NaN/Inf), non-zero vectors, and optimal norm distribution',
+  Embedding_Model_Health: 'Health score of the embedding model based on output consistency',
+  Semantic_Search_Readiness: 'Composite score for RAG readiness (dimension consistency + vector quality + model health + success rate)',
+  // RAG metric descriptions
+  Retrieval_Recall_At_K: 'Percentage of relevant documents retrieved in top K results',
+  Average_Precision_At_K: 'Average precision across top K retrieved results',
+  Query_Coverage: 'Percentage of queries with at least one relevant result retrieved',
+}
+
+// Metric categories for professional organization
+const METRIC_CATEGORIES = {
+  governance: {
+    name: 'Governance & Compliance',
+    icon: Shield,
+    metrics: ['Secure', 'Completeness', 'Accuracy', 'Metadata_Presence'],
+    headerBg: 'bg-[#F5E6E8]',
+    headerBorder: 'border-[#C8102E]/30',
+    iconClass: 'text-[#C8102E]',
+  },
+  content: {
+    name: 'Content Quality',
+    icon: FileText,
+    metrics: ['Quality', 'Context_Quality', 'Audience_Intentionality', 'Audience_Accessibility', 'Diversity', 'Timeliness', 'KnowledgeBase_Ready', 'Token_Count'],
+    headerBg: 'bg-[#F5E6E8]',
+    headerBorder: 'border-[#C8102E]/30',
+    iconClass: 'text-[#C8102E]',
+  },
+  chunking: {
+    name: 'Chunking & Structure',
+    icon: Layers,
+    metrics: ['Chunk_Coherence', 'Noise_Free_Score', 'Chunk_Boundary_Quality', 'Avg_Chunk_Coherence', 'Avg_Noise_Free_Score'],
+    headerBg: 'bg-[#F5E6E8]',
+    headerBorder: 'border-[#C8102E]/30',
+    iconClass: 'text-[#C8102E]',
+  },
+  vector: {
+    name: 'Vector Metrics',
+    icon: Database,
+    metrics: ['Embedding_Dimension_Consistency', 'Embedding_Success_Rate', 'Vector_Quality_Score', 'Embedding_Model_Health', 'Semantic_Search_Readiness'],
+    headerBg: 'bg-[#F5E6E8]',
+    headerBorder: 'border-[#C8102E]/30',
+    iconClass: 'text-[#C8102E]',
+  },
+  rag: {
+    name: 'RAG Performance',
+    icon: Search,
+    metrics: ['Retrieval_Recall_At_K', 'Average_Precision_At_K', 'Query_Coverage'],
+    headerBg: 'bg-[#F5E6E8]',
+    headerBorder: 'border-[#C8102E]/30',
+    iconClass: 'text-[#C8102E]',
+  },
 }
 
 export function AITrustScoreDisplay({ productId, showTitle = true }: AITrustScoreDisplayProps) {
@@ -62,6 +126,15 @@ export function AITrustScoreDisplay({ productId, showTitle = true }: AITrustScor
   const [error, setError] = useState<string | null>(null)
   const [applyingRecommendation, setApplyingRecommendation] = useState<string | null>(null)
   const { addToast } = useToast()
+  
+  // State for collapsible categories
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
+    governance: true,
+    content: true,
+    chunking: true,
+    vector: true,
+    rag: true,
+  })
 
   useEffect(() => {
     loadInsights()
@@ -242,6 +315,47 @@ export function AITrustScoreDisplay({ productId, showTitle = true }: AITrustScor
     return normalized / 100  // Convert to 0-1 for progress bar
   }
 
+  // Check if metric should show "Not Evaluated" for vector metrics
+  const isNotEvaluated = (key: string, value: number): boolean => {
+    const vectorMetrics = ['Embedding_Dimension_Consistency', 'Embedding_Success_Rate', 'Vector_Quality_Score', 'Embedding_Model_Health', 'Semantic_Search_Readiness']
+    return vectorMetrics.includes(key) && (value === 0 || value === null || value === undefined)
+  }
+
+  const toggleCategory = (category: string) => {
+    setExpandedCategories(prev => ({
+      ...prev,
+      [category]: !prev[category],
+    }))
+  }
+
+  // Organize metrics by category
+  const organizeMetricsByCategory = (metrics: [string, any][]) => {
+    const categorized: Record<string, [string, any][]> = {
+      governance: [],
+      content: [],
+      chunking: [],
+      vector: [],
+      rag: [],
+      other: [],
+    }
+
+    metrics.forEach(([key, value]) => {
+      let found = false
+      for (const [catKey, catConfig] of Object.entries(METRIC_CATEGORIES)) {
+        if (catConfig.metrics.includes(key)) {
+          categorized[catKey].push([key, value])
+          found = true
+          break
+        }
+      }
+      if (!found) {
+        categorized.other.push([key, value])
+      }
+    })
+
+    return categorized
+  }
+
   if (loading) {
     return (
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -282,118 +396,210 @@ export function AITrustScoreDisplay({ productId, showTitle = true }: AITrustScor
   }
 
   // Get all metrics except AI_Trust_Score, GPT_Confidence, and page for detailed breakdown
-  const otherMetrics = Object.entries(fingerprint || {})
+  const allMetrics = Object.entries(fingerprint || {})
     .filter(([key]) => key !== 'AI_Trust_Score' && key !== 'GPT_Confidence' && key !== 'page')
-    .sort(([a], [b]) => {
-      // Priority order for important metrics
-      const order = ['Secure', 'Metadata_Presence', 'KnowledgeBase_Ready', 'Quality', 'Completeness']
-      const aIdx = order.indexOf(a)
-      const bIdx = order.indexOf(b)
-      if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx
-      if (aIdx !== -1) return -1
-      if (bIdx !== -1) return 1
-      return a.localeCompare(b)
-    })
+  
+  // Organize metrics by category
+  const categorizedMetrics = organizeMetricsByCategory(allMetrics)
 
   return (
     <div className="space-y-6">
       {showTitle && <h2 className="text-lg font-semibold text-gray-900">AI Trust Score</h2>}
 
-      {/* Overall AI Trust Score */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <div className={`rounded-lg p-6 ${getScoreColor(trustScore)}`}>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium mb-1">Overall AI Trust Score</p>
-              <div className="flex items-baseline gap-2">
-                <span className="text-4xl font-bold">{(trustScore * 100).toFixed(1)}%</span>
-                <span className="text-sm opacity-75">/ 100%</span>
+      {/* Compact header row (Score + Policy) */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Score */}
+          <div className="rounded-lg border border-[#C8102E]/20 bg-[#F5E6E8]/50 p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 mb-1">
+                  Overall AI Trust Score
+                </p>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-3xl font-bold text-gray-900">{(trustScore * 100).toFixed(1)}%</span>
+                  <span className="text-xs text-gray-500">/ 100%</span>
+                </div>
+                <p className="text-xs text-gray-600 mt-1">
+                  {trustScore >= 0.8
+                    ? 'Excellent — Ready for AI use'
+                    : trustScore >= 0.6
+                    ? 'Good — Minor improvements recommended'
+                    : 'Needs improvement — Significant enhancements required'}
+                </p>
               </div>
-              <p className="text-xs mt-2 opacity-75">
-                {trustScore >= 0.8
-                  ? 'Excellent - Ready for AI use'
-                  : trustScore >= 0.6
-                  ? 'Good - Minor improvements recommended'
-                  : 'Needs Improvement - Significant enhancements required'}
-              </p>
+              <div className="flex-shrink-0 opacity-80">{getScoreIcon(trustScore)}</div>
             </div>
-            <div className="flex-shrink-0">{getScoreIcon(trustScore)}</div>
           </div>
-        </div>
-      </div>
 
-      {/* Policy Status Banner */}
-      <div className={`rounded-lg border p-4 ${getPolicyStatusColor(policy.status || 'unknown')}`}>
-        <div className="flex items-start gap-3">
-          {getPolicyStatusIcon(policy.status || 'unknown')}
-          <div className="flex-1">
-            <h3 className="font-medium mb-1">
-              Policy Evaluation: {policy.status ? (policy.status.charAt(0).toUpperCase() + policy.status.slice(1)) : 'Unknown'}
-            </h3>
-            {policy.violations && policy.violations.length > 0 && (
-              <div className="mt-2">
-                <p className="text-sm font-medium mb-1">Violations:</p>
-                <ul className="list-disc list-inside text-sm space-y-1">
-                  {(policy.violations || []).map((violation: string, idx: number) => (
-                    <li key={idx}>{violation}</li>
-                  ))}
-                </ul>
-              </div>
+          {/* Policy */}
+          <div className="rounded-lg border border-[#C8102E]/10 bg-white p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 mb-2">
+              Policy Evaluation
+            </p>
+            <div className="flex items-center gap-2">
+              {getPolicyStatusIcon(policy.status || 'unknown')}
+              <span className="text-sm font-semibold text-gray-900">
+                {policy.status ? (policy.status.charAt(0).toUpperCase() + policy.status.slice(1)) : 'Unknown'}
+              </span>
+            </div>
+            {(policy.violations?.length ?? 0) > 0 && (
+              <p className="mt-2 text-xs text-gray-600">
+                {policy.violations.length} violation(s) detected
+              </p>
             )}
-            {policy.warnings && policy.warnings.length > 0 && (
-              <div className="mt-2">
-                <p className="text-sm font-medium mb-1">Warnings:</p>
-                <ul className="list-disc list-inside text-sm space-y-1">
-                  {(policy.warnings || []).map((warning: string, idx: number) => (
-                    <li key={idx}>{warning}</li>
-                  ))}
-                </ul>
-              </div>
+            {(policy.warnings?.length ?? 0) > 0 && (
+              <p className="mt-1 text-xs text-gray-600">
+                {policy.warnings.length} warning(s)
+              </p>
             )}
           </div>
         </div>
       </div>
 
-      {/* Detailed Metrics Breakdown */}
+      {/* Detailed Metrics Breakdown - Categorized */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <h3 className="text-sm font-medium text-gray-900 mb-4 flex items-center gap-2">
-          <BookOpen className="h-5 w-5" />
+        <h3 className="text-lg font-semibold text-gray-900 mb-6 flex items-center gap-2">
+          <BookOpen className="h-5 w-5 text-[#C8102E]" />
           Detailed Metrics
         </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {otherMetrics.map(([key, value]) => {
-            const displayName = METRIC_NAMES[key] || key.replace(/_/g, ' ')
-            const description = METRIC_DESCRIPTIONS[key] || ''
-            const numericValue = typeof value === 'number' ? value : parseFloat(value as any) || 0
+        
+        <div className="space-y-6">
+          {Object.entries(METRIC_CATEGORIES).map(([catKey, catConfig]) => {
+            const metrics = categorizedMetrics[catKey]
+            if (metrics.length === 0) return null
             
-            // Normalize value for color determination and progress bar (0-1 scale)
-            const normalizedForColor = getNormalizedValueForProgress(key, numericValue)
-            const scoreColor = normalizedForColor >= 0.8 ? 'text-green-600' : normalizedForColor >= 0.6 ? 'text-yellow-600' : 'text-red-600'
+            const Icon = catConfig.icon
+            const isExpanded = expandedCategories[catKey]
             
             return (
-              <div key={key} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex-1">
-                    <h4 className="text-sm font-medium text-gray-900">{displayName}</h4>
-                    {description && (
-                      <p className="text-xs text-gray-500 mt-1">{description}</p>
-                    )}
+              <div key={catKey} className={`border-2 rounded-xl overflow-hidden ${catConfig.headerBorder}`}>
+                <button
+                  onClick={() => toggleCategory(catKey)}
+                  className={`w-full px-6 py-4 flex items-center justify-between ${catConfig.headerBg} border-b border-[#C8102E]/20 hover:bg-[#F5E6E8]/80 transition-colors`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Icon className={`h-5 w-5 ${catConfig.iconClass}`} />
+                    <h4 className="text-lg font-semibold text-gray-900">{catConfig.name}</h4>
+                    <span className="text-sm text-[#C8102E] font-medium">({metrics.length})</span>
                   </div>
-                  <div className={`text-lg font-semibold ${scoreColor} ml-2`}>
-                    {formatMetricValue(key, numericValue)}
+                  {isExpanded ? (
+                    <ChevronUp className="h-5 w-5 text-gray-600" />
+                  ) : (
+                    <ChevronDown className="h-5 w-5 text-gray-600" />
+                  )}
+                </button>
+                
+                {isExpanded && (
+                  <div className="p-6 bg-white">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {metrics.map(([key, value]) => {
+                        const displayName = METRIC_NAMES[key] || key.replace(/_/g, ' ')
+                        const description = METRIC_DESCRIPTIONS[key] || ''
+                        const numericValue = typeof value === 'number' ? value : parseFloat(value as any) || 0
+                        const notEvaluated = isNotEvaluated(key, numericValue)
+                        
+                        // Normalize value for color determination and progress bar (0-1 scale)
+                        const normalizedForColor = getNormalizedValueForProgress(key, numericValue)
+                        const scoreColor = notEvaluated 
+                          ? 'text-gray-500' 
+                          : normalizedForColor >= 0.8 
+                          ? 'text-green-600' 
+                          : normalizedForColor >= 0.6 
+                          ? 'text-yellow-600' 
+                          : 'text-red-600'
+                        
+                        return (
+                          <div key={key} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors relative group">
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                  <h4 className="text-sm font-medium text-gray-900">{displayName}</h4>
+                                  {description && (
+                                    <div className="relative">
+                                      <Info className="h-4 w-4 text-gray-400 cursor-help" />
+                                      <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-64 p-2 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                                        {description}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                                {description && (
+                                  <p className="text-xs text-gray-500 mt-1">{description}</p>
+                                )}
+                              </div>
+                              <div className={`text-lg font-semibold ${scoreColor} ml-2`}>
+                                {notEvaluated ? 'Not Evaluated' : formatMetricValue(key, numericValue)}
+                              </div>
+                            </div>
+                            {!notEvaluated && (
+                              <div className="w-full bg-gray-200 rounded-full h-2">
+                                <div
+                                  className={`h-2 rounded-full transition-all ${
+                                    normalizedForColor >= 0.8 ? 'bg-green-500' : normalizedForColor >= 0.6 ? 'bg-yellow-500' : 'bg-red-500'
+                                  }`}
+                                  style={{ width: `${Math.min(normalizedForColor * 100, 100)}%` }}
+                                />
+                              </div>
+                            )}
+                            {notEvaluated && (
+                              <div className="w-full bg-gray-100 rounded-full h-2">
+                                <div className="h-2 rounded-full bg-gray-300" style={{ width: '100%' }} />
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
                   </div>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div
-                    className={`h-2 rounded-full ${
-                      normalizedForColor >= 0.8 ? 'bg-green-500' : normalizedForColor >= 0.6 ? 'bg-yellow-500' : 'bg-red-500'
-                    }`}
-                    style={{ width: `${Math.min(normalizedForColor * 100, 100)}%` }}
-                  />
-                </div>
+                )}
               </div>
             )
           })}
+          
+          {/* Other uncategorized metrics */}
+          {categorizedMetrics.other.length > 0 && (
+            <div className="border-2 border-gray-200 rounded-xl overflow-hidden">
+              <div className="w-full px-6 py-4 bg-gray-50 flex items-center justify-between">
+                <h4 className="text-lg font-semibold text-gray-900">Other Metrics</h4>
+              </div>
+              <div className="p-6 bg-white">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {categorizedMetrics.other.map(([key, value]) => {
+                    const displayName = METRIC_NAMES[key] || key.replace(/_/g, ' ')
+                    const description = METRIC_DESCRIPTIONS[key] || ''
+                    const numericValue = typeof value === 'number' ? value : parseFloat(value as any) || 0
+                    const normalizedForColor = getNormalizedValueForProgress(key, numericValue)
+                    const scoreColor = normalizedForColor >= 0.8 ? 'text-green-600' : normalizedForColor >= 0.6 ? 'text-yellow-600' : 'text-red-600'
+                    
+                    return (
+                      <div key={key} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex-1">
+                            <h4 className="text-sm font-medium text-gray-900">{displayName}</h4>
+                            {description && (
+                              <p className="text-xs text-gray-500 mt-1">{description}</p>
+                            )}
+                          </div>
+                          <div className={`text-lg font-semibold ${scoreColor} ml-2`}>
+                            {formatMetricValue(key, numericValue)}
+                          </div>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div
+                            className={`h-2 rounded-full ${
+                              normalizedForColor >= 0.8 ? 'bg-green-500' : normalizedForColor >= 0.6 ? 'bg-yellow-500' : 'bg-red-500'
+                            }`}
+                            style={{ width: `${Math.min(normalizedForColor * 100, 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -419,7 +625,7 @@ export function AITrustScoreDisplay({ productId, showTitle = true }: AITrustScor
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1">
-                            <Sparkles className="h-4 w-4 text-blue-600" />
+                            <Sparkles className="h-4 w-4 text-[#C8102E]" />
                             <p className="text-sm text-gray-700">{rec.message}</p>
                           </div>
                         </div>

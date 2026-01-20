@@ -58,7 +58,7 @@ export default function HomePage() {
       ],
       icon: Shield,
       color: "blue",
-      gradient: "from-blue-500 to-indigo-600"
+      gradient: "from-[#C8102E] to-[#A00D24]"
     },
     {
       title: "Readiness Fingerprint",
@@ -89,47 +89,42 @@ export default function HomePage() {
   ]
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex flex-col">
+    <div className="min-h-screen bg-gradient-to-br from-white via-white to-rose-100 flex flex-col">
       {/* Hero Section */}
       <div className="container mx-auto px-4 py-20">
         <div className="text-center max-w-5xl mx-auto">
-          <div className="inline-flex items-center space-x-2 bg-blue-100 text-blue-700 px-4 py-2 rounded-full text-sm font-semibold mb-6">
+          <div className="inline-flex items-center space-x-2 bg-[#F5E6E8] text-[#C8102E] px-4 py-2 rounded-full text-sm font-semibold mb-6">
             <Zap className="h-4 w-4" />
             <span>Enterprise AI Data Platform</span>
           </div>
           
-          <h1 className="text-6xl md:text-7xl font-bold mb-4 leading-tight">
-            <span className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent">
-              PrimeData
-            </span>
-            <span className="block text-xl md:text-2xl text-gray-500 font-normal mt-5 tracking-normal">
-              Making Data AI-Ready
-            </span>
+          <h1 className="text-6xl md:text-7xl font-extrabold mb-4 leading-tight text-white bg-[#C8102E] px-8 py-6 rounded-2xl shadow-xl">
+            A data platform that puts AI readiness above all
           </h1>
           
-          <p className="text-base md:text-lg text-gray-600 mb-4 leading-relaxed max-w-3xl mx-auto">
+          <p className="text-base md:text-lg text-gray-700 mb-4 leading-relaxed max-w-3xl mx-auto mt-6">
             Transform your data into{' '}
-            <span className="font-semibold text-gray-800">production-ready AI assets</span>
+            <span className="font-semibold text-gray-900">production-ready AI assets</span>
             {' '}with enterprise-grade{' '}
-            <span className="font-semibold text-gray-800">ingestion, processing, validation, and vectorization</span>.
+            <span className="font-semibold text-gray-900">ingestion, processing, validation, and vectorization</span>.
           </p>
           
           <div className="flex flex-wrap items-center justify-center gap-2 mb-12">
             {[
-              { text: 'Ingest', gradient: 'from-blue-500 to-blue-600' },
-              { text: 'Clean', gradient: 'from-green-500 to-green-600' },
-              { text: 'Chunk', gradient: 'from-purple-500 to-purple-600' },
-              { text: 'Embed', gradient: 'from-pink-500 to-pink-600' },
-              { text: 'Index', gradient: 'from-indigo-500 to-indigo-600' },
-              { text: 'Test', gradient: 'from-cyan-500 to-cyan-600' },
-              { text: 'Export', gradient: 'from-orange-500 to-orange-600' }
+              { text: 'Ingest', gradient: 'from-[#C8102E] to-[#A00D24]' },
+              { text: 'Clean', gradient: 'from-[#C8102E] to-[#A00D24]' },
+              { text: 'Chunk', gradient: 'from-[#C8102E] to-[#A00D24]' },
+              { text: 'Embed', gradient: 'from-[#C8102E] to-[#A00D24]' },
+              { text: 'Index', gradient: 'from-[#C8102E] to-[#A00D24]' },
+              { text: 'Test', gradient: 'from-[#C8102E] to-[#A00D24]' },
+              { text: 'Export', gradient: 'from-[#C8102E] to-[#A00D24]' }
             ].map((item, index, array) => (
               <span key={item.text} className="flex items-center">
                 <span className={`px-4 py-1.5 rounded-full text-sm font-semibold bg-gradient-to-r ${item.gradient} text-white shadow-sm hover:shadow-md transition-all duration-200 hover:scale-105`}>
                   {item.text}
                 </span>
                 {index < array.length - 1 && (
-                  <span className="mx-2 text-gray-300 font-light text-lg">|</span>
+                  <span className="mx-2 text-gray-400 font-light text-lg">|</span>
                 )}
               </span>
             ))}
@@ -140,7 +135,7 @@ export default function HomePage() {
             <button
               data-testid="cta-get-started"
               onClick={handleEmailSignIn}
-              className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold py-4 px-12 rounded-xl shadow-lg transition-all duration-200 hover:shadow-xl hover:scale-105 text-lg"
+              className="bg-white text-[#C8102E] hover:bg-gray-100 font-semibold py-4 px-12 rounded-xl shadow-lg transition-all duration-200 hover:shadow-xl hover:scale-105 text-lg"
             >
               Get Started
             </button>
@@ -157,7 +152,7 @@ export default function HomePage() {
                   key={index}
                   onClick={() => setCurrentSlide(index)}
                   className={`w-2 h-2 rounded-full transition-all ${
-                    currentSlide === index ? 'bg-blue-600 w-8' : 'bg-gray-300'
+                    currentSlide === index ? 'bg-[#C8102E] w-8' : 'bg-gray-300'
                   }`}
                   aria-label={`Go to slide ${index + 1}`}
                 />
@@ -230,8 +225,8 @@ export default function HomePage() {
 
           <div className="grid md:grid-cols-3 gap-8">
             {/* AI Trust Score */}
-            <div className="bg-white rounded-2xl p-8 shadow-lg border-2 border-blue-100 hover:border-blue-300 transition-all hover:shadow-2xl hover:-translate-y-1">
-              <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center mb-6">
+            <div className="bg-white rounded-2xl p-8 shadow-lg border-2 border-gray-200 hover:border-[#C8102E] transition-all hover:shadow-2xl hover:-translate-y-1">
+              <div className="w-16 h-16 bg-[#C8102E] rounded-2xl flex items-center justify-center mb-6">
                 <Shield className="h-8 w-8 text-white" />
               </div>
               <h3 className="text-2xl font-bold text-gray-900 mb-4">AI Trust Score</h3>
@@ -241,15 +236,15 @@ export default function HomePage() {
               </p>
               <ul className="space-y-2">
                 <li className="flex items-center text-gray-700">
-                  <CheckCircle2 className="h-5 w-5 text-blue-600 mr-2 flex-shrink-0" />
+                  <CheckCircle2 className="h-5 w-5 text-[#C8102E] mr-2 flex-shrink-0" />
                   <span>Multi-dimensional scoring</span>
                 </li>
                 <li className="flex items-center text-gray-700">
-                  <CheckCircle2 className="h-5 w-5 text-blue-600 mr-2 flex-shrink-0" />
+                  <CheckCircle2 className="h-5 w-5 text-[#C8102E] mr-2 flex-shrink-0" />
                   <span>Policy compliance validation</span>
                 </li>
                 <li className="flex items-center text-gray-700">
-                  <CheckCircle2 className="h-5 w-5 text-blue-600 mr-2 flex-shrink-0" />
+                  <CheckCircle2 className="h-5 w-5 text-[#C8102E] mr-2 flex-shrink-0" />
                   <span>Automated threshold checks</span>
                 </li>
               </ul>
@@ -314,8 +309,8 @@ export default function HomePage() {
           <div className="grid md:grid-cols-3 gap-8">
             {/* Connectors */}
             <div className="bg-white rounded-xl p-8 shadow-md border border-gray-100 hover:shadow-lg transition-shadow">
-              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-6">
-                <Link2 className="w-6 h-6 text-blue-600" />
+              <div className="w-12 h-12 bg-[#F5E6E8] rounded-lg flex items-center justify-center mb-6">
+                <Link2 className="w-6 h-6 text-[#C8102E]" />
               </div>
               <h3 className="text-xl font-semibold text-gray-900 mb-4">Universal Connectors</h3>
               <p className="text-gray-600 leading-relaxed">
@@ -338,8 +333,8 @@ export default function HomePage() {
 
             {/* Export */}
             <div className="bg-white rounded-xl p-8 shadow-md border border-gray-100 hover:shadow-lg transition-shadow">
-              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mb-6">
-                <Download className="w-6 h-6 text-purple-600" />
+              <div className="w-12 h-12 bg-[#F5E6E8] rounded-lg flex items-center justify-center mb-6">
+                <Download className="w-6 h-6 text-[#C8102E]" />
               </div>
               <h3 className="text-xl font-semibold text-gray-900 mb-4">Export & Integration</h3>
               <p className="text-gray-600 leading-relaxed">
@@ -358,7 +353,7 @@ export default function HomePage() {
             </h3>
             <div className="grid md:grid-cols-3 gap-8 mt-8">
               <div>
-                <div className="text-4xl font-bold text-blue-600 mb-2">15+</div>
+                <div className="text-4xl font-bold text-[#C8102E] mb-2">15+</div>
                 <div className="text-gray-600">Quality Dimensions</div>
               </div>
               <div>
@@ -366,7 +361,7 @@ export default function HomePage() {
                 <div className="text-gray-600">Policy Compliance</div>
               </div>
               <div>
-                <div className="text-4xl font-bold text-purple-600 mb-2">∞</div>
+                <div className="text-4xl font-bold text-[#C8102E] mb-2">∞</div>
                 <div className="text-gray-600">Data Sources</div>
               </div>
             </div>

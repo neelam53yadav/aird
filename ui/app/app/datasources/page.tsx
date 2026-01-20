@@ -72,7 +72,7 @@ export default function DataSourcesPage() {
 
   const getDataSourceTypeIcon = (type: string) => {
     switch (type) {
-      case 'web': return <Globe className="h-5 w-5 text-blue-600" />
+      case 'web': return <Globe className="h-5 w-5 text-[#C8102E]" />
       case 'db': return <Server className="h-5 w-5 text-green-600" />
       case 'confluence': return <FileText className="h-5 w-5 text-purple-600" />
       case 'sharepoint': return <Share className="h-5 w-5 text-orange-600" />
@@ -133,7 +133,7 @@ export default function DataSourcesPage() {
 
   return (
     <AppLayout>
-      <div className="p-6 bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-50/30 min-h-screen">
+      <div className="p-6 bg-gradient-to-br from-white via-white to-rose-100 min-h-screen">
         {/* Header */}
         <div className="mb-8">
           <div className="flex justify-between items-center">
@@ -144,14 +144,14 @@ export default function DataSourcesPage() {
             <div className="flex space-x-3">
               <Button 
                 variant="outline" 
-                className="border-2 hover:border-blue-300 hover:bg-blue-50"
+                className="border-2 hover:border-[#C8102E] hover:bg-[#F5E6E8]"
                 onClick={() => router.push('/app/products')}
               >
                 <Database className="h-4 w-4 mr-2" />
                 Import Data Source
               </Button>
               <Button 
-                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg"
+                className="bg-[#C8102E] hover:bg-[#A00D24] shadow-md hover:shadow-lg"
                 onClick={() => router.push('/app/products')}
               >
                 <Plus className="h-4 w-4 mr-2" />
@@ -165,7 +165,7 @@ export default function DataSourcesPage() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5">
             <div className="flex items-center">
-              <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl p-3 mr-4 shadow-sm">
+              <div className="bg-[#C8102E] rounded-xl p-3 mr-4 shadow-sm">
                 <Database className="h-6 w-6 text-white" />
               </div>
               <div>
@@ -226,13 +226,13 @@ export default function DataSourcesPage() {
           <div className="p-6">
             {dataSources.length === 0 ? (
               <div className="text-center py-12">
-                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4">
-                  <Database className="h-10 w-10 text-blue-600" />
+                <div className="bg-[#F5E6E8] border-2 border-[#C8102E] rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4">
+                  <Database className="h-10 w-10 text-[#C8102E]" />
                 </div>
                 <h4 className="text-xl font-semibold text-gray-900 mb-2">No data sources yet</h4>
                 <p className="text-gray-600 mb-6 max-w-md mx-auto">Get started by adding your first data source to a product.</p>
                 <Link href="/app/products">
-                  <Button className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg">
+                  <Button className="bg-[#C8102E] hover:bg-[#A00D24] shadow-md hover:shadow-lg">
                     <Plus className="h-4 w-4 mr-2" />
                     Go to Products
                   </Button>
@@ -241,13 +241,13 @@ export default function DataSourcesPage() {
             ) : (
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {dataSources.map((dataSource) => (
-                  <div key={dataSource.id} className="border-2 border-gray-200 rounded-xl p-5 hover:bg-blue-50/50 hover:border-blue-300 transition-all duration-200 hover:shadow-md group">
+                  <div key={dataSource.id} className="border-2 border-gray-200 rounded-xl p-5 hover:bg-[#F5E6E8]/50 hover:border-[#C8102E] transition-all duration-200 hover:shadow-md group">
                     <div className="flex items-start mb-4">
-                      <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl p-2.5 mr-3 flex-shrink-0 shadow-sm group-hover:scale-110 transition-transform">
+                      <div className="bg-[#C8102E] rounded-xl p-2.5 mr-3 flex-shrink-0 shadow-sm group-hover:scale-110 transition-transform">
                         {getDataSourceTypeIcon(dataSource.type)}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <h4 className="font-semibold text-gray-900 text-sm mb-1 group-hover:text-blue-600 transition-colors">
+                        <h4 className="font-semibold text-gray-900 text-sm mb-1 group-hover:text-[#C8102E] transition-colors">
                           {getDataSourceTypeName(dataSource.type)}
                         </h4>
                         <p className="text-xs text-gray-600 truncate mb-1">
@@ -265,7 +265,7 @@ export default function DataSourcesPage() {
                         <span className="text-xs font-medium text-green-700">Active</span>
                       </div>
                       <Link href={`/app/products/${dataSource.product_id}`}>
-                        <Button variant="outline" size="sm" className="border-2 hover:border-blue-300 hover:bg-blue-50">
+                        <Button variant="outline" size="sm" className="border-2 hover:border-[#C8102E] hover:bg-[#F5E6E8]">
                           View Product
                         </Button>
                       </Link>

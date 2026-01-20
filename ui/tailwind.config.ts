@@ -51,6 +51,11 @@ const config: Config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        "lilly-red": {
+          DEFAULT: "#C8102E",
+          light: "#F5E6E8",
+          dark: "#A00D24",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",

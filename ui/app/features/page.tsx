@@ -153,7 +153,7 @@ function FeatureCard({ feature, index }: { feature: Feature; index: number }) {
   
   return (
     <article
-      className="bg-white rounded-2xl p-8 shadow-lg border-2 border-gray-100 hover:border-blue-300 transition-all hover:shadow-2xl hover:-translate-y-1"
+      className="bg-white rounded-2xl p-8 shadow-lg border-2 border-gray-100 hover:border-[#C8102E] transition-all hover:shadow-2xl hover:-translate-y-1"
       aria-labelledby={`feature-${index}-title`}
     >
       <div className={`w-16 h-16 bg-gradient-to-br ${feature.gradient} rounded-2xl flex items-center justify-center mb-6`}>
@@ -166,7 +166,7 @@ function FeatureCard({ feature, index }: { feature: Feature; index: number }) {
         {feature.items.map((item, idx) => (
           <li key={idx} className="flex items-start text-gray-700">
             <CheckCircle2 
-              className="h-5 w-5 text-blue-600 mr-2 flex-shrink-0 mt-0.5" 
+              className="h-5 w-5 text-[#C8102E] mr-2 flex-shrink-0 mt-0.5" 
               aria-hidden="true"
             />
             <span className="text-sm leading-relaxed">{item}</span>
@@ -181,26 +181,26 @@ function FeatureCard({ feature, index }: { feature: Feature; index: number }) {
 function CTASection() {
   return (
     <section 
-      className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-12 text-center text-white mb-16"
+      className="bg-[#C8102E] rounded-2xl p-12 text-center text-white mb-16"
       aria-labelledby="cta-heading"
     >
       <h2 id="cta-heading" className="text-3xl font-bold mb-4">
         Ready to Get Started?
       </h2>
-      <p className="text-xl text-blue-100 mb-8">
+      <p className="text-xl text-white/90 mb-8">
         Transform your data into AI-ready assets today
       </p>
       <div className="flex flex-col sm:flex-row gap-4 justify-center">
         <Link
           href="/signin"
-          className="bg-white hover:bg-gray-50 text-blue-600 font-semibold py-3 px-8 rounded-xl shadow-lg transition-all duration-200 hover:shadow-xl hover:scale-105 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-blue-600"
+          className="bg-white hover:bg-gray-50 text-[#C8102E] font-semibold py-3 px-8 rounded-xl shadow-lg transition-all duration-200 hover:shadow-xl hover:scale-105 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-blue-600"
           aria-label="Sign up for a free account"
         >
           Sign Up Free
         </Link>
         <Link
           href="/contact"
-          className="bg-blue-700 hover:bg-blue-800 text-white font-semibold py-3 px-8 rounded-xl shadow-lg transition-all duration-200 hover:shadow-xl hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:ring-offset-2 focus:ring-offset-blue-600"
+          className="bg-[#A00D24] hover:bg-blue-800 text-white font-semibold py-3 px-8 rounded-xl shadow-lg transition-all duration-200 hover:shadow-xl hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:ring-offset-2 focus:ring-offset-blue-600"
           aria-label="Contact our sales team"
         >
           Contact Sales
@@ -243,7 +243,7 @@ export default function FeaturesPage() {
       {/* Hero Section */}
       <header className="container mx-auto px-4 py-16">
         <div className="text-center max-w-4xl mx-auto mb-16">
-          <div className="inline-flex items-center space-x-2 bg-blue-100 text-blue-700 px-4 py-2 rounded-full text-sm font-semibold mb-6">
+          <div className="inline-flex items-center space-x-2 bg-[#F5E6E8] text-[#C8102E] px-4 py-2 rounded-full text-sm font-semibold mb-6">
             <Zap className="h-4 w-4" aria-hidden="true" />
             <span>Comprehensive Feature Set</span>
           </div>

@@ -223,7 +223,7 @@ export default function AIReadinessPage() {
   if (status === 'loading' || loading) {
     return (
       <AppLayout>
-        <div className="p-6 bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-50/30 min-h-screen">
+        <div className="p-6 bg-gradient-to-br from-white via-white to-rose-100 min-h-screen">
           <div className="max-w-7xl mx-auto space-y-6">
             <CardSkeleton />
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -254,7 +254,7 @@ export default function AIReadinessPage() {
 
   return (
     <AppLayout>
-      <div className="p-6 bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-50/30 min-h-screen">
+      <div className="p-6 bg-gradient-to-br from-white via-white to-rose-100 min-h-screen">
         <div className="max-w-7xl mx-auto">
         {/* Breadcrumb Navigation */}
         <div className="flex items-center mb-6">
@@ -405,7 +405,7 @@ export default function AIReadinessPage() {
                     <h2 className="text-2xl font-bold text-gray-900 mb-2">Overall AI Readiness Score</h2>
                     <p className="text-sm text-gray-600">
                       📊 Assessing {useVersion === 'prod' ? 'production' : 'current'} data • 
-                      <span className="ml-1 inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-sm">
+                      <span className="ml-1 inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-[#C8102E] text-white shadow-sm">
                         v{aiReadiness.version}
                       </span>
                     </p>
@@ -441,7 +441,7 @@ export default function AIReadinessPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5">
                 <div className="flex items-center justify-between mb-3">
-                  <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg p-2">
+                  <div className="bg-[#C8102E] rounded-lg p-2">
                     <Database className="h-5 w-5 text-white" />
                   </div>
                   <span className={`px-3 py-1 rounded-full text-sm font-bold ${
@@ -555,7 +555,7 @@ export default function AIReadinessPage() {
                 Data Quality Metrics
               </h2>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                <div className="text-center p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
+                <div className="text-center p-4 bg-[#F5E6E8] rounded-xl border-2 border-[#C8102E]/30">
                   <div className="text-3xl font-bold text-gray-900 mb-1">{aiReadiness.metrics.total_documents}</div>
                   <div className="text-sm font-medium text-gray-600">Documents</div>
                 </div>
@@ -605,15 +605,17 @@ export default function AIReadinessPage() {
 
             {/* Recommendations */}
             {aiReadiness.score.recommendations.length > 0 && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="bg-[#F5E6E8] border-2 border-[#C8102E]/30 rounded-xl p-6 shadow-sm">
                 <div className="flex items-start">
-                  <AlertTriangle className="h-5 w-5 text-blue-400 mt-0.5 mr-3 flex-shrink-0" />
+                  <div className="bg-[#C8102E] rounded-lg p-2 mr-3 flex-shrink-0">
+                    <AlertTriangle className="h-5 w-5 text-white" />
+                  </div>
                   <div className="flex-1">
-                    <h3 className="text-sm font-medium text-blue-800">Recommendations</h3>
+                    <h3 className="text-base font-bold text-[#C8102E] mb-3">Recommendations</h3>
                     <div className="mt-2 space-y-3">
                       {aiReadiness.score.recommendations.map((recommendation, index) => (
-                        <div key={index} className="flex items-center justify-between bg-white rounded-lg p-3 border border-blue-100">
-                          <p className="text-sm text-blue-700 flex-1">{recommendation}</p>
+                        <div key={index} className="flex items-center justify-between bg-white rounded-lg p-4 border-2 border-[#C8102E]/20 shadow-sm">
+                          <p className="text-sm text-gray-700 flex-1">{recommendation}</p>
                           <div className="ml-3 flex space-x-2">
                             {recommendation.includes('duplicate') && (
                               <Button
@@ -652,7 +654,7 @@ export default function AIReadinessPage() {
                               <Link href={`/app/products/${productId}/datasources/new`}>
                                 <Button
                                   size="sm"
-                                  className="text-xs bg-blue-600 hover:bg-blue-700 text-white"
+                                  className="text-xs bg-[#C8102E] hover:bg-[#A00D24] text-white"
                                 >
                                   Add Data Source
                                 </Button>

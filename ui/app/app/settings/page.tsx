@@ -193,7 +193,7 @@ export default function SettingsPage() {
   if (loading) {
     return (
       <AppLayout>
-        <div className="p-6 bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-50/30 min-h-screen">
+        <div className="p-6 bg-gradient-to-br from-white via-white to-rose-100 min-h-screen">
           <div className="max-w-7xl mx-auto">
             <div className="mb-8">
               <div className="h-10 bg-gray-200 rounded-xl w-1/3 mb-2 animate-pulse"></div>
@@ -224,7 +224,7 @@ export default function SettingsPage() {
 
   return (
     <AppLayout>
-      <div className="p-6 bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-50/30 min-h-screen">
+      <div className="p-6 bg-gradient-to-br from-white via-white to-rose-100 min-h-screen">
         <div className="max-w-7xl mx-auto">
           <div className="mb-8">
             <h1 className="text-4xl font-bold text-gray-900 mb-2 tracking-tight">Settings</h1>
@@ -243,12 +243,12 @@ export default function SettingsPage() {
                       onClick={() => setActiveTab(tab.id)}
                       className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-all duration-200 ${
                         activeTab === tab.id
-                          ? 'bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 border-l-4 border-blue-600 shadow-sm'
-                          : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                          ? 'bg-[#F5E6E8] text-[#C8102E] border-l-4 border-[#C8102E] shadow-sm'
+                          : 'text-gray-600 hover:text-gray-900 hover:bg-[#F5E6E8]'
                       }`}
                     >
                       <Icon className={`h-5 w-5 mr-3 ${
-                        activeTab === tab.id ? 'text-blue-600' : 'text-gray-400'
+                        activeTab === tab.id ? 'text-[#C8102E]' : 'text-gray-400'
                       }`} />
                       {tab.name}
                     </button>
@@ -262,7 +262,7 @@ export default function SettingsPage() {
             {/* Profile Settings */}
             {activeTab === 'profile' && (
               <div className="bg-white rounded-xl shadow-md border border-gray-200">
-                <div className="px-6 py-4 border-b-2 border-gray-100 bg-gradient-to-r from-gray-50 to-blue-50/30">
+                  <div className="px-6 py-4 border-b-2 border-gray-100 bg-[#F5E6E8]">
                   <h3 className="text-lg font-semibold text-gray-900">Profile Information</h3>
                   <p className="text-sm text-gray-600">Update your personal information</p>
                 </div>
@@ -274,7 +274,7 @@ export default function SettingsPage() {
                         type="text"
                         value={settings.firstName}
                         onChange={(e) => setSettings({...settings, firstName: e.target.value})}
-                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-[#C8102E] transition-all"
                       />
                     </div>
                     <div>
@@ -283,7 +283,7 @@ export default function SettingsPage() {
                         type="text"
                         value={settings.lastName}
                         onChange={(e) => setSettings({...settings, lastName: e.target.value})}
-                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-[#C8102E] transition-all"
                       />
                     </div>
                   </div>
@@ -305,7 +305,7 @@ export default function SettingsPage() {
                     <select
                       value={settings.timezone}
                       onChange={(e) => setSettings({...settings, timezone: e.target.value})}
-                      className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white"
+                      className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-[#C8102E] transition-all bg-white"
                     >
                       <option value="UTC">UTC</option>
                       <option value="America/New_York">Eastern Time</option>
@@ -336,7 +336,7 @@ export default function SettingsPage() {
                     <Button 
                       onClick={() => handleSave('profile')}
                       disabled={saving}
-                      className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg"
+                      className="bg-[#C8102E] hover:bg-[#A00D24] shadow-md hover:shadow-lg text-white"
                     >
                       <Save className="h-4 w-4 mr-2" />
                       {saving ? 'Saving...' : 'Save Changes'}
@@ -349,7 +349,7 @@ export default function SettingsPage() {
             {/* Notification Settings */}
             {activeTab === 'notifications' && (
               <div className="bg-white rounded-xl shadow-md border border-gray-200">
-                <div className="px-6 py-4 border-b-2 border-gray-100 bg-gradient-to-r from-gray-50 to-blue-50/30">
+                  <div className="px-6 py-4 border-b-2 border-gray-100 bg-[#F5E6E8]">
                   <h3 className="text-lg font-semibold text-gray-900">Notification Preferences</h3>
                   <p className="text-sm text-gray-600">Choose how you want to be notified</p>
                 </div>
@@ -367,7 +367,7 @@ export default function SettingsPage() {
                           onChange={(e) => setSettings({...settings, emailNotifications: e.target.checked})}
                           className="sr-only peer"
                         />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#F5E6E8] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#C8102E]"></div>
                       </label>
                     </div>
                     
@@ -383,7 +383,7 @@ export default function SettingsPage() {
                           onChange={(e) => setSettings({...settings, pipelineNotifications: e.target.checked})}
                           className="sr-only peer"
                         />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#F5E6E8] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#C8102E]"></div>
                       </label>
                     </div>
                     
@@ -399,7 +399,7 @@ export default function SettingsPage() {
                           onChange={(e) => setSettings({...settings, billingNotifications: e.target.checked})}
                           className="sr-only peer"
                         />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#F5E6E8] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#C8102E]"></div>
                       </label>
                     </div>
                   </div>
@@ -407,7 +407,7 @@ export default function SettingsPage() {
                     <Button 
                       onClick={() => handleSave('notifications')}
                       disabled={saving}
-                      className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg"
+                      className="bg-[#C8102E] hover:bg-[#A00D24] shadow-md hover:shadow-lg text-white"
                     >
                       <Save className="h-4 w-4 mr-2" />
                       {saving ? 'Saving...' : 'Save Changes'}
@@ -420,7 +420,7 @@ export default function SettingsPage() {
             {/* Security Settings */}
             {activeTab === 'security' && (
               <div className="bg-white rounded-xl shadow-md border border-gray-200">
-                <div className="px-6 py-4 border-b-2 border-gray-100 bg-gradient-to-r from-gray-50 to-blue-50/30">
+                  <div className="px-6 py-4 border-b-2 border-gray-100 bg-[#F5E6E8]">
                   <h3 className="text-lg font-semibold text-gray-900">Security Settings</h3>
                   <p className="text-sm text-gray-600">Manage your account security</p>
                 </div>
@@ -438,7 +438,7 @@ export default function SettingsPage() {
                           onChange={(e) => setSettings({...settings, twoFactorEnabled: e.target.checked})}
                           className="sr-only peer"
                         />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#F5E6E8] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#C8102E]"></div>
                       </label>
                     </div>
                     
@@ -447,7 +447,7 @@ export default function SettingsPage() {
                       <select
                         value={settings.sessionTimeout}
                         onChange={(e) => setSettings({...settings, sessionTimeout: e.target.value})}
-                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white"
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-[#C8102E] transition-all bg-white"
                       >
                         <option value="1">1 hour</option>
                         <option value="8">8 hours</option>
@@ -460,7 +460,7 @@ export default function SettingsPage() {
                     <Button 
                       onClick={() => handleSave('security')}
                       disabled={saving}
-                      className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg"
+                      className="bg-[#C8102E] hover:bg-[#A00D24] shadow-md hover:shadow-lg text-white"
                     >
                       <Save className="h-4 w-4 mr-2" />
                       {saving ? 'Saving...' : 'Save Changes'}
@@ -473,7 +473,7 @@ export default function SettingsPage() {
             {/* API Settings */}
             {activeTab === 'api' && (
               <div className="bg-white rounded-xl shadow-md border border-gray-200">
-                <div className="px-6 py-4 border-b-2 border-gray-100 bg-gradient-to-r from-gray-50 to-blue-50/30">
+                  <div className="px-6 py-4 border-b-2 border-gray-100 bg-[#F5E6E8]">
                   <h3 className="text-lg font-semibold text-gray-900">API & Integrations</h3>
                   <p className="text-sm text-gray-600">Manage your API keys and webhooks</p>
                 </div>
@@ -488,7 +488,7 @@ export default function SettingsPage() {
                         href="https://platform.openai.com/api-keys" 
                         target="_blank" 
                         rel="noopener noreferrer"
-                        className="text-blue-600 hover:text-blue-800 underline"
+                        className="text-[#C8102E] hover:text-[#A00D24] underline"
                       >
                         OpenAI Platform
                       </a>
@@ -501,7 +501,7 @@ export default function SettingsPage() {
                           value={settings.openaiApiKey || ''}
                           onChange={(e) => setSettings({...settings, openaiApiKey: e.target.value})}
                           placeholder={settings.openaiApiKeyConfigured ? "sk-...****" : "sk-your-api-key-here"}
-                          className="flex-1 px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                          className="flex-1 px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-[#C8102E] transition-all"
                         />
                         <Button
                           variant="outline"
@@ -525,7 +525,7 @@ export default function SettingsPage() {
                       value={settings.webhookUrl}
                       onChange={(e) => setSettings({...settings, webhookUrl: e.target.value})}
                       placeholder="https://your-domain.com/webhook"
-                      className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                      className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-[#C8102E] transition-all"
                     />
                     <p className="text-xs text-gray-500 mt-1">Receive real-time notifications about your data pipelines</p>
                   </div>
@@ -534,7 +534,7 @@ export default function SettingsPage() {
                     <Button 
                       onClick={() => handleSave('api')}
                       disabled={saving}
-                      className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg"
+                      className="bg-[#C8102E] hover:bg-[#A00D24] shadow-md hover:shadow-lg text-white"
                     >
                       <Save className="h-4 w-4 mr-2" />
                       {saving ? 'Saving...' : 'Save Changes'}
@@ -547,7 +547,7 @@ export default function SettingsPage() {
             {/* Workspace Settings */}
             {activeTab === 'workspace' && (
               <div className="bg-white rounded-xl shadow-md border border-gray-200">
-                <div className="px-6 py-4 border-b-2 border-gray-100 bg-gradient-to-r from-gray-50 to-blue-50/30">
+                  <div className="px-6 py-4 border-b-2 border-gray-100 bg-[#F5E6E8]">
                   <h3 className="text-lg font-semibold text-gray-900">Workspace Settings</h3>
                   <p className="text-sm text-gray-600">Configure your workspace preferences</p>
                 </div>
@@ -558,7 +558,7 @@ export default function SettingsPage() {
                       type="text"
                       value={settings.workspaceName}
                       onChange={(e) => setSettings({...settings, workspaceName: e.target.value})}
-                      className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                      className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-[#C8102E] transition-all"
                     />
                   </div>
                   
@@ -568,7 +568,7 @@ export default function SettingsPage() {
                       <select
                         value={settings.defaultLanguage}
                         onChange={(e) => setSettings({...settings, defaultLanguage: e.target.value})}
-                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white"
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-[#C8102E] transition-all bg-white"
                       >
                         <option value="en">English</option>
                         <option value="es">Spanish</option>
@@ -582,7 +582,7 @@ export default function SettingsPage() {
                       <select
                         value={settings.dateFormat}
                         onChange={(e) => setSettings({...settings, dateFormat: e.target.value})}
-                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white"
+                        className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-[#C8102E] transition-all bg-white"
                       >
                         <option value="MM/DD/YYYY">MM/DD/YYYY</option>
                         <option value="DD/MM/YYYY">DD/MM/YYYY</option>
@@ -595,7 +595,7 @@ export default function SettingsPage() {
                     <Button 
                       onClick={() => handleSave('workspace')}
                       disabled={saving}
-                      className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg"
+                      className="bg-[#C8102E] hover:bg-[#A00D24] shadow-md hover:shadow-lg text-white"
                     >
                       <Save className="h-4 w-4 mr-2" />
                       {saving ? 'Saving...' : 'Save Changes'}

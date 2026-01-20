@@ -31,10 +31,10 @@ const statusConfig: Record<StatusType, {
   running: {
     label: 'Running',
     icon: Activity,
-    gradient: 'from-blue-500 to-indigo-600',
-    textColor: 'text-blue-700',
-    bgColor: 'bg-blue-50',
-    borderColor: 'border-blue-300',
+    gradient: 'from-[#C8102E] to-[#A00D24]',
+    textColor: 'text-[#C8102E]',
+    bgColor: 'bg-[#F5E6E8]',
+    borderColor: 'border-[#C8102E]',
     pulse: true,
   },
   ready: {

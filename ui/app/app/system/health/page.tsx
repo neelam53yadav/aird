@@ -84,7 +84,7 @@ export default function SystemHealthPage() {
 
   return (
     <AppLayout>
-      <div className="p-6 bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-50/30 min-h-screen">
+      <div className="p-6 bg-gradient-to-br from-white via-white to-rose-100 min-h-screen">
         <div className="max-w-7xl mx-auto">
         {/* Breadcrumb Navigation */}
         <div className="flex items-center mb-6">
@@ -99,7 +99,7 @@ export default function SystemHealthPage() {
         {/* Page Header */}
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center">
-            <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl p-3 mr-4 shadow-lg">
+            <div className="bg-[#C8102E] rounded-xl p-3 mr-4 shadow-lg">
               <Activity className="h-6 w-6 text-white" />
             </div>
             <div>
@@ -112,7 +112,7 @@ export default function SystemHealthPage() {
           <Button
             onClick={loadHealth}
             disabled={loading}
-            className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-md"
+            className="bg-[#C8102E] hover:bg-[#A00D24] text-white shadow-md"
           >
             <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
             Refresh

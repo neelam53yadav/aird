@@ -130,7 +130,7 @@ export default function AnalyticsPage() {
   if (loading) {
     return (
       <AppLayout>
-        <div className="p-6 bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-50/30 min-h-screen">
+        <div className="p-6 bg-gradient-to-br from-white via-white to-rose-100 min-h-screen">
           <div className="max-w-7xl mx-auto">
             <div className="mb-8">
               <div className="h-10 bg-gray-200 rounded-xl w-1/3 mb-2 animate-pulse"></div>
@@ -149,7 +149,7 @@ export default function AnalyticsPage() {
 
   return (
     <AppLayout>
-      <div className="p-6 bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-50/30 min-h-screen">
+      <div className="p-6 bg-gradient-to-br from-white via-white to-rose-100 min-h-screen">
         <div className="max-w-7xl mx-auto">
           <div className="mb-8">
             <h1 className="text-4xl font-bold text-gray-900 mb-2 tracking-tight">Analytics Dashboard</h1>
@@ -160,7 +160,7 @@ export default function AnalyticsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5">
               <div className="flex items-center">
-                <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl p-3 mr-4 shadow-sm">
+                <div className="bg-[#C8102E] rounded-xl p-3 mr-4 shadow-sm">
                   <Database className="h-6 w-6 text-white" />
                 </div>
                 <div>
@@ -219,7 +219,7 @@ export default function AnalyticsPage() {
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2.5">
                   <div 
-                    className="bg-gradient-to-r from-blue-500 to-indigo-600 h-2.5 rounded-full transition-all"
+                    className="bg-[#C8102E] h-2.5 rounded-full transition-all"
                     style={{ width: `${Math.min((analytics?.avgProcessingTime || 0) / 60 * 100, 100)}%` }}
                   ></div>
                 </div>
@@ -247,14 +247,14 @@ export default function AnalyticsPage() {
             <div className="space-y-4 max-h-[600px] overflow-y-auto">
               {analytics?.monthlyStats && analytics.monthlyStats.length > 0 ? (
                 analytics.monthlyStats.map((stat, index) => (
-                  <div key={stat.month} className="border-2 border-gray-100 rounded-lg p-4 hover:border-blue-300 transition-colors">
+                  <div key={stat.month} className="border-2 border-gray-100 rounded-lg p-4 hover:border-[#C8102E] transition-colors">
                     <div className="flex items-center justify-between mb-3">
                       <span className="text-base font-semibold text-gray-900">{stat.month}</span>
                     </div>
                     <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                      <div className="bg-blue-50 rounded-md p-3 text-center">
-                        <div className="font-bold text-blue-700 text-lg">{stat.pipeline_runs || 0}</div>
-                        <div className="text-blue-600 text-xs font-medium mt-1">Pipeline Runs</div>
+                      <div className="bg-[#F5E6E8] rounded-md p-3 text-center">
+                        <div className="font-bold text-[#C8102E] text-lg">{stat.pipeline_runs || 0}</div>
+                        <div className="text-[#C8102E] text-xs font-medium mt-1">Pipeline Runs</div>
                       </div>
                       <div className="bg-indigo-50 rounded-md p-3 text-center">
                         <div className="font-bold text-indigo-700 text-lg">{stat.products || 0}</div>
@@ -298,7 +298,7 @@ export default function AnalyticsPage() {
           </div>
           <div className="divide-y divide-gray-100">
             {analytics?.recentActivity?.map((activity) => (
-              <div key={activity.id} className="px-6 py-4 hover:bg-blue-50/30 transition-colors">
+              <div key={activity.id} className="px-6 py-4 hover:bg-[#F5E6E8]/30 transition-colors">
                 <div className="flex items-start">
                   <div className="flex-shrink-0 mt-0.5">
                     {getStatusIcon(activity.status)}

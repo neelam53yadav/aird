@@ -178,7 +178,7 @@ export default function TeamPage() {
     switch (role) {
       case 'owner': return 'bg-gradient-to-r from-purple-500 to-pink-600 text-white'
       case 'admin': return 'bg-gradient-to-r from-red-500 to-rose-600 text-white'
-      case 'editor': return 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white'
+      case 'editor': return 'bg-[#C8102E] text-white'
       case 'viewer': return 'bg-gradient-to-r from-gray-500 to-slate-600 text-white'
       default: return 'bg-gradient-to-r from-gray-500 to-slate-600 text-white'
     }
@@ -203,7 +203,7 @@ export default function TeamPage() {
   if (loading) {
     return (
       <AppLayout>
-        <div className="p-6 bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-50/30 min-h-screen">
+        <div className="p-6 bg-gradient-to-br from-white via-white to-rose-100 min-h-screen">
           <div className="max-w-7xl mx-auto">
             <div className="mb-8">
               <div className="h-10 bg-gray-200 rounded-xl w-1/3 mb-2 animate-pulse"></div>
@@ -231,7 +231,7 @@ export default function TeamPage() {
 
   return (
     <AppLayout>
-      <div className="p-6 bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-50/30 min-h-screen">
+      <div className="p-6 bg-gradient-to-br from-white via-white to-rose-100 min-h-screen">
         <div className="max-w-7xl mx-auto">
           {/* Header */}
           <div className="mb-8">
@@ -276,7 +276,7 @@ export default function TeamPage() {
               </div>
               <Button 
                 onClick={() => setShowInviteModal(true)}
-                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg whitespace-nowrap"
+                className="bg-[#C8102E] hover:bg-[#A00D24] shadow-md hover:shadow-lg whitespace-nowrap"
               >
                 <UserPlus className="h-4 w-4 mr-2" />
                 Invite Member
@@ -295,7 +295,7 @@ export default function TeamPage() {
                 {!searchQuery && (
                   <Button
                     onClick={() => setShowInviteModal(true)}
-                    className="mt-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+                    className="mt-4 bg-[#C8102E] hover:bg-[#A00D24]"
                   >
                     <UserPlus className="h-4 w-4 mr-2" />
                     Invite Your First Member
@@ -305,11 +305,11 @@ export default function TeamPage() {
             ) : (
               <div className="divide-y divide-gray-100">
                 {filteredMembers.map((member) => (
-                  <div key={member.id} className="px-6 py-4 hover:bg-blue-50/30 transition-colors">
+                  <div key={member.id} className="px-6 py-4 hover:bg-[#F5E6E8]/30 transition-colors">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-4 flex-1">
                         <div className="flex-shrink-0">
-                          <div className="h-12 w-12 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center ring-2 ring-gray-200">
+                          <div className="h-12 w-12 rounded-full bg-[#C8102E] flex items-center justify-center ring-2 ring-gray-200">
                             <span className="text-white font-semibold text-lg">
                               {member.name.charAt(0).toUpperCase()}
                             </span>
@@ -349,8 +349,8 @@ export default function TeamPage() {
           </div>
 
           {/* Role Permissions Info */}
-          <div className="mt-8 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl p-6">
-            <h3 className="text-lg font-semibold text-blue-900 mb-4">Role Permissions</h3>
+          <div className="mt-8 bg-[#F5E6E8] border-2 border-[#C8102E]/30 rounded-xl p-6">
+            <h3 className="text-lg font-semibold text-[#A00D24] mb-4">Role Permissions</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-200">
                 <div className="flex items-center space-x-2 mb-2">
@@ -372,7 +372,7 @@ export default function TeamPage() {
               </div>
               <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-200">
                 <div className="flex items-center space-x-2 mb-2">
-                  <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg p-2">
+                  <div className="bg-[#C8102E] rounded-lg p-2">
                     <Edit className="h-5 w-5 text-white" />
                   </div>
                   <span className="font-semibold text-gray-900">Editor</span>
@@ -418,7 +418,7 @@ export default function TeamPage() {
                 <select
                   value={inviteRole}
                   onChange={(e) => setInviteRole(e.target.value as 'admin' | 'editor' | 'viewer')}
-                  className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white"
+                  className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-[#C8102E] transition-all bg-white"
                 >
                   <option value="viewer">Viewer - View only access</option>
                   <option value="editor">Editor - Create and edit access</option>
@@ -440,7 +440,7 @@ export default function TeamPage() {
                 <Button 
                   onClick={handleInviteMember}
                   disabled={inviting || !inviteEmail}
-                  className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg"
+                  className="bg-[#C8102E] hover:bg-[#A00D24] shadow-md hover:shadow-lg"
                 >
                   {inviting ? 'Sending...' : 'Send Invite'}
                 </Button>

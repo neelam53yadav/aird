@@ -42,9 +42,9 @@ export function DataQualityBanner({ violations, onViewDetails, className = '' }:
     ? 'bg-red-50 border-red-200 text-red-800' 
     : hasWarnings 
     ? 'bg-orange-50 border-orange-200 text-orange-800'
-    : 'bg-blue-50 border-blue-200 text-blue-800'
+    : 'bg-[#F5E6E8] border-[#C8102E]/30 text-[#C8102E]'
   
-  const iconColor = hasErrors ? 'text-red-600' : hasWarnings ? 'text-orange-600' : 'text-blue-600'
+  const iconColor = hasErrors ? 'text-red-600' : hasWarnings ? 'text-orange-600' : 'text-[#C8102E]'
   
   const getSeverityText = () => {
     if (hasErrors) return 'Quality checks failed'
@@ -102,7 +102,7 @@ export function DataQualityBanner({ violations, onViewDetails, className = '' }:
                     ? 'bg-red-100 text-red-800' 
                     : violation.severity === 'warning'
                     ? 'bg-orange-100 text-orange-800'
-                    : 'bg-blue-100 text-blue-800'
+                    : 'bg-[#F5E6E8] text-[#C8102E]'
                 }`}>
                   {violation.severity}
                 </span>

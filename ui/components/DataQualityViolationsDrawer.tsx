@@ -62,7 +62,7 @@ export function DataQualityViolationsDrawer({
       case 'warning':
         return <AlertCircle className="h-5 w-5 text-orange-600" />
       case 'info':
-        return <Info className="h-5 w-5 text-blue-600" />
+        return <Info className="h-5 w-5 text-[#C8102E]" />
       default:
         return <AlertTriangle className="h-5 w-5 text-gray-600" />
     }
@@ -75,7 +75,7 @@ export function DataQualityViolationsDrawer({
       case 'warning':
         return 'border-orange-200 bg-orange-50'
       case 'info':
-        return 'border-blue-200 bg-blue-50'
+        return 'border-[#C8102E]/30 bg-[#F5E6E8]'
       default:
         return 'border-gray-200 bg-gray-50'
     }
@@ -88,7 +88,7 @@ export function DataQualityViolationsDrawer({
       case 'warning':
         return 'bg-orange-100 text-orange-800'
       case 'info':
-        return 'bg-blue-100 text-blue-800'
+        return 'bg-[#F5E6E8] text-[#C8102E]'
       default:
         return 'bg-gray-100 text-gray-800'
     }
@@ -151,7 +151,7 @@ export function DataQualityViolationsDrawer({
                   placeholder="Search violations..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#C8102E] focus:border-[#C8102E] sm:text-sm"
                 />
               </div>
               
@@ -160,7 +160,7 @@ export function DataQualityViolationsDrawer({
                 <select
                   value={severityFilter}
                   onChange={(e) => setSeverityFilter(e.target.value as any)}
-                  className="px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  className="px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#C8102E] focus:border-[#C8102E] sm:text-sm"
                 >
                   <option value="all">All Severities</option>
                   <option value="error">Errors</option>

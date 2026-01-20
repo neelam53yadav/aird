@@ -92,10 +92,10 @@ export function CostEstimation({ showTitle = true }: CostEstimationProps) {
                 accept=".txt,.pdf"
                 className="hidden"
               />
-              <div className="flex items-center justify-center px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-500 transition-colors">
+              <div className="flex items-center justify-center px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-[#C8102E] transition-colors">
                 {file ? (
                   <div className="flex items-center gap-2 text-sm text-gray-700">
-                    <FileText className="h-5 w-5 text-blue-600" />
+                    <FileText className="h-5 w-5 text-[#C8102E]" />
                     <span className="font-medium">{file.name}</span>
                     <span className="text-gray-500">
                       ({(file.size / 1024).toFixed(1)} KB)
@@ -156,9 +156,9 @@ export function CostEstimation({ showTitle = true }: CostEstimationProps) {
 
         {/* Estimate Results */}
         {estimate && (
-          <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="mt-6 p-4 bg-[#F5E6E8] border border-[#C8102E]/30 rounded-lg">
             <h3 className="text-md font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <DollarSign className="h-5 w-5 text-blue-600" />
+              <DollarSign className="h-5 w-5 text-[#C8102E]" />
               Cost Estimate Results
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -184,7 +184,7 @@ export function CostEstimation({ showTitle = true }: CostEstimationProps) {
               </div>
               <div className="sm:col-span-2">
                 <p className="text-sm font-medium text-gray-700 mb-2">Estimated Cost</p>
-                <p className="text-3xl font-bold text-blue-600">
+                <p className="text-3xl font-bold text-[#C8102E]">
                   {formatCurrency(estimate.estimated_cost_usd)}
                 </p>
               </div>
