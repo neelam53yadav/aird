@@ -61,6 +61,7 @@ interface Product {
   trust_score?: number  // M2
   policy_status?: string  // M2: 'passed' | 'failed' | 'warnings' | 'unknown'
   chunking_strategy?: string  // From latest successful pipeline run
+  vector_creation_enabled?: boolean  // Enable vector/embedding creation and indexing
   created_at: string
   updated_at?: string
 }
@@ -1438,13 +1439,15 @@ export default function ProductDetailPage() {
                   <h3 className="font-medium text-gray-900">Run Pipeline</h3>
                   <p className="text-sm text-gray-600">Execute the data processing pipeline</p>
                 </div>
-                <Link href={`/app/products/${productId}/playground`}>
-                  <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer h-full flex flex-col">
-                    <Search className="h-8 w-8 text-purple-600 mb-2" />
-                    <h3 className="font-medium text-gray-900">RAG Playground</h3>
-                    <p className="text-sm text-gray-600">Search and explore your indexed data</p>
-                  </div>
-                </Link>
+                {(product.vector_creation_enabled !== false) && (
+                  <Link href={`/app/products/${productId}/playground`}>
+                    <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer h-full flex flex-col">
+                      <Search className="h-8 w-8 text-purple-600 mb-2" />
+                      <h3 className="font-medium text-gray-900">RAG Playground</h3>
+                      <p className="text-sm text-gray-600">Search and explore your indexed data</p>
+                    </div>
+                  </Link>
+                )}
                 <Link href={`/app/products/${productId}/ai-readiness`}>
                   <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer h-full flex flex-col">
                     <TrendingUp className="h-8 w-8 text-orange-600 mb-2" />
@@ -1452,13 +1455,15 @@ export default function ProductDetailPage() {
                     <p className="text-sm text-gray-600">Assess and improve data quality</p>
                   </div>
                 </Link>
-                <Link href={`/app/products/${productId}/rag-quality`}>
-                  <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer h-full flex flex-col">
-                    <BarChart3 className="h-8 w-8 text-indigo-600 mb-2" />
-                    <h3 className="font-medium text-gray-900">RAG Quality</h3>
-                    <p className="text-sm text-gray-600">Evaluate RAG system quality metrics</p>
-                  </div>
-                </Link>
+                {(product.vector_creation_enabled !== false) && (
+                  <Link href={`/app/products/${productId}/rag-quality`}>
+                    <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer h-full flex flex-col">
+                      <BarChart3 className="h-8 w-8 text-indigo-600 mb-2" />
+                      <h3 className="font-medium text-gray-900">RAG Quality</h3>
+                      <p className="text-sm text-gray-600">Evaluate RAG system quality metrics</p>
+                    </div>
+                  </Link>
+                )}
                 <Link href={`/app/products/${productId}/pipeline-metrics`}>
                   <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer h-full flex flex-col">
                     <BarChart3 className="h-8 w-8 text-purple-600 mb-2" />

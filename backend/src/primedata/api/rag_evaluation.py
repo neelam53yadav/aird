@@ -7,7 +7,7 @@ import csv
 import io
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
@@ -15,15 +15,16 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Res
 from fastapi.responses import StreamingResponse
 from loguru import logger
 from pydantic import BaseModel, Field
-from sqlalchemy import func
+from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 
+from primedata.core.plan_limits import get_plan_limit
 from primedata.core.scope import ensure_product_access
 from primedata.core.security import get_current_user
 from primedata.core.settings import get_settings
 from primedata.core.user_utils import get_user_id
 from primedata.db.database import get_db
-from primedata.db.models import EvalDataset, EvalDatasetItem, EvalDatasetStatus, EvalQuery, EvalRun, Product
+from primedata.db.models import BillingProfile, EvalDataset, EvalDatasetItem, EvalDatasetStatus, EvalQuery, EvalRun, Product
 from primedata.evaluation.datasets.dataset_manager import DatasetManager
 from primedata.evaluation.harness.runner import EvaluationRunner
 from primedata.indexing.embeddings import EmbeddingGenerator
@@ -937,6 +938,37 @@ async def create_eval_run(
         if dataset.product_id != product_id:
             logger.warning(f"Dataset {request_body.dataset_id} belongs to product {dataset.product_id}, but requested for product {product_id}")
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Dataset does not belong to this product")
+        
+        # Check evaluation runs limit for current month
+        billing_profile = db.query(BillingProfile).filter(
+            BillingProfile.workspace_id == product.workspace_id
+        ).first()
+
+        if billing_profile:
+            plan_name = billing_profile.plan.value.lower() if hasattr(billing_profile.plan, "value") else str(billing_profile.plan).lower()
+            max_runs = get_plan_limit(plan_name, "max_evaluation_runs_per_month")
+            
+            if max_runs != -1:  # If not unlimited
+                # Count evaluation runs in current month
+                now = datetime.now(timezone.utc)
+                month_start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
+                current_month_runs = (
+                    db.query(func.count(EvalRun.id))
+                    .filter(
+                        and_(
+                            EvalRun.workspace_id == product.workspace_id,
+                            EvalRun.started_at >= month_start
+                        )
+                    )
+                    .scalar() or 0
+                )
+                
+                if current_month_runs >= max_runs:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail=f"Evaluation runs limit exceeded. You have used {current_month_runs} of {max_runs} runs this month. "
+                               f"Please upgrade your plan or wait until next month."
+                    )
         
         # ALWAYS create a new evaluation run version number (similar to pipeline runs)
         # Get the maximum existing evaluation run version for this product

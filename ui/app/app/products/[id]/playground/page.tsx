@@ -21,6 +21,7 @@ interface Product {
   status: 'draft' | 'running' | 'ready' | 'failed'
   current_version: number
   promoted_version?: number
+  vector_creation_enabled?: boolean
   created_at: string
   updated_at?: string
 }
@@ -205,6 +206,32 @@ export default function PlaygroundPage() {
             <Link href="/app/products">
               <Button>Back to Products</Button>
             </Link>
+          </div>
+        </div>
+      </AppLayout>
+    )
+  }
+
+  // Check if vector creation is disabled
+  if (product.vector_creation_enabled === false) {
+    return (
+      <AppLayout>
+        <div className="p-6 flex items-center justify-center min-h-96">
+          <div className="text-center max-w-md">
+            <AlertCircle className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">Vector Creation Disabled</h2>
+            <p className="text-gray-600 mb-6">
+              RAG Playground requires vector creation to be enabled for this product. 
+              Please enable vector creation in the product settings to use this feature.
+            </p>
+            <div className="flex gap-4 justify-center">
+              <Link href={`/app/products/${productId}`}>
+                <Button variant="outline">Back to Product</Button>
+              </Link>
+              <Link href={`/app/products/${productId}/edit`}>
+                <Button>Enable Vector Creation</Button>
+              </Link>
+            </div>
           </div>
         </div>
       </AppLayout>

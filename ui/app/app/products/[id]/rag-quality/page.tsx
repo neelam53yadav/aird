@@ -18,6 +18,7 @@ interface Product {
   name: string
   current_version: number
   promoted_version?: number
+  vector_creation_enabled?: boolean
   rag_quality_thresholds?: Record<string, number>
 }
 
@@ -164,6 +165,32 @@ export default function RAGQualityPage() {
         <div className="p-6">
           <div className="bg-red-50 border border-red-200 rounded-lg p-4">
             <p className="text-red-800">{error || 'Product not found'}</p>
+          </div>
+        </div>
+      </AppLayout>
+    )
+  }
+
+  // Check if vector creation is disabled
+  if (product.vector_creation_enabled === false) {
+    return (
+      <AppLayout>
+        <div className="p-6 flex items-center justify-center min-h-96">
+          <div className="text-center max-w-md">
+            <AlertTriangle className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">Vector Creation Disabled</h2>
+            <p className="text-gray-600 mb-6">
+              RAG Quality evaluation requires vector creation to be enabled for this product. 
+              Please enable vector creation in the product settings to use this feature.
+            </p>
+            <div className="flex gap-4 justify-center">
+              <Link href={`/app/products/${productId}`}>
+                <Button variant="outline">Back to Product</Button>
+              </Link>
+              <Link href={`/app/products/${productId}/edit`}>
+                <Button>Enable Vector Creation</Button>
+              </Link>
+            </div>
           </div>
         </div>
       </AppLayout>

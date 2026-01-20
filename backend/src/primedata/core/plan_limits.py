@@ -14,6 +14,7 @@ PLAN_LIMITS: Dict[str, Dict[str, Any]] = {
         "max_products": 3,
         "max_data_sources_per_product": 5,
         "max_pipeline_runs_per_month": 10,
+        "max_evaluation_runs_per_month": 5,
         "max_raw_files_size_mb": 100,  # 100 MB total for all raw files across all data sources
         "schedule_frequency": "manual",
     },
@@ -21,6 +22,7 @@ PLAN_LIMITS: Dict[str, Dict[str, Any]] = {
         "max_products": 25,
         "max_data_sources_per_product": 50,
         "max_pipeline_runs_per_month": 1000,
+        "max_evaluation_runs_per_month": 500,
         "max_raw_files_size_mb": -1,  # Unlimited
         "schedule_frequency": "hourly",
     },
@@ -28,6 +30,7 @@ PLAN_LIMITS: Dict[str, Dict[str, Any]] = {
         "max_products": -1,  # Unlimited
         "max_data_sources_per_product": -1,  # Unlimited
         "max_pipeline_runs_per_month": -1,  # Unlimited
+        "max_evaluation_runs_per_month": -1,  # Unlimited
         "max_raw_files_size_mb": -1,  # Unlimited
         "schedule_frequency": "realtime",
     },
