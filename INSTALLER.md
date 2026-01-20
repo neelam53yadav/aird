@@ -4,6 +4,19 @@ This document describes the installer options available for PrimeData on Windows
 
 ## Quick Start
 
+## Recommended Installer Flow (All OS)
+
+PrimeData uses **one cross-platform installer**:
+
+- `scripts/install.py` — installs Python backend deps + UI deps and creates `.env.local` files.
+
+Then each OS has a small wrapper:
+
+- **Windows**: `scripts\setup_windows.bat` (checks Python/Node, then calls `python scripts\install.py`)
+- **macOS/Linux**: run `python3 scripts/install.py` directly
+
+This design keeps the installer logic in one place and avoids OS-specific duplication.
+
 ### Windows
 
 **Option 1: Automated Installer (Recommended)**
@@ -65,6 +78,7 @@ The installer performs the following steps automatically:
 - **Memory Check**: PowerShell script: `scripts\check_memory.ps1`
 - **Services**: Use `python run.py dev --services-only`
 - **Commands**: Python scripts work natively, Makefile requires WSL/Git Bash
+- **Podman (Windows)**: Supported. Install **Podman Desktop** and ensure the Podman machine/VM is running. If you see Docker-daemon errors, enable Podman’s Docker API compatibility or install the Docker CLI shim so tools expecting `docker` still work.
 
 ### macOS
 
@@ -87,6 +101,12 @@ The installer performs the following steps automatically:
 
 **Issue**: Installer reports missing prerequisites
 **Solution**: Install missing software (Python, Node.js, Docker) and run installer again
+
+**Issue**: Using Podman but the app says "Cannot connect to Docker daemon"
+**Solution**:
+- Ensure Podman Desktop is running and the Podman machine is started
+- Enable Podman “Docker API compatibility” (or install the docker CLI shim)
+- Re-run: `python run.py dev --services-only`
 
 **Issue**: Permission errors on Linux/macOS
 **Solution**: Use `sudo` only if absolutely necessary, prefer user-level installation
