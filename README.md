@@ -353,7 +353,9 @@ Policy evaluation serves as a quality gate to ensure data meets production stand
 
 - **Python**: 3.11+ (3.12 compatible)
 - **Node.js**: 18+
-- **Docker**: 20.10+ and Docker Compose 2.0+
+- **Containers (required for services)**: **Docker** (20.10+ + Docker Compose 2.0+) **or Podman**
+  - **macOS/Windows**: Docker Desktop or Podman Desktop (ensure the Docker daemon / Podman machine is running)
+  - **Linux**: Docker Engine/Compose or Podman (`apt-get install podman` / distro equivalent)
 - **Git**: 2.30+
 - **Make**: 4.0+ (optional, for Makefile commands - recommended for easier setup)
   - **Windows**: Install via [Chocolatey](https://chocolatey.org/) (`choco install make`), [Scoop](https://scoop.sh/) (`scoop install make`), or use WSL/Git Bash
@@ -365,6 +367,37 @@ Policy evaluation serves as a quality gate to ensure data meets production stand
   - CPU: 4+ cores recommended
 
 ### Quick Start (Local Development)
+
+#### Option 0: Cross-Platform Installer (Recommended for Windows/macOS/Linux)
+
+PrimeData includes a cross-platform installer that:
+- Creates a Python virtual environment
+- Installs backend + frontend dependencies
+- Creates `.env.local` files from examples (if missing)
+
+Run:
+
+```bash
+# macOS/Linux
+python3 scripts/install.py
+```
+
+```bash
+# Windows (from Command Prompt)
+scripts\setup_windows.bat
+```
+
+Then start services:
+
+```bash
+# Docker auto-detect (default)
+python run.py dev --services-only
+
+# Force Podman (macOS/Linux)
+CONTAINER_RUNTIME=podman python run.py dev --services-only
+```
+
+For detailed installer notes and troubleshooting, see `INSTALLER.md`.
 
 #### Option 1: Using Makefile (Recommended)
 
@@ -402,13 +435,13 @@ make frontend
 | `make install` | Install both backend and frontend dependencies | When dependencies change (requirements.txt or package.json updated) |
 | `make install-backend` | Install only backend Python dependencies | When only backend dependencies change |
 | `make install-frontend` | Install only frontend npm dependencies | When only frontend dependencies change |
-| `make services` | Start/restart Docker services (PostgreSQL, Qdrant, MinIO, Airflow) | When services need to be restarted or after system reboot |
+| `make services` | Start/restart services (PostgreSQL, Qdrant, MinIO, Airflow) via Docker/Podman | When services need to be restarted or after system reboot |
 | `make migrate` | Run database migrations only | When database schema changes |
 | `make backend` | Start backend development server (with hot reload) | Daily development - run in separate terminal |
 | `make frontend` | Start frontend development server (Next.js) | Daily development - run in separate terminal |
 | `make dev` | Show instructions for running development servers | Quick reference for starting dev servers |
-| `make stop` | Stop all Docker services | When you're done working |
-| `make clean` | Stop services and remove all Docker volumes (⚠️ destructive) | When you want to start fresh (removes all data) |
+| `make stop` | Stop all services (Docker/Podman) | When you're done working |
+| `make clean` | Stop services and remove all volumes (⚠️ destructive) | When you want to start fresh (removes all data) |
 | `make help` | Show all available commands | Quick reference |
 
 **Daily Development Workflow:**
@@ -473,9 +506,13 @@ npm install
 # Frontend: Create ui/.env.local (copy from infra/env/ui.example.env.local)
 # Edit each .env.local file with your configuration (see Configuration section)
 
-# 6. Start Docker services
+# 6. Start services (Docker or Podman)
 cd ../infra
 docker compose -f docker-compose.yml --env-file .env.local up -d
+
+# If you use Podman on macOS/Linux, use one of:
+# podman compose -f docker-compose.yml --env-file .env.local up -d
+# CONTAINER_RUNTIME=podman python ../run.py dev --services-only
 
 # 7. Wait for services to be ready (10-15 seconds)
 # On Windows: python -c "import time; time.sleep(10)"
@@ -517,19 +554,20 @@ Once all services are running, you can access:
 - Use Git Bash, WSL, or install make via Chocolatey/Scoop
 - The Makefile uses Python for cross-platform compatibility, so Python must be in your PATH
 
-**Docker services not starting:**
-- Check if ports are already in use: `docker ps`
+**Services not starting (Docker/Podman):**
+- Check if ports are already in use: `docker ps` or `podman ps`
 - Verify `.env.local` files are configured correctly
-- Check Docker logs: `docker logs primedata-postgres`, `docker logs primedata-airflow-webserver`, etc.
+- Check service logs: `docker logs primedata-postgres` (Docker) or `podman logs primedata-postgres` (Podman), etc.
+- If using Podman on macOS/Linux, try forcing it: `CONTAINER_RUNTIME=podman python run.py dev --services-only`
 
 **Migrations failing:**
-- Ensure PostgreSQL is running and healthy: `docker ps | grep postgres`
+- Ensure PostgreSQL is running and healthy: `docker ps | grep postgres` (or `podman ps | grep postgres`)
 - Verify `DATABASE_URL` in `backend/.env.local` is correct
 - Check database connection: `docker exec -it primedata-postgres psql -U <user> -d <db>`
 
 **Airflow not accessible:**
 - Wait 30-60 seconds after starting services for Airflow to initialize
-- Check Airflow logs: `docker logs primedata-airflow-webserver`
+- Check Airflow logs: `docker logs primedata-airflow-webserver` (or `podman logs primedata-airflow-webserver`)
 - Verify `AIRFLOW_DB_NAME` is set in `infra/.env.local`
 
 **Backend/Frontend not starting:**
