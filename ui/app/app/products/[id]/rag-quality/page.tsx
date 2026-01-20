@@ -217,7 +217,8 @@ export default function RAGQualityPage() {
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-gray-900">RAG Quality Metrics</h1>
           <p className="text-gray-600 mt-1">
-            Evaluate and monitor the quality of your RAG system with comprehensive metrics and quality gates.
+            Evaluate and monitor the quality of your RAG system with comprehensive metrics and quality gates. 
+            Quality gates must pass before promoting versions to production.
           </p>
         </div>
 
@@ -237,7 +238,9 @@ export default function RAGQualityPage() {
                       Quality Gates: {qualityGates.all_passed ? 'Passed' : 'Failed'}
                     </h3>
                     <p className="text-sm text-gray-600 mt-1">
-                      {qualityGates.blocking ? 'Blocking promotion to production' : 'Ready for production'}
+                      {qualityGates.blocking 
+                        ? 'Blocking promotion to production - Quality gates must pass before promotion' 
+                        : 'Ready for production - All quality gates passed'}
                     </p>
                   </div>
                 </div>

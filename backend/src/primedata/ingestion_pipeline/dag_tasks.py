@@ -2272,12 +2272,25 @@ def task_indexing(**context) -> Dict[str, Any]:
             workspace_id=workspace_id,
         )
 
+        # Load playbook for RAG evaluation settings (if available)
+        playbook = {}
+        playbook_id = playbook_selection.get("playbook_id") if playbook_selection else product.playbook_id
+        if playbook_id:
+            try:
+                from primedata.ingestion_pipeline.aird_stages.playbooks import load_playbook_yaml
+                playbook = load_playbook_yaml(playbook_id, workspace_id=str(workspace_id), db_session=db)
+                logger.info(f"Loaded playbook {playbook_id} for indexing stage (keys: {list(playbook.keys())[:10]})")
+            except Exception as e:
+                logger.warning(f"Failed to load playbook {playbook_id} for indexing: {e}", exc_info=True)
+
         stage_context = {
             "storage": storage,
             "processed_files": processed_files,
             "preprocess_result": preprocess_result,
             "scoring_result": scoring_result,
             "chunking_config": chunking_config,
+            "playbook": playbook,
+            "playbook_id": playbook_id,
         }
 
         result = indexing_stage.execute(stage_context)
@@ -2286,6 +2299,58 @@ def task_indexing(**context) -> Dict[str, Any]:
             tracker.record_stage_result(result)
 
         logger.info(f"Indexing completed: {result.status.value}, vectors={result.metrics.get('points_indexed', 0)}")
+
+        # Persist vector + RAG metrics into product readiness_fingerprint (so UI reflects real computations)
+        if result.status == StageStatus.SUCCEEDED:
+            try:
+                from primedata.services.lazy_json_loader import load_product_json_field
+                from primedata.services.s3_json_storage import save_product_json_field
+
+                product_for_update = db.query(Product).filter(Product.id == product_id).first()
+                if product_for_update:
+                    existing_fp = load_product_json_field(product_for_update, "readiness_fingerprint") or {}
+                    if not isinstance(existing_fp, dict):
+                        existing_fp = {}
+
+                    # Only merge keys that the UI expects + keep details fields under dedicated keys
+                    keys_to_merge = [
+                        "Embedding_Dimension_Consistency",
+                        "Embedding_Success_Rate",
+                        "Vector_Quality_Score",
+                        "Embedding_Model_Health",
+                        "Semantic_Search_Readiness",
+                        "Retrieval_Recall_At_K",
+                        "Average_Precision_At_K",
+                        "Query_Coverage",
+                    ]
+                    for k in keys_to_merge:
+                        if k in result.metrics:
+                            existing_fp[k] = result.metrics[k]
+
+                    # Attach details (optional, useful for debugging)
+                    if "vector_metrics_details" in result.metrics:
+                        existing_fp["vector_metrics_details"] = result.metrics["vector_metrics_details"]
+                    if "rag_metrics_details" in result.metrics:
+                        existing_fp["rag_metrics_details"] = result.metrics["rag_metrics_details"]
+
+                    s3_path, should_save_to_s3 = save_product_json_field(
+                        product_for_update.workspace_id, product_for_update.id, "readiness_fingerprint", existing_fp
+                    )
+                    if should_save_to_s3 and s3_path:
+                        product_for_update.readiness_fingerprint_path = s3_path
+                        product_for_update.readiness_fingerprint = None
+                    else:
+                        # Assign a fresh dict so SQLAlchemy sees the JSON change.
+                        product_for_update.readiness_fingerprint = dict(existing_fp)
+                        product_for_update.readiness_fingerprint_path = None
+                        from sqlalchemy.orm.attributes import flag_modified
+
+                        flag_modified(product_for_update, "readiness_fingerprint")
+
+                    db.commit()
+                    logger.info(f"Updated product {product_id} readiness_fingerprint with vector/RAG metrics")
+            except Exception as e:
+                logger.warning(f"Failed to persist vector/RAG metrics into readiness_fingerprint: {e}", exc_info=True)
 
         # Phase 1 & 2: Register artifacts for traceability
         indexing_artifact_ids = []

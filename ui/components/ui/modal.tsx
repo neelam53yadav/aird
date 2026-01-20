@@ -93,7 +93,7 @@ export function ConfirmModal({
       <div className="space-y-6">
         <div className="flex items-start space-x-4">
           <div className="flex-shrink-0 text-3xl">{iconConfig[variant]}</div>
-          <p className="text-gray-700 leading-relaxed">{message}</p>
+          <div className="text-gray-700 leading-relaxed whitespace-pre-line">{message}</div>
         </div>
         <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
           <Button 
