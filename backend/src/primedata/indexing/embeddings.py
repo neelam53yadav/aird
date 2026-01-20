@@ -12,7 +12,7 @@ Key runtime goals (Airflow-friendly):
 
 import hashlib
 import logging
-from typing import List, Optional
+from typing import Dict, List, Optional
 from uuid import UUID
 
 import numpy as np
@@ -60,6 +60,18 @@ class EmbeddingGenerator:
         self.openai_client = None
         self.workspace_id = workspace_id
         self.db = db
+
+        # Runtime stats (used for vector/embedding health metrics)
+        # NOTE: These are best-effort counters (no guarantees in multithreaded use).
+        self.stats: Dict[str, float] = {
+            "texts_total": 0.0,
+            "api_requests": 0.0,  # OpenAI calls (single or batch)
+            "api_errors": 0.0,
+            "embed_calls": 0.0,  # fastembed calls (single or batch)
+            "embed_errors": 0.0,
+            "fallback_vectors": 0.0,  # number of vectors produced via hash fallback
+            "dim_mismatch_vectors": 0.0,  # vectors whose original dim != expected (coerced)
+        }
 
         # Initialize the model
         self._load_model()
@@ -184,21 +196,26 @@ class EmbeddingGenerator:
     # -------------------------
     def embed(self, text: str) -> np.ndarray:
         """Generate embedding for a single text."""
+        self.stats["texts_total"] += 1.0
         if not text:
             return self._coerce_dim(np.zeros(self.dimension, dtype=np.float32))
 
         # OpenAI
         if self.model == "openai" and self.openai_client and self.model_config:
+            self.stats["api_requests"] += 1.0
             try:
                 resp = self.openai_client.embeddings.create(model=self.model_config.model_path, input=text)
                 vec = np.array(resp.data[0].embedding, dtype=np.float32)
                 return self._coerce_dim(vec)
             except Exception as e:
                 logger.error(f"Error generating OpenAI embedding: {e}")
+                self.stats["api_errors"] += 1.0
+                self.stats["fallback_vectors"] += 1.0
                 return self._hash_embedding(text)
 
         # fastembed (TextEmbedding)
         if self.model is not None and self.model != "openai":
+            self.stats["embed_calls"] += 1.0
             try:
                 # fastembed returns an iterator of numpy arrays
                 vec = next(iter(self.model.embed([text])))
@@ -206,28 +223,36 @@ class EmbeddingGenerator:
                 return self._coerce_dim(vec)
             except Exception as e:
                 logger.error(f"Error generating embedding with fastembed: {e}")
+                self.stats["embed_errors"] += 1.0
+                self.stats["fallback_vectors"] += 1.0
                 return self._hash_embedding(text)
 
         # hash fallback
+        self.stats["fallback_vectors"] += 1.0
         return self._hash_embedding(text)
 
     def embed_batch(self, texts: List[str], batch_size: Optional[int] = None) -> List[np.ndarray]:
         """Generate embeddings for a batch of texts."""
         if not texts:
             return []
+        self.stats["texts_total"] += float(len(texts))
 
         # OpenAI
         if self.model == "openai" and self.openai_client and self.model_config:
+            self.stats["api_requests"] += 1.0
             try:
                 resp = self.openai_client.embeddings.create(model=self.model_config.model_path, input=texts)
                 out = [self._coerce_dim(np.array(item.embedding, dtype=np.float32)) for item in resp.data]
                 return out
             except Exception as e:
                 logger.error(f"Error generating OpenAI batch embeddings: {e}")
+                self.stats["api_errors"] += 1.0
+                self.stats["fallback_vectors"] += float(len(texts))
                 return [self._hash_embedding(t) for t in texts]
 
         # fastembed
         if self.model is not None and self.model != "openai":
+            self.stats["embed_calls"] += 1.0
             try:
                 # fastembed does its own batching internally
                 vectors = list(self.model.embed(texts))
@@ -235,9 +260,12 @@ class EmbeddingGenerator:
                 return out
             except Exception as e:
                 logger.error(f"Error generating batch embeddings with fastembed: {e}")
+                self.stats["embed_errors"] += 1.0
+                self.stats["fallback_vectors"] += float(len(texts))
                 return [self._hash_embedding(t) for t in texts]
 
         # hash fallback
+        self.stats["fallback_vectors"] += float(len(texts))
         return [self._hash_embedding(t) for t in texts]
 
     # -------------------------
@@ -249,6 +277,8 @@ class EmbeddingGenerator:
         Pads or truncates deterministically if needed.
         """
         vec = np.asarray(vec, dtype=np.float32).reshape(-1)
+        if vec.shape[0] != self.dimension:
+            self.stats["dim_mismatch_vectors"] += 1.0
         if vec.shape[0] == self.dimension:
             return vec
 

@@ -669,8 +669,6 @@ class QdrantClient:
             return False
 
         try:
-            from qdrant_client.http import models
-
             # Create alias name - keep readable alias based on product name if available
             if product_name:
                 sanitized_name = self._sanitize_collection_name(product_name)
@@ -694,20 +692,43 @@ class QdrantClient:
                 )
                 return False
 
-            # Create or update the alias using direct HTTP API
+            return self.set_alias(alias_name=alias_name, collection_name=collection_name)
+
+        except Exception as e:
+            logger.error(f"Failed to set production alias: {e}")
+            return False
+
+    def set_alias(self, alias_name: str, collection_name: str) -> bool:
+        """
+        Create/update a Qdrant alias to point to an explicit collection name.
+
+        This is more robust than name/id guessing and is used by promotion flows that
+        rely on the exact collection name recorded during indexing.
+        """
+        if not self.is_connected():
+            logger.error("Qdrant client not connected")
+            return False
+
+        try:
+            # Ensure the collection exists (fast fail with clear log)
+            info = self.get_collection_info(collection_name)
+            if not info:
+                logger.error(f"Cannot set alias '{alias_name}': collection '{collection_name}' not found in Qdrant")
+                return False
+
             import requests
 
-            # First, try to delete existing alias if it exists
+            # Delete existing alias if present
             try:
                 existing_aliases = self.client.get_aliases()
                 for alias in existing_aliases.aliases:
                     if alias.alias_name == alias_name:
-                        # Delete existing alias
                         delete_payload = {"actions": [{"delete_alias": {"alias_name": alias_name}}]}
                         response = requests.post(
                             f"http://{self.host}:{self.port}/collections/aliases",
                             json=delete_payload,
                             headers={"Content-Type": "application/json"},
+                            timeout=10,
                         )
                         if response.status_code == 200:
                             logger.info(f"Deleted existing alias '{alias_name}'")
@@ -715,24 +736,21 @@ class QdrantClient:
             except Exception as e:
                 logger.warning(f"Could not check/delete existing aliases: {e}")
 
-            # Create the new alias
             create_payload = {"actions": [{"create_alias": {"collection_name": collection_name, "alias_name": alias_name}}]}
-
             response = requests.post(
                 f"http://{self.host}:{self.port}/collections/aliases",
                 json=create_payload,
                 headers={"Content-Type": "application/json"},
+                timeout=10,
             )
-
             if response.status_code == 200:
-                logger.info(f"Created production alias '{alias_name}' -> '{collection_name}'")
-            else:
-                raise Exception(f"Failed to create alias: {response.status_code} - {response.text}")
+                logger.info(f"Created alias '{alias_name}' -> '{collection_name}'")
+                return True
 
-            return True
-
+            logger.error(f"Failed to create alias '{alias_name}' -> '{collection_name}': {response.status_code} - {response.text}")
+            return False
         except Exception as e:
-            logger.error(f"Failed to set production alias: {e}")
+            logger.error(f"Failed to set alias '{alias_name}' -> '{collection_name}': {e}", exc_info=True)
             return False
 
     def get_prod_alias_collection(

@@ -10,6 +10,8 @@ from typing import Any, Dict, List, Optional
 from loguru import logger
 from minio import Minio
 from minio.error import S3Error
+from urllib3 import PoolManager, Timeout
+from urllib3.util.retry import Retry
 
 # Try to import google-cloud-storage (optional, only needed for GCS)
 try:
@@ -100,7 +102,35 @@ class MinIOClient:
                 else:
                     raise ValueError("MINIO_SECRET_KEY environment variable must be set for production MinIO")
             self.secure = os.getenv("MINIO_SECURE", "false").lower() == "true"
-            self.client = Minio(self.host, access_key=self.access_key, secret_key=self.secret_key, secure=self.secure)
+            connect_timeout = float(os.getenv("MINIO_HTTP_CONNECT_TIMEOUT", "10"))
+            read_timeout = float(os.getenv("MINIO_HTTP_READ_TIMEOUT", "120"))
+            max_retries = int(os.getenv("MINIO_HTTP_MAX_RETRIES", "5"))
+            backoff = float(os.getenv("MINIO_HTTP_BACKOFF", "0.5"))
+            pool_size = int(os.getenv("MINIO_HTTP_POOL_SIZE", "10"))
+
+            retries = Retry(
+                total=max_retries,
+                connect=max_retries,
+                read=max_retries,
+                backoff_factor=backoff,
+                status_forcelist=(429, 500, 502, 503, 504),
+                allowed_methods=frozenset(["GET", "PUT", "POST", "DELETE", "HEAD"]),
+                raise_on_status=False,
+            )
+
+            http_client = PoolManager(
+                timeout=Timeout(connect=connect_timeout, read=read_timeout),
+                retries=retries,
+                maxsize=pool_size,
+            )
+
+            self.client = Minio(
+                self.host,
+                access_key=self.access_key,
+                secret_key=self.secret_key,
+                secure=self.secure,
+                http_client=http_client,
+            )
             self.gcs_client = None  # GCS client not used for MinIO
             logger.info(f"Initialized MinIO client for local MinIO at {self.host}")
 

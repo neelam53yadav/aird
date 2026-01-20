@@ -835,7 +835,7 @@ export default function HelpPage() {
                       </p>
                       <div className="bg-white rounded-lg p-3 mb-3 font-mono text-xs text-gray-800">
                         <strong>Formula:</strong> VQS = 0.4 × valid_ratio + 0.3 × non_zero_ratio + 0.3 × norm_health
-                        <br />where norm_health = 1 - deviation_from_optimal_norm
+                        <br />where norm_health ≈ 1 - outlier_rate(norms) (robustly measured via MAD / modified z-score)
                       </div>
                       <p className="text-xs text-gray-600">
                         <strong>Threshold:</strong> ≥ 95% = Excellent, ≥ 85% = Good, &lt; 85% = Needs Investigation
@@ -868,8 +868,8 @@ export default function HelpPage() {
                         <strong>Calculation:</strong> Composite metric evaluating embedding variance, outlier detection, and API error rates (for API-based models).
                       </p>
                       <div className="bg-white rounded-lg p-3 mb-3 font-mono text-xs text-gray-800">
-                        <strong>Formula:</strong> Model_Health = f(embedding_variance, outlier_rate, api_error_rate, response_consistency)
-                        <br />Health = 100% if all indicators within normal range
+                        <strong>Formula (current implementation):</strong> Model_Health = 0.30×(1-api_error_rate) + 0.25×(1-fallback_rate) + 0.20×(1-dim_mismatch_rate) + 0.15×norm_health + 0.10×response_consistency
+                        <br />Note: If the embedder is running in fallback (hash) mode, Model_Health is set to 0%.
                       </div>
                       <p className="text-xs text-gray-600">
                         <strong>Threshold:</strong> ≥ 95% = Healthy, ≥ 85% = Acceptable, &lt; 85% = Degraded (investigate model)
@@ -900,6 +900,10 @@ export default function HelpPage() {
                     <Search className="h-6 w-6 text-[#C8102E]" />
                     RAG Performance Metrics
                   </h3>
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 text-sm text-gray-700">
+                    <strong>Note:</strong> Unless you have a curated evaluation set (queries + relevance labels), PrimeData computes these as a <em>self-retrieval proxy</em>:
+                    each query is derived from a chunk, and the chunk is treated as the single relevant document. This validates indexing/search correctness, but it is not a full “production RAG” benchmark.
+                  </div>
                   <div className="space-y-6">
                     <div className="bg-red-50 border-l-4 border-red-500 rounded-lg p-5">
                       <h4 className="font-bold text-gray-900 mb-3">Retrieval Recall@K</h4>

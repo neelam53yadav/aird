@@ -473,12 +473,15 @@ async def trigger_pipeline(
         )
 
         # Trigger Airflow DAG with configuration
-        # Pass raw_file_version to Airflow, but pipeline_run will have its own version
+        # IMPORTANT:
+        # - pipeline_run_version is the version for the PipelineRun record + artifact/Qdrant naming
+        # - raw_file_version is only used to select input RawFile rows and stored keys
         dag_run_id = await _trigger_airflow_dag(
             workspace_id=product.workspace_id,
             product_id=request.product_id,
-            version=raw_file_version,  # Airflow processes raw files from this version
+            version=pipeline_run_version,  # Airflow uses this as PipelineRun/Artifact/Qdrant version
             pipeline_run_id=pipeline_run.id,
+            raw_file_version=raw_file_version,
             chunking_config=chunking_config,
             embedding_config=embedding_config,
             playbook_id=product.playbook_id,
@@ -1375,6 +1378,7 @@ async def _trigger_airflow_dag(
     product_id: UUID,
     version: int,
     pipeline_run_id: UUID,
+    raw_file_version: Optional[int] = None,
     chunking_config: Dict[str, Any] = None,
     embedding_config: Dict[str, Any] = None,
     playbook_id: str = None,
@@ -1425,6 +1429,7 @@ async def _trigger_airflow_dag(
                 "workspace_id": str(workspace_id),
                 "product_id": str(product_id),
                 "version": version,
+                "raw_file_version": raw_file_version if raw_file_version is not None else version,
                 "pipeline_run_id": str(pipeline_run_id),
                 "chunking_config": chunking_config or {},
                 "embedding_config": embedding_config or {},

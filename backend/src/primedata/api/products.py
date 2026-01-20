@@ -103,6 +103,61 @@ class ProductInsightsResponse(BaseModel):
     optimizer: Optional[Dict[str, Any]] = None  # Optimizer suggestions (M3)
 
 
+def _enrich_fingerprint_with_vector_metrics(*, fingerprint: Dict[str, Any], product) -> Dict[str, Any]:
+    """
+    Add vector-health metrics to the readiness fingerprint so the UI can render them.
+    Uses Qdrant collection metadata (dimension + counts). Safe no-op on any failure.
+    """
+    try:
+        from ..indexing.qdrant_client import QdrantClient
+
+        qdrant = QdrantClient()
+        if not qdrant.is_connected():
+            return fingerprint
+
+        collection_name = qdrant.find_collection_name(
+            workspace_id=str(product.workspace_id),
+            product_id=str(product.id),
+            version=product.current_version,
+            product_name=product.name,
+        )
+        if not collection_name:
+            return fingerprint
+
+        info = qdrant.get_collection_info(collection_name) or {}
+
+        # Qdrant returns slightly different shapes depending on client/version
+        actual_dim = (
+            info.get("config", {}).get("params", {}).get("vectors", {}).get("size")
+            or info.get("config", {}).get("vector_size")
+            or info.get("vector_size")
+            or 0
+        )
+        points_count = int(info.get("points_count") or info.get("vectors_count") or 0)
+        indexed_count = int(info.get("indexed_vectors_count") or points_count)
+
+        expected_dim = int(((product.embedding_config or {}) or {}).get("embedding_dimension") or 0)
+
+        dim_consistency = 100.0 if (expected_dim and actual_dim and expected_dim == actual_dim) else 0.0
+        success_rate = 0.0 if points_count <= 0 else round((indexed_count / max(points_count, 1)) * 100.0, 2)
+
+        # Lightweight computed placeholders (no vector sampling)
+        vector_quality = round((dim_consistency * 0.5) + (success_rate * 0.5), 2)
+        model_health = 100.0 if dim_consistency > 0 else 0.0
+        semantic_readiness = round((dim_consistency + success_rate + vector_quality + model_health) / 4.0, 2)
+
+        # Only set if missing (don’t overwrite if pipeline already computed them)
+        fingerprint.setdefault("Embedding_Dimension_Consistency", dim_consistency)
+        fingerprint.setdefault("Embedding_Success_Rate", success_rate)
+        fingerprint.setdefault("Vector_Quality_Score", vector_quality)
+        fingerprint.setdefault("Embedding_Model_Health", model_health)
+        fingerprint.setdefault("Semantic_Search_Readiness", semantic_readiness)
+
+        return fingerprint
+    except Exception:
+        return fingerprint
+
+
 @router.post("/", response_model=ProductResponse)
 async def create_product(
     request_body: ProductCreateRequest,
@@ -694,6 +749,8 @@ async def get_product_insights(
 
     if not fingerprint:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fingerprint not available for this product")
+
+    fingerprint = _enrich_fingerprint_with_vector_metrics(fingerprint=fingerprint, product=product)
 
     # Evaluate policy
     config = get_aird_config()
@@ -1781,18 +1838,77 @@ async def promote_version(
 
     try:
         from primedata.indexing.qdrant_client import qdrant_client
+        from primedata.db.models import ArtifactType, PipelineArtifact
 
         if not qdrant_client.is_connected():
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Qdrant client not connected")
 
-        # Set the production alias in Qdrant (using product name for better readability)
-        success = qdrant_client.set_prod_alias(
-            workspace_id=str(product.workspace_id), product_id=str(product_id), version=version, product_name=product.name
+        vectors_skipped = bool(
+            (pipeline_run.metrics or {}).get("vectors_skipped")
+            or (pipeline_run.metrics or {}).get("vectors_skip_reason")
+            or (product.vector_creation_enabled is False)
         )
 
-        if not success:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to set production alias in Qdrant"
+        alias_name = None
+        collection_name = None
+        alias_set = False
+
+        if not vectors_skipped:
+            # Prefer the exact collection name recorded during indexing (robust to product renames)
+            indexing_artifact = (
+                db.query(PipelineArtifact)
+                .filter(
+                    PipelineArtifact.pipeline_run_id == pipeline_run.id,
+                    PipelineArtifact.stage_name == "indexing",
+                    PipelineArtifact.artifact_type == ArtifactType.VECTOR,
+                )
+                .order_by(PipelineArtifact.created_at.desc())
+                .first()
+            )
+
+            collection_name_hint = None
+            if indexing_artifact and isinstance(indexing_artifact.artifact_metadata, dict):
+                collection_name_hint = indexing_artifact.artifact_metadata.get("collection_name")
+
+            sanitized_name = qdrant_client._sanitize_collection_name(product.name)
+            alias_name_pretty = f"prod_ws_{product.workspace_id}__{sanitized_name}"
+            alias_name_legacy = f"prod_ws_{product.workspace_id}__prod_{product_id}"
+
+            if collection_name_hint:
+                alias_set = qdrant_client.set_alias(alias_name=alias_name_pretty, collection_name=collection_name_hint)
+                # Also set legacy alias for backward compatibility (best-effort)
+                qdrant_client.set_alias(alias_name=alias_name_legacy, collection_name=collection_name_hint)
+                collection_name = collection_name_hint
+                alias_name = alias_name_pretty
+            else:
+                # Fallback: name/id guessing (older runs may not have artifact metadata)
+                alias_set = qdrant_client.set_prod_alias(
+                    workspace_id=str(product.workspace_id),
+                    product_id=str(product_id),
+                    version=version,
+                    product_name=product.name,
+                )
+                if alias_set:
+                    alias_name = alias_name_pretty
+                    collection_name = qdrant_client.find_collection_name(
+                        workspace_id=str(product.workspace_id),
+                        product_id=str(product_id),
+                        version=version,
+                        product_name=product.name,
+                    )
+
+            if not alias_set:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        "Failed to set production alias in Qdrant. "
+                        "No vectors/collection found for this version. "
+                        "Run the pipeline with vector indexing enabled (or promote a version that has vectors)."
+                    ),
+                )
+        else:
+            logger.warning(
+                f"Promoting version {version} without Qdrant alias: vectors were skipped for product {product_id}."
             )
 
         # Update the product's promoted_version
@@ -1800,16 +1916,25 @@ async def promote_version(
         db.commit()
         db.refresh(product)
 
-        # Get the actual collection name (which may use product name)
-        sanitized_name = qdrant_client._sanitize_collection_name(product.name)
-        alias_name = f"prod_ws_{product.workspace_id}__{sanitized_name}"
-        collection_name = f"ws_{product.workspace_id}__{sanitized_name}__v_{version}"
+        if alias_set and not alias_name:
+            # Backfill response fields if they were not set above
+            sanitized_name = qdrant_client._sanitize_collection_name(product.name)
+            alias_name = f"prod_ws_{product.workspace_id}__{sanitized_name}"
+        if alias_set and not collection_name:
+            collection_name = qdrant_client.find_collection_name(
+                workspace_id=str(product.workspace_id),
+                product_id=str(product_id),
+                version=version,
+                product_name=product.name,
+            )
 
         return {
             "message": f"Version {version} promoted to production successfully",
             "promoted_version": version,
             "alias_name": alias_name,
             "collection_name": collection_name,
+            "alias_set": alias_set,
+            "vectors_skipped": vectors_skipped,
         }
 
     except HTTPException:

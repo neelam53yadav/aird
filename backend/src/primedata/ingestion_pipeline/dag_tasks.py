@@ -102,6 +102,17 @@ def mark_raw_files_as_failed(product_id: UUID, version: int, error_message: str,
             db.close()
 
 
+def _get_versions_from_context(**context) -> Dict[str, int]:
+    """
+    Helper: return (pipeline_run_version, raw_file_version) from DAG params.
+    Backward compatible: if raw_file_version is missing, it defaults to version.
+    """
+    params = get_dag_params(**context)
+    v = int(params.get("version") or 0)
+    rv = int(params.get("raw_file_version") or v)
+    return {"version": v, "raw_file_version": rv}
+
+
 def register_stage_artifacts(
     db: Session,
     pipeline_run_id: UUID,
@@ -485,7 +496,11 @@ def get_dag_params(**context) -> Dict[str, Any]:
     # Get required parameters
     workspace_id = params.get("workspace_id")
     product_id = params.get("product_id")
-    version = params.get("version")
+    version = params.get("version")  # PipelineRun / artifact / Qdrant version
+    raw_file_version = params.get("raw_file_version")  # Input RawFile.version
+    if raw_file_version is None:
+        # Backward compatibility: older triggers used "version" as raw file version
+        raw_file_version = version
     playbook_id = params.get("playbook_id")
 
     # Get embedding configuration
@@ -514,6 +529,7 @@ def get_dag_params(**context) -> Dict[str, Any]:
         "workspace_id": UUID(workspace_id) if isinstance(workspace_id, str) else workspace_id,
         "product_id": UUID(product_id) if isinstance(product_id, str) else product_id,
         "version": version,
+        "raw_file_version": raw_file_version,
         "playbook_id": playbook_id,
         "embedder_name": embedder_name,
         "dim": dim,
@@ -545,6 +561,7 @@ def get_aird_context(**context) -> Dict[str, Any]:
     workspace_id = params["workspace_id"]
     product_id = params["product_id"]
     version = params["version"]
+    raw_file_version = params.get("raw_file_version", version)
 
     # Get database session
     db = next(get_db())
@@ -575,6 +592,7 @@ def get_aird_context(**context) -> Dict[str, Any]:
         "workspace_id": workspace_id,
         "product_id": product_id,
         "version": version,
+        "raw_file_version": raw_file_version,
         "storage": storage,
         "tracker": tracker,
         "db": db,
@@ -966,7 +984,8 @@ def task_preprocess(**context) -> Dict[str, Any]:
     params = get_dag_params(**context)
     workspace_id = params["workspace_id"]
     product_id = params["product_id"]
-    version = params["version"]
+    version = params["version"]  # pipeline run version
+    raw_file_version = params.get("raw_file_version", version)  # input raw file version
     playbook_id = params.get("playbook_id")
 
     logger.info(f"Starting AIRD preprocessing for product {product_id}, version {version}, playbook={playbook_id}")
@@ -998,12 +1017,13 @@ def task_preprocess(**context) -> Dict[str, Any]:
 
         # Enterprise best practice: Query raw files with explicit type conversion and logging
         logger.info(
-            f"Querying raw files for product_id={product_id} (type: {type(product_id).__name__}), version={version} (type: {type(version).__name__})"
+            f"Querying raw files for product_id={product_id} (type: {type(product_id).__name__}), "
+            f"raw_file_version={raw_file_version} (type: {type(raw_file_version).__name__}), pipeline_run_version={version}"
         )
 
         # Ensure product_id is UUID type for query
         query_product_id = UUID(str(product_id)) if not isinstance(product_id, UUID) else product_id
-        query_version = int(version) if version is not None else None
+        query_version = int(raw_file_version) if raw_file_version is not None else None
 
         if query_version is None:
             logger.error("Version is None - cannot query raw files without version")
@@ -1497,6 +1517,7 @@ def task_scoring(**context) -> Dict[str, Any]:
     workspace_id = params["workspace_id"]
     product_id = params["product_id"]
     version = params["version"]
+    raw_file_version = params.get("raw_file_version", version)
 
     logger.info(f"Starting AIRD scoring for product {product_id}, version {version}")
 
@@ -1624,7 +1645,7 @@ def task_scoring(**context) -> Dict[str, Any]:
         # Mark raw files as failed if scoring failed (before raising exception)
         if result.status == StageStatus.FAILED:
             error_msg = result.error or "Unknown error"
-            mark_raw_files_as_failed(product_id, version, f"Scoring stage failed: {error_msg}", db_session=db)
+            mark_raw_files_as_failed(product_id, raw_file_version, f"Scoring stage failed: {error_msg}", db_session=db)
 
         # Raise exception if stage failed (Airflow only fails tasks on exceptions)
         raise_if_stage_failed(result, "Scoring")
@@ -1638,7 +1659,7 @@ def task_scoring(**context) -> Dict[str, Any]:
         logger.error(f"Scoring failed: {e}", exc_info=True)
         std_logger.error(f"Scoring failed: {e}", exc_info=True)
         # Mark raw files as FAILED since pipeline failed at scoring stage
-        mark_raw_files_as_failed(product_id, version, f"Scoring stage failed: {str(e)}", db_session=db)
+        mark_raw_files_as_failed(product_id, raw_file_version, f"Scoring stage failed: {str(e)}", db_session=db)
         raise
     finally:
         db.close()
@@ -1650,6 +1671,7 @@ def task_fingerprint(**context) -> Dict[str, Any]:
     workspace_id = params["workspace_id"]
     product_id = params["product_id"]
     version = params["version"]
+    raw_file_version = params.get("raw_file_version", version)
 
     logger.info(f"Starting AIRD fingerprint generation for product {product_id}, version {version}")
 
@@ -1730,7 +1752,7 @@ def task_fingerprint(**context) -> Dict[str, Any]:
         # Mark raw files as failed if fingerprint failed (before raising exception)
         if result.status == StageStatus.FAILED:
             error_msg = result.error or "Unknown error"
-            mark_raw_files_as_failed(product_id, version, f"Fingerprint stage failed: {error_msg}", db_session=db)
+            mark_raw_files_as_failed(product_id, raw_file_version, f"Fingerprint stage failed: {error_msg}", db_session=db)
 
         # Raise exception if stage failed (Airflow only fails tasks on exceptions)
         raise_if_stage_failed(result, "Fingerprint")
@@ -1774,7 +1796,7 @@ def task_fingerprint(**context) -> Dict[str, Any]:
         logger.error(f"Fingerprint generation failed: {e}", exc_info=True)
         std_logger.error(f"Fingerprint generation failed: {e}", exc_info=True)
         # Mark raw files as FAILED since pipeline failed at fingerprint stage
-        mark_raw_files_as_failed(product_id, version, f"Fingerprint stage failed: {str(e)}", db_session=db)
+        mark_raw_files_as_failed(product_id, raw_file_version, f"Fingerprint stage failed: {str(e)}", db_session=db)
         raise
     finally:
         db.close()
@@ -1786,6 +1808,7 @@ def task_validation(**context) -> Dict[str, Any]:
     workspace_id = params["workspace_id"]
     product_id = params["product_id"]
     version = params["version"]
+    raw_file_version = params.get("raw_file_version", version)
 
     logger.info(f"Starting AIRD validation summary generation for product {product_id}, version {version}")
 
@@ -1868,7 +1891,7 @@ def task_validation(**context) -> Dict[str, Any]:
         logger.error(f"Validation summary generation failed: {e}", exc_info=True)
         std_logger.error(f"Validation summary generation failed: {e}", exc_info=True)
         # Mark raw files as FAILED since pipeline failed at validation stage
-        mark_raw_files_as_failed(product_id, version, f"Validation stage failed: {str(e)}", db_session=db)
+        mark_raw_files_as_failed(product_id, raw_file_version, f"Validation stage failed: {str(e)}", db_session=db)
         raise
     finally:
         db.close()
@@ -1880,6 +1903,7 @@ def task_policy(**context) -> Dict[str, Any]:
     workspace_id = params["workspace_id"]
     product_id = params["product_id"]
     version = params["version"]
+    raw_file_version = params.get("raw_file_version", version)
 
     logger.info(f"Starting AIRD policy evaluation for product {product_id}, version {version}")
 
@@ -1986,7 +2010,7 @@ def task_policy(**context) -> Dict[str, Any]:
         # Mark raw files as failed if policy failed (before raising exception)
         if result.status == StageStatus.FAILED:
             error_msg = result.error or "Unknown error"
-            mark_raw_files_as_failed(product_id, version, f"Policy stage failed: {error_msg}", db_session=db)
+            mark_raw_files_as_failed(product_id, raw_file_version, f"Policy stage failed: {error_msg}", db_session=db)
 
         # Raise exception if stage failed (Airflow only fails tasks on exceptions)
         raise_if_stage_failed(result, "Policy")
@@ -2024,7 +2048,7 @@ def task_policy(**context) -> Dict[str, Any]:
         logger.error(f"Policy evaluation failed: {e}", exc_info=True)
         std_logger.error(f"Policy evaluation failed: {e}", exc_info=True)
         # Mark raw files as FAILED since pipeline failed at policy stage
-        mark_raw_files_as_failed(product_id, version, f"Policy stage failed: {str(e)}", db_session=db)
+        mark_raw_files_as_failed(product_id, raw_file_version, f"Policy stage failed: {str(e)}", db_session=db)
         raise
     finally:
         db.close()
@@ -2036,6 +2060,7 @@ def task_reporting(**context) -> Dict[str, Any]:
     workspace_id = params["workspace_id"]
     product_id = params["product_id"]
     version = params["version"]
+    raw_file_version = params.get("raw_file_version", version)
 
     logger.info(f"Starting AIRD PDF report generation for product {product_id}, version {version}")
 
@@ -2100,7 +2125,7 @@ def task_reporting(**context) -> Dict[str, Any]:
         # Mark raw files as failed if reporting failed (before raising exception)
         if result.status == StageStatus.FAILED:
             error_msg = result.error or "Unknown error"
-            mark_raw_files_as_failed(product_id, version, f"Reporting stage failed: {error_msg}", db_session=db)
+            mark_raw_files_as_failed(product_id, raw_file_version, f"Reporting stage failed: {error_msg}", db_session=db)
 
         # Raise exception if stage failed (Airflow only fails tasks on exceptions)
         raise_if_stage_failed(result, "Reporting")
@@ -2124,7 +2149,7 @@ def task_reporting(**context) -> Dict[str, Any]:
         logger.error(f"PDF report generation failed: {e}", exc_info=True)
         std_logger.error(f"PDF report generation failed: {e}", exc_info=True)
         # Mark raw files as FAILED since pipeline failed at reporting stage
-        mark_raw_files_as_failed(product_id, version, f"Reporting stage failed: {str(e)}", db_session=db)
+        mark_raw_files_as_failed(product_id, raw_file_version, f"Reporting stage failed: {str(e)}", db_session=db)
         raise
     finally:
         db.close()
@@ -2183,6 +2208,7 @@ def task_indexing(**context) -> Dict[str, Any]:
     workspace_id = params["workspace_id"]
     product_id = params["product_id"]
     version = params["version"]
+    raw_file_version = params.get("raw_file_version", version)
 
     logger.info(f"Starting AIRD indexing for product {product_id}, version {version}")
 
@@ -2244,12 +2270,13 @@ def task_indexing(**context) -> Dict[str, Any]:
         effective_config = effective.to_legacy_dict(product_row=product)
         chunking_config = effective_config.get("chunking_config")
         playbook_selection = effective_config.get("playbook_selection")
+        playbook_id = effective_config.get("playbook_id") or params.get("playbook_id") or getattr(product, "playbook_id", None)
 
         # Log new resolver usage
         logger.info("✅ Using NEW resolver: resolve_effective_config() (indexing)")
         logger.info("Resolution trace: %s", effective.resolution_trace.dict() if effective.resolution_trace else None)
         logger.info(f"Effective chunking config (indexing): {chunking_config}")
-        logger.info(f"Effective playbook (indexing): {playbook_selection or {'playbook_id': product.playbook_id}}")
+        logger.info(f"Effective playbook (indexing): {playbook_selection or {'playbook_id': playbook_id or product.playbook_id}}")
 
         # Get processed files from preprocessing
         preprocess_result = context["task_instance"].xcom_pull(task_ids="preprocess", key="preprocess_result")
@@ -2261,6 +2288,17 @@ def task_indexing(**context) -> Dict[str, Any]:
         scoring_result = context["task_instance"].xcom_pull(task_ids="scoring", key="scoring_result")
         if not scoring_result:
             scoring_result = context["task_instance"].xcom_pull(task_ids="scoring")
+
+        # Load playbook (used for optional RAG evaluation settings)
+        playbook = {}
+        if playbook_id:
+            try:
+                from primedata.ingestion_pipeline.aird_stages.playbooks import load_playbook_yaml
+
+                playbook = load_playbook_yaml(playbook_id, workspace_id=str(workspace_id), db_session=db)
+                logger.info(f"Loaded playbook {playbook_id} for indexing stage (keys: {list(playbook.keys())[:10]})")
+            except Exception as e:
+                logger.warning(f"Failed to load playbook {playbook_id} for indexing: {e}", exc_info=True)
 
         # Create and execute indexing stage
         # Lazy import to avoid DAG import timeouts
@@ -2278,6 +2316,8 @@ def task_indexing(**context) -> Dict[str, Any]:
             "preprocess_result": preprocess_result,
             "scoring_result": scoring_result,
             "chunking_config": chunking_config,
+            "playbook": playbook,
+            "playbook_id": playbook_id,
         }
 
         result = indexing_stage.execute(stage_context)
@@ -2286,6 +2326,58 @@ def task_indexing(**context) -> Dict[str, Any]:
             tracker.record_stage_result(result)
 
         logger.info(f"Indexing completed: {result.status.value}, vectors={result.metrics.get('points_indexed', 0)}")
+
+        # Persist vector + RAG metrics into product readiness_fingerprint (so UI reflects real computations)
+        if result.status == StageStatus.SUCCEEDED:
+            try:
+                from primedata.services.lazy_json_loader import load_product_json_field
+                from primedata.services.s3_json_storage import save_product_json_field
+
+                product_for_update = db.query(Product).filter(Product.id == product_id).first()
+                if product_for_update:
+                    existing_fp = load_product_json_field(product_for_update, "readiness_fingerprint") or {}
+                    if not isinstance(existing_fp, dict):
+                        existing_fp = {}
+
+                    # Only merge keys that the UI expects + keep details fields under dedicated keys
+                    keys_to_merge = [
+                        "Embedding_Dimension_Consistency",
+                        "Embedding_Success_Rate",
+                        "Vector_Quality_Score",
+                        "Embedding_Model_Health",
+                        "Semantic_Search_Readiness",
+                        "Retrieval_Recall_At_K",
+                        "Average_Precision_At_K",
+                        "Query_Coverage",
+                    ]
+                    for k in keys_to_merge:
+                        if k in result.metrics:
+                            existing_fp[k] = result.metrics[k]
+
+                    # Attach details (optional, useful for debugging)
+                    if "vector_metrics_details" in result.metrics:
+                        existing_fp["vector_metrics_details"] = result.metrics["vector_metrics_details"]
+                    if "rag_metrics_details" in result.metrics:
+                        existing_fp["rag_metrics_details"] = result.metrics["rag_metrics_details"]
+
+                    s3_path, should_save_to_s3 = save_product_json_field(
+                        product_for_update.workspace_id, product_for_update.id, "readiness_fingerprint", existing_fp
+                    )
+                    if should_save_to_s3 and s3_path:
+                        product_for_update.readiness_fingerprint_path = s3_path
+                        product_for_update.readiness_fingerprint = None
+                    else:
+                        # Assign a fresh dict so SQLAlchemy sees the JSON change.
+                        product_for_update.readiness_fingerprint = dict(existing_fp)
+                        product_for_update.readiness_fingerprint_path = None
+                        from sqlalchemy.orm.attributes import flag_modified
+
+                        flag_modified(product_for_update, "readiness_fingerprint")
+
+                    db.commit()
+                    logger.info(f"Updated product {product_id} readiness_fingerprint with vector/RAG metrics")
+            except Exception as e:
+                logger.warning(f"Failed to persist vector/RAG metrics into readiness_fingerprint: {e}", exc_info=True)
 
         # Phase 1 & 2: Register artifacts for traceability
         indexing_artifact_ids = []
@@ -2322,7 +2414,7 @@ def task_indexing(**context) -> Dict[str, Any]:
         # Mark raw files as failed if indexing failed (before raising exception)
         if result.status == StageStatus.FAILED:
             error_msg = result.error or "Unknown error"
-            mark_raw_files_as_failed(product_id, version, f"Indexing stage failed: {error_msg}", db_session=db)
+            mark_raw_files_as_failed(product_id, raw_file_version, f"Indexing stage failed: {error_msg}", db_session=db)
 
         # Raise exception if stage failed (Airflow only fails tasks on exceptions)
         raise_if_stage_failed(result, "Indexing")
@@ -2330,12 +2422,29 @@ def task_indexing(**context) -> Dict[str, Any]:
         return {
             "status": result.status.value,
             "vectors_indexed": result.metrics.get("points_indexed", 0),  # Indexing stage uses 'points_indexed'
+            # Expose key computed metrics in XCom/response (optional, helps UI/logs)
+            "vector_metrics": {
+                k: result.metrics.get(k)
+                for k in [
+                    "Embedding_Dimension_Consistency",
+                    "Embedding_Success_Rate",
+                    "Vector_Quality_Score",
+                    "Embedding_Model_Health",
+                    "Semantic_Search_Readiness",
+                ]
+                if k in result.metrics
+            },
+            "rag_metrics": {
+                k: result.metrics.get(k)
+                for k in ["Retrieval_Recall_At_K", "Average_Precision_At_K", "Query_Coverage"]
+                if k in result.metrics
+            },
         }
     except Exception as e:
         logger.error(f"Indexing failed: {e}", exc_info=True)
         std_logger.error(f"Indexing failed: {e}", exc_info=True)
         # Mark raw files as FAILED since pipeline failed at indexing stage
-        mark_raw_files_as_failed(product_id, version, f"Indexing stage failed: {str(e)}", db_session=db)
+        mark_raw_files_as_failed(product_id, raw_file_version, f"Indexing stage failed: {str(e)}", db_session=db)
         raise
     finally:
         db.close()
@@ -2347,6 +2456,7 @@ def task_validate_data_quality(**context) -> Dict[str, Any]:
     workspace_id = params["workspace_id"]
     product_id = params["product_id"]
     version = params["version"]
+    raw_file_version = params.get("raw_file_version", version)
     pipeline_run_id = get_pipeline_run_id_from_context(**context)
 
     logger.info(f"Starting data quality validation for product {product_id}, version {version}")
@@ -2397,7 +2507,7 @@ def task_validate_data_quality(**context) -> Dict[str, Any]:
         logger.error(f"Data quality validation failed: {e}", exc_info=True)
         std_logger.error(f"Data quality validation failed: {e}", exc_info=True)
         # Mark raw files as FAILED since pipeline failed at data quality validation stage
-        mark_raw_files_as_failed(product_id, version, f"Data quality validation stage failed: {str(e)}", db_session=db)
+        mark_raw_files_as_failed(product_id, raw_file_version, f"Data quality validation stage failed: {str(e)}", db_session=db)
         raise
     finally:
         db.close()
@@ -2409,6 +2519,7 @@ def task_finalize(**context) -> Dict[str, Any]:
     workspace_id = params["workspace_id"]
     product_id = params["product_id"]
     version = params["version"]
+    raw_file_version = params.get("raw_file_version", version)
     pipeline_run_id = get_pipeline_run_id_from_context(**context)
 
     logger.info(f"Finalizing pipeline for product {product_id}, version {version}")
@@ -2443,7 +2554,11 @@ def task_finalize(**context) -> Dict[str, Any]:
         # This is the ONLY place where files should be marked as PROCESSED
         raw_files_to_finalize = (
             db.query(RawFile)
-            .filter(RawFile.product_id == product_id, RawFile.version == version, RawFile.status == RawFileStatus.PROCESSING)
+            .filter(
+                RawFile.product_id == product_id,
+                RawFile.version == raw_file_version,
+                RawFile.status == RawFileStatus.PROCESSING,
+            )
             .all()
         )
 

@@ -21,6 +21,61 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _enrich_fingerprint_with_vector_metrics(*, fingerprint: Dict[str, Any], product) -> Dict[str, Any]:
+    """
+    Add vector-health metrics to the readiness fingerprint so the UI can render them.
+    Uses Qdrant collection metadata (dimension + counts). Safe no-op on any failure.
+    """
+    try:
+        from ..indexing.qdrant_client import QdrantClient
+
+        qdrant = QdrantClient()
+        if not qdrant.is_connected():
+            return fingerprint
+
+        collection_name = qdrant.find_collection_name(
+            workspace_id=str(product.workspace_id),
+            product_id=str(product.id),
+            version=product.current_version,
+            product_name=product.name,
+        )
+        if not collection_name:
+            return fingerprint
+
+        info = qdrant.get_collection_info(collection_name) or {}
+
+        # Qdrant returns slightly different shapes depending on client/version
+        actual_dim = (
+            info.get("config", {}).get("params", {}).get("vectors", {}).get("size")
+            or info.get("config", {}).get("vector_size")
+            or info.get("vector_size")
+            or 0
+        )
+        points_count = int(info.get("points_count") or info.get("vectors_count") or 0)
+        indexed_count = int(info.get("indexed_vectors_count") or points_count)
+
+        expected_dim = int(((product.embedding_config or {}) or {}).get("embedding_dimension") or 0)
+
+        dim_consistency = 100.0 if (expected_dim and actual_dim and expected_dim == actual_dim) else 0.0
+        success_rate = 0.0 if points_count <= 0 else round((indexed_count / max(points_count, 1)) * 100.0, 2)
+
+        # Lightweight computed placeholders (no vector sampling)
+        vector_quality = round((dim_consistency * 0.5) + (success_rate * 0.5), 2)
+        model_health = 100.0 if dim_consistency > 0 else 0.0
+        semantic_readiness = round((dim_consistency + success_rate + vector_quality + model_health) / 4.0, 2)
+
+        # Only set if missing (don’t overwrite if pipeline already computed them)
+        fingerprint.setdefault("Embedding_Dimension_Consistency", dim_consistency)
+        fingerprint.setdefault("Embedding_Success_Rate", success_rate)
+        fingerprint.setdefault("Vector_Quality_Score", vector_quality)
+        fingerprint.setdefault("Embedding_Model_Health", model_health)
+        fingerprint.setdefault("Semantic_Search_Readiness", semantic_readiness)
+
+        return fingerprint
+    except Exception:
+        return fingerprint
+
+
 class ProductInsightsResponse(BaseModel):
     """Product insights response (M2)."""
 
@@ -402,6 +457,8 @@ async def get_product_insights(
                 status="no_data",
                 message="No fingerprint data available. Run a pipeline to generate insights.",
             )
+
+    fingerprint = _enrich_fingerprint_with_vector_metrics(fingerprint=fingerprint, product=product)
 
     # Evaluate policy
     config = get_aird_config()

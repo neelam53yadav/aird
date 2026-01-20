@@ -170,6 +170,13 @@ services:
       # ✅ Qdrant
       QDRANT_HOST: "qdrant"
       QDRANT_PORT: "6333"
+
+      # ✅ Reduce RAM usage on small machines (8GB laptops / podman VM)
+      AIRFLOW__WEBSERVER__WORKERS: "1"
+      AIRFLOW__SCHEDULER__PARSING_PROCESSES: "1"
+      AIRFLOW__CORE__PARALLELISM: "4"
+      AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: "2"
+      AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG: "1"
     ports:
       - "${AIRFLOW_WEBSERVER_PORT:-8080}:8080"
     volumes:
@@ -223,6 +230,13 @@ services:
       # ✅ Qdrant
       QDRANT_HOST: "qdrant"
       QDRANT_PORT: "6333"
+
+      # ✅ Reduce RAM usage on small machines (8GB laptops / podman VM)
+      AIRFLOW__WEBSERVER__WORKERS: "1"
+      AIRFLOW__SCHEDULER__PARSING_PROCESSES: "1"
+      AIRFLOW__CORE__PARALLELISM: "4"
+      AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: "2"
+      AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG: "1"
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - airflow_logs:/opt/airflow/logs
