@@ -289,7 +289,10 @@ def main():
     if system == "Windows":
         print("   python run.py dev --services-only")
     else:
-        print("   make services")
+        print("   python run.py dev --services-only  (recommended)")
+        print("   # If you use Podman on macOS/Linux, run:")
+        print("   #   CONTAINER_RUNTIME=podman python run.py dev --services-only")
+        print("   # Or: make services")
     print("\n3. Run database migrations:")
     if system == "Windows":
         python_exe = venv_path / "Scripts" / "python.exe"

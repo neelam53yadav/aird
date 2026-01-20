@@ -86,6 +86,7 @@ The installer performs the following steps automatically:
 - **Memory Check**: `bash scripts/check_memory.sh`
 - **Services**: Use `make services` or `python run.py dev --services-only`
 - **Commands**: Makefile works natively, or use Python scripts
+- **Podman (macOS)**: Supported. Install **Podman Desktop** and start the Podman machine. If you prefer, set `CONTAINER_RUNTIME=podman` when running `python run.py dev --services-only`.
 
 ### Linux
 
@@ -94,6 +95,7 @@ The installer performs the following steps automatically:
 - **Services**: Use `make services` or `python run.py dev --services-only`
 - **Commands**: Makefile works natively, or use Python scripts
 - **Permissions**: May need to add user to docker group: `sudo usermod -aG docker $USER`
+- **Podman (Linux)**: Supported. Install Podman (`sudo apt-get install podman`) and run services via `python run.py dev --services-only` (or set `CONTAINER_RUNTIME=podman` to force Podman).
 
 ## Troubleshooting
 
