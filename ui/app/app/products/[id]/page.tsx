@@ -114,6 +114,8 @@ export default function ProductDetailPage() {
   const [ingestionResults, setIngestionResults] = useState<Record<string, any>>({})
   const [pipelineArtifacts, setPipelineArtifacts] = useState<any[]>([])
   const [loadingArtifacts, setLoadingArtifacts] = useState(false)
+  const PIPELINE_ARTIFACTS_PER_PAGE = 5
+  const [pipelineArtifactsPage, setPipelineArtifactsPage] = useState(1)
   const [pipelineRuns, setPipelineRuns] = useState<PipelineRun[]>([])
   const [loadingPipelineRuns, setLoadingPipelineRuns] = useState(false)
   const [pipelineRunsPage, setPipelineRunsPage] = useState(0)
@@ -430,6 +432,7 @@ export default function ProductDetailPage() {
       const response = await apiClient.getPipelineArtifacts(product.id, product.current_version)
       if (response.data) {
         setPipelineArtifacts(response.data.artifacts || [])
+        setPipelineArtifactsPage(1) // Reset to first page whenever artifacts reload
       }
     } catch (err) {
       console.error('Failed to load pipeline artifacts:', err)
@@ -1673,6 +1676,24 @@ export default function ProductDetailPage() {
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
+                    {(() => {
+                      const artifactsTotalPages = Math.max(1, Math.ceil(pipelineArtifacts.length / PIPELINE_ARTIFACTS_PER_PAGE))
+                      const artifactsPage = Math.min(Math.max(1, pipelineArtifactsPage), artifactsTotalPages)
+                      const artifactsStart = (artifactsPage - 1) * PIPELINE_ARTIFACTS_PER_PAGE
+                      const artifactsEnd = artifactsStart + PIPELINE_ARTIFACTS_PER_PAGE
+                      const pagedArtifacts = pipelineArtifacts.slice(artifactsStart, artifactsEnd)
+
+                      const pages = (() => {
+                        const s = new Set<number>()
+                        ;[1, 2, artifactsTotalPages - 1, artifactsTotalPages].forEach((p) => s.add(p))
+                        for (let p = artifactsPage - 1; p <= artifactsPage + 1; p++) s.add(p)
+                        return Array.from(s)
+                          .filter((p) => p >= 1 && p <= artifactsTotalPages)
+                          .sort((a, b) => a - b)
+                      })()
+
+                      return (
+                        <>
                     <table className="min-w-full divide-y divide-gray-200">
                       <thead className="bg-gray-50">
                         <tr>
@@ -1691,7 +1712,7 @@ export default function ProductDetailPage() {
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
-                        {pipelineArtifacts.map((artifact: any, index: number) => {
+                        {pagedArtifacts.map((artifact: any, index: number) => {
                           const formatFileSize = (bytes: number) => {
                             if (bytes < 1024) return `${bytes} B`
                             if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
@@ -1765,6 +1786,72 @@ export default function ProductDetailPage() {
                         })}
                       </tbody>
                     </table>
+
+                    {pipelineArtifacts.length > PIPELINE_ARTIFACTS_PER_PAGE && (
+                      <div className="mt-4 flex items-center justify-between gap-3">
+                        <div className="text-xs text-gray-600">
+                          Showing <span className="font-semibold text-gray-900">{artifactsStart + 1}</span>–
+                          <span className="font-semibold text-gray-900">
+                            {Math.min(artifactsEnd, pipelineArtifacts.length)}
+                          </span>{' '}
+                          of <span className="font-semibold text-gray-900">{pipelineArtifacts.length}</span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            disabled={artifactsPage === 1}
+                            onClick={() => setPipelineArtifactsPage((p) => Math.max(1, p - 1))}
+                            className={`px-3 py-1.5 text-xs rounded-md border ${
+                              artifactsPage === 1
+                                ? 'text-gray-400 border-gray-200 bg-gray-50 cursor-not-allowed'
+                                : 'text-gray-700 border-gray-300 bg-white hover:bg-[#F5E6E8]'
+                            }`}
+                          >
+                            Prev
+                          </button>
+
+                          <div className="flex items-center gap-1">
+                            {pages.map((p, idx) => {
+                              const prev = pages[idx - 1]
+                              const showEllipsis = idx > 0 && prev !== undefined && p - prev > 1
+                              return (
+                                <span key={p} className="flex items-center gap-1">
+                                  {showEllipsis && <span className="px-1 text-xs text-gray-400">…</span>}
+                                  <button
+                                    type="button"
+                                    onClick={() => setPipelineArtifactsPage(p)}
+                                    className={`min-w-[32px] px-2 py-1.5 text-xs rounded-md border ${
+                                      p === artifactsPage
+                                        ? 'border-[#C8102E] bg-[#F5E6E8] text-[#C8102E] font-semibold'
+                                        : 'border-gray-300 bg-white text-gray-700 hover:bg-[#F5E6E8]'
+                                    }`}
+                                  >
+                                    {p}
+                                  </button>
+                                </span>
+                              )
+                            })}
+                          </div>
+
+                          <button
+                            type="button"
+                            disabled={artifactsPage === artifactsTotalPages}
+                            onClick={() => setPipelineArtifactsPage((p) => Math.min(artifactsTotalPages, p + 1))}
+                            className={`px-3 py-1.5 text-xs rounded-md border ${
+                              artifactsPage === artifactsTotalPages
+                                ? 'text-gray-400 border-gray-200 bg-gray-50 cursor-not-allowed'
+                                : 'text-gray-700 border-gray-300 bg-white hover:bg-[#F5E6E8]'
+                            }`}
+                          >
+                            Next
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                        </>
+                      )
+                    })()}
                   </div>
                 )}
               </div>
