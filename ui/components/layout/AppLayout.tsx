@@ -20,7 +20,8 @@ import {
   Bell,
   Search,
   HelpCircle,
-  Play
+  Play,
+  BookOpen
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ComingSoonBadgeInline } from '@/components/ui/coming-soon-badge-inline'
@@ -37,6 +38,7 @@ const navigation = [
   { name: 'Analytics', href: '/app/analytics', icon: BarChart3 },
   { name: 'Billing', href: '/app/billing', icon: CreditCard },
   { name: 'Team', href: '/app/team', icon: Users, comingSoon: true },
+  { name: 'FAQ', href: '/app/faq', icon: BookOpen },
   { name: 'Support', href: '/app/support', icon: HelpCircle },
   { name: 'Settings', href: '/app/settings', icon: Settings },
 ]
@@ -48,6 +50,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [imageError, setImageError] = useState(false)
   const [betaBannerDismissed, setBetaBannerDismissed] = useState(() => {
     // Check localStorage to persist dismissal
     if (typeof window !== 'undefined') {
@@ -85,6 +88,19 @@ export default function AppLayout({ children }: AppLayoutProps) {
     if (typeof window !== 'undefined') {
       localStorage.setItem('betaBannerDismissed', 'true')
     }
+  }
+
+  // Get user initial from email (fallback to name if email not available)
+  const getUserInitial = () => {
+    const email = session?.user?.email
+    const name = session?.user?.name
+    if (email) {
+      return email.charAt(0).toUpperCase()
+    }
+    if (name) {
+      return name.charAt(0).toUpperCase()
+    }
+    return 'U'
   }
 
   if (status === 'loading') {
@@ -273,16 +289,17 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   onClick={() => setUserMenuOpen(!userMenuOpen)}
                   className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-100 transition-colors border-2 border-transparent hover:border-gray-200"
                 >
-                  {session.user?.image ? (
+                  {session.user?.image && !imageError ? (
                     <img
                       className="h-9 w-9 rounded-full ring-2 ring-gray-200"
                       src={session.user.image}
                       alt="Profile"
+                      onError={() => setImageError(true)}
                     />
                   ) : (
                     <div className="h-9 w-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center ring-2 ring-gray-200">
                       <span className="text-white text-sm font-semibold">
-                        {session.user?.name?.charAt(0)?.toUpperCase() || 'U'}
+                        {getUserInitial()}
                       </span>
                     </div>
                   )}

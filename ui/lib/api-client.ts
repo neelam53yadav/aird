@@ -470,8 +470,8 @@ class ApiClient {
     return this.post(`/api/v1/products/${productId}/auto-configure-chunking`)
   }
 
-  async promoteVersion(productId: string, version: number): Promise<ApiResponse> {
-    return this.post(`/api/v1/products/${productId}/promote`, { version })
+  async promoteVersion(productId: string, version: number, forceOverride: boolean = false): Promise<ApiResponse> {
+    return this.post(`/api/v1/products/${productId}/promote`, { version, force_override: forceOverride })
   }
 
   // Data Sources API

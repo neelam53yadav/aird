@@ -18,6 +18,32 @@ import { DataQualityRulesEditor } from '@/components/DataQualityRulesEditor'
 import { AITrustScoreDisplay } from '@/components/AITrustScoreDisplay'
 import { useToast } from '@/components/ui/toast'
 import PipelineDetailsModal from '@/components/PipelineDetailsModal'
+
+// Map technical gate names to user-friendly display names
+const getFriendlyGateName = (gateName: string): string => {
+  const gateNameMap: Record<string, string> = {
+    'groundedness_min': 'Groundedness',
+    'citation_coverage_min': 'Citation Coverage',
+    'refusal_correctness_min': 'Refusal Correctness',
+    'context_relevance_min': 'Context Relevance',
+    'answer_relevance_min': 'Answer Relevance',
+    'hallucination_rate_max': 'Hallucination Rate',
+    'hallucination_rate': 'Hallucination Rate',
+    'acl_leakage_max': 'ACL Leakage',
+    'acl_leakage': 'ACL Leakage',
+  }
+  
+  // Remove common suffixes and get friendly name
+  const baseName = gateName.replace(/_min$|_max$/, '')
+  return gateNameMap[gateName] || gateNameMap[baseName] || gateName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+}
+
+// Format failed gates list for display
+const formatFailedGates = (gates: string[]): string[] => {
+  // Remove duplicates and sort
+  const uniqueGates = [...new Set(gates)]
+  return uniqueGates.map(gate => getFriendlyGateName(gate)).sort()
+}
 import { ComingSoonBadge } from '@/components/ui/coming-soon-badge'
 
 interface Product {
@@ -145,6 +171,12 @@ export default function ProductDetailPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleteDataSourceId, setDeleteDataSourceId] = useState<string | null>(null)
   const [showResultModal, setShowResultModal] = useState(false)
+  const [showConfirmModal, setShowConfirmModal] = useState(false)
+  const [confirmModalData, setConfirmModalData] = useState<{
+    title: string
+    message: string
+    onConfirm: () => void
+  } | null>(null)
   const [showPipelineModal, setShowPipelineModal] = useState(false)
   const [resultModalData, setResultModalData] = useState<{
     type: 'success' | 'error' | 'warning' | 'info'
@@ -728,14 +760,38 @@ export default function ProductDetailPage() {
     }
   }
 
-  const handlePromoteVersion = async (version: number) => {
+  const handlePromoteVersion = async (version: number, forceOverride: boolean = false) => {
     if (!product) return
     
     setPromotingVersion(version)
     try {
-      const response = await apiClient.promoteVersion(product.id, version)
+      const response = await apiClient.promoteVersion(product.id, version, forceOverride)
       
       if (response.error) {
+        // Check if error is about quality gates
+        if (typeof response.error === 'string' && response.error.includes('Quality gates failed')) {
+          // Extract failed gates from error message
+          const failedGatesMatch = response.error.match(/Failed gates: ([^.]+)/)
+          const failedGates = failedGatesMatch ? failedGatesMatch[1].split(', ') : []
+          const friendlyGates = formatFailedGates(failedGates)
+          
+          const gatesList = friendlyGates.length > 0 
+            ? `\n\nThe following quality gates did not meet the required thresholds:\n${friendlyGates.map(g => `• ${g}`).join('\n')}`
+            : ''
+          
+          setConfirmModalData({
+            title: 'Quality Gates Failed',
+            message: `Version ${version} has failed quality gates and is blocking promotion to production.${gatesList}\n\nAre you sure you want to promote this version anyway? This will override the quality gates.`,
+            onConfirm: () => {
+              setShowConfirmModal(false)
+              handlePromoteVersion(version, true)
+            }
+          })
+          setShowConfirmModal(true)
+          setPromotingVersion(null)
+          return
+        }
+        
         setResultModalData({
           type: 'error',
           title: 'Promotion Failed',
@@ -746,7 +802,7 @@ export default function ProductDetailPage() {
         setResultModalData({
           type: 'success',
           title: 'Version Promoted',
-          message: `Version ${version} has been promoted to production successfully`
+          message: `Version ${version} has been promoted to production successfully${forceOverride ? ' (quality gates overridden)' : ''}`
         })
         
         // Refresh product data to get updated promoted_version
@@ -1936,6 +1992,22 @@ export default function ProductDetailPage() {
           title={resultModalData.title}
           message={resultModalData.message}
           type={resultModalData.type}
+        />
+      )}
+
+      {showConfirmModal && confirmModalData && (
+        <ConfirmModal
+          isOpen={showConfirmModal}
+          onClose={() => {
+            setShowConfirmModal(false)
+            setConfirmModalData(null)
+          }}
+          onConfirm={confirmModalData.onConfirm}
+          title={confirmModalData.title}
+          message={confirmModalData.message}
+          confirmText="Promote Anyway"
+          cancelText="Cancel"
+          variant="warning"
         />
       )}
 

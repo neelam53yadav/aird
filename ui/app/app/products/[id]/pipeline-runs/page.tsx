@@ -12,6 +12,32 @@ import { useToast } from '@/components/ui/toast'
 import PipelineDetailsModal from '@/components/PipelineDetailsModal'
 import ChunkingConfigModal from '@/components/ChunkingConfigModal'
 
+// Map technical gate names to user-friendly display names
+const getFriendlyGateName = (gateName: string): string => {
+  const gateNameMap: Record<string, string> = {
+    'groundedness_min': 'Groundedness',
+    'citation_coverage_min': 'Citation Coverage',
+    'refusal_correctness_min': 'Refusal Correctness',
+    'context_relevance_min': 'Context Relevance',
+    'answer_relevance_min': 'Answer Relevance',
+    'hallucination_rate_max': 'Hallucination Rate',
+    'hallucination_rate': 'Hallucination Rate',
+    'acl_leakage_max': 'ACL Leakage',
+    'acl_leakage': 'ACL Leakage',
+  }
+  
+  // Remove common suffixes and get friendly name
+  const baseName = gateName.replace(/_min$|_max$/, '')
+  return gateNameMap[gateName] || gateNameMap[baseName] || gateName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+}
+
+// Format failed gates list for display
+const formatFailedGates = (gates: string[]): string[] => {
+  // Remove duplicates and sort
+  const uniqueGates = [...new Set(gates)]
+  return uniqueGates.map(gate => getFriendlyGateName(gate)).sort()
+}
+
 export default function PipelineRunsPage() {
   const params = useParams()
   const router = useRouter()
@@ -31,6 +57,9 @@ export default function PipelineRunsPage() {
   const [selectedRunForDetails, setSelectedRunForDetails] = useState<PipelineRun | null>(null)
   const [selectedChunkingConfig, setSelectedChunkingConfig] = useState<any | null>(null)
   const [loadingChunkingConfig, setLoadingChunkingConfig] = useState(false)
+  const [showPromoteConfirm, setShowPromoteConfirm] = useState(false)
+  const [pendingPromoteVersion, setPendingPromoteVersion] = useState<number | null>(null)
+  const [qualityGatesStatus, setQualityGatesStatus] = useState<{ blocking: boolean; failedGates?: string[] } | null>(null)
   const RUNS_PER_PAGE = 20
   
   // Ref to track the polling interval
@@ -240,14 +269,26 @@ export default function PipelineRunsPage() {
     }
   }
 
-  const handlePromoteVersion = async (version: number) => {
+  const handlePromoteVersion = async (version: number, forceOverride: boolean = false) => {
     if (!product) return
     
     setPromotingVersion(version)
     try {
-      const response = await apiClient.promoteVersion(product.id, version)
+      const response = await apiClient.promoteVersion(product.id, version, forceOverride)
       
       if (response.error) {
+        // Check if error is about quality gates
+        if (typeof response.error === 'string' && response.error.includes('Quality gates failed')) {
+          // Extract failed gates from error message
+          const failedGatesMatch = response.error.match(/Failed gates: ([^.]+)/)
+          const failedGates = failedGatesMatch ? failedGatesMatch[1].split(', ') : []
+          setQualityGatesStatus({ blocking: true, failedGates })
+          setPendingPromoteVersion(version)
+          setShowPromoteConfirm(true)
+          setPromotingVersion(null)
+          return
+        }
+        
         addToast({
           type: 'error',
           message: typeof response.error === 'string' ? response.error : 'Failed to promote version',
@@ -255,7 +296,7 @@ export default function PipelineRunsPage() {
       } else {
         addToast({
           type: 'success',
-          message: `Version ${version} has been promoted to production successfully`,
+          message: `Version ${version} has been promoted to production successfully${forceOverride ? ' (quality gates overridden)' : ''}`,
         })
         
         // Refresh product data to get updated promoted_version
@@ -268,6 +309,15 @@ export default function PipelineRunsPage() {
       })
     } finally {
       setPromotingVersion(null)
+    }
+  }
+
+  const handleConfirmPromote = async () => {
+    if (pendingPromoteVersion) {
+      await handlePromoteVersion(pendingPromoteVersion, true)
+      setShowPromoteConfirm(false)
+      setPendingPromoteVersion(null)
+      setQualityGatesStatus(null)
     }
   }
 
@@ -752,6 +802,57 @@ export default function PipelineRunsPage() {
               <Loader2 className="h-4 w-4 animate-spin" />
               Auto-refreshing pipeline status...
             </p>
+          </div>
+        )}
+
+        {/* Quality Gates Confirmation Modal */}
+        {showPromoteConfirm && pendingPromoteVersion && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+              <div className="flex items-start gap-4">
+                <AlertTriangle className="h-6 w-6 text-yellow-500 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    Quality Gates Failed
+                  </h3>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Version {pendingPromoteVersion} has failed quality gates and is blocking promotion to production.
+                  </p>
+                  {qualityGatesStatus?.failedGates && qualityGatesStatus.failedGates.length > 0 && (
+                    <div className="mb-4">
+                      <p className="text-sm font-medium text-gray-700 mb-2">Failed Quality Gates:</p>
+                      <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
+                        {formatFailedGates(qualityGatesStatus.failedGates).map((gate, idx) => (
+                          <li key={idx}>{gate}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  <p className="text-sm text-gray-600 mb-4">
+                    Are you sure you want to promote this version anyway? This action will override the quality gates.
+                  </p>
+                  <div className="flex gap-3 justify-end">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setShowPromoteConfirm(false)
+                        setPendingPromoteVersion(null)
+                        setQualityGatesStatus(null)
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="default"
+                      onClick={handleConfirmPromote}
+                      className="bg-yellow-600 hover:bg-yellow-700 text-white"
+                    >
+                      Promote Anyway
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 

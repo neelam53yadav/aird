@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Save, X, Package, Settings, FileText, Sparkles, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Save, X, Package, Settings, FileText, Sparkles, AlertCircle, CheckCircle2, Zap, DollarSign, Target } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -1042,11 +1042,11 @@ export default function EditProductPage() {
                               {resolved.evidence.all_scores && (
                                 <div className="mb-2">
                                   <strong className="text-gray-700">Content Type Scores:</strong>
-                                  <div className="mt-1 grid grid-cols-2 gap-1">
+                                  <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-1">
                                     {Object.entries(resolved.evidence.all_scores).map(([type, score]: [string, any]) => (
-                                      <div key={type} className="flex justify-between">
-                                        <span className="capitalize">{type}:</span>
-                                        <span className={type === resolved.evidence.final_type ? 'font-bold text-blue-600' : ''}>
+                                      <div key={type} className="flex items-center gap-2">
+                                        <span className="capitalize text-gray-600">{type}:</span>
+                                        <span className={type === resolved.evidence.final_type ? 'font-bold text-blue-600' : 'text-gray-900'}>
                                           {(score * 100).toFixed(1)}%
                                         </span>
                                       </div>
@@ -1176,9 +1176,20 @@ export default function EditProductPage() {
                     <p className="text-sm text-gray-600 mt-1">
                       Fast, free optimization using pattern matching. Handles 90% of common issues.
                     </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      ✅ Recommended for most documents • ✅ No API costs • ✅ Instant processing
-                    </p>
+                    <div className="flex flex-wrap items-center gap-3 mt-2">
+                      <div className="flex items-center gap-1.5 text-xs text-gray-600">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+                        <span>Recommended for most documents</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs text-gray-600">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+                        <span>No API costs</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs text-gray-600">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+                        <span>Instant processing</span>
+                      </div>
+                    </div>
                   </div>
                 </label>
 
@@ -1201,9 +1212,20 @@ export default function EditProductPage() {
                     <p className="text-sm text-gray-600 mt-1">
                       Pattern-based first, then AI enhancement when quality &lt; 75%. Best balance of speed, cost, and quality.
                     </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      ✅ Pattern-based for most docs • ✅ AI only when needed • ✅ Cost-optimized
-                    </p>
+                    <div className="flex flex-wrap items-center gap-3 mt-2">
+                      <div className="flex items-center gap-1.5 text-xs text-gray-600">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+                        <span>Pattern-based for most docs</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs text-gray-600">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+                        <span>AI only when needed</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs text-gray-600">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+                        <span>Cost-optimized</span>
+                      </div>
+                    </div>
                   </div>
                 </label>
 
@@ -1226,9 +1248,20 @@ export default function EditProductPage() {
                     <p className="text-sm text-gray-600 mt-1">
                       Best quality with semantic understanding. Uses OpenAI to enhance all documents.
                     </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      ⚡ Best quality • 💰 Higher cost • 🎯 For complex documents
-                    </p>
+                    <div className="flex flex-wrap items-center gap-3 mt-2">
+                      <div className="flex items-center gap-1.5 text-xs text-gray-600">
+                        <Zap className="h-3.5 w-3.5 text-amber-500" />
+                        <span>Best quality</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs text-gray-600">
+                        <DollarSign className="h-3.5 w-3.5 text-amber-600" />
+                        <span>Higher cost</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs text-gray-600">
+                        <Target className="h-3.5 w-3.5 text-purple-600" />
+                        <span>For complex documents</span>
+                      </div>
+                    </div>
                   </div>
                 </label>
               </div>
@@ -1246,8 +1279,9 @@ export default function EditProductPage() {
                           ? 'Hybrid mode requires an OpenAI API key configured in Workspace Settings. AI enhancement will be used automatically when quality score is below 75%.'
                           : 'LLM mode requires an OpenAI API key configured in Workspace Settings. All documents will be enhanced using AI.'}
                       </p>
-                      <p className="text-xs text-blue-600 mt-2">
-                        💡 Go to <Link href="/app/settings" className="underline font-medium">Settings</Link> → Workspace Settings to configure your OpenAI API key.
+                      <p className="text-xs text-blue-600 mt-2 flex items-center gap-1.5">
+                        <Sparkles className="h-3.5 w-3.5" />
+                        <span>Go to <Link href="/app/settings" className="underline font-medium">Settings</Link> → Workspace Settings to configure your OpenAI API key.</span>
                       </p>
                     </div>
                   </div>

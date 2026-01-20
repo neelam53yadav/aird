@@ -19,7 +19,16 @@ from primedata.core.security import get_current_user
 from primedata.core.settings import get_settings
 from primedata.core.user_utils import get_user_id
 from primedata.db.database import get_db
-from primedata.db.models import PipelineRun, PipelineRunStatus, Product, ProductStatus, Workspace
+from primedata.db.models import (
+    ArtifactStatus,
+    ArtifactType,
+    PipelineArtifact,
+    PipelineRun,
+    PipelineRunStatus,
+    Product,
+    ProductStatus,
+    Workspace,
+)
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
@@ -1992,6 +2001,7 @@ class PromoteVersionRequest(BaseModel):
     """Request model for promoting a version to production."""
 
     version: int
+    force_override: bool = Field(default=False, description="Force promotion even if quality gates fail")
 
 
 @router.post("/{product_id}/promote")
@@ -2022,7 +2032,69 @@ async def promote_version(
     )
 
     if not pipeline_run:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Version {version} not found or has not succeeded")
+        # Check if pipeline run exists with different status
+        pipeline_run_any_status = db.query(PipelineRun).filter(
+            PipelineRun.product_id == product_id,
+            PipelineRun.version == version
+        ).first()
+        
+        if pipeline_run_any_status:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Version {version} exists but has status '{pipeline_run_any_status.status.value}', not 'succeeded'. Cannot promote a version that hasn't completed successfully."
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Version {version} not found. Please run the pipeline for this version first."
+            )
+    
+    # Store pipeline_run_id for artifact lookup
+    pipeline_run_id = pipeline_run.id
+
+    # Check quality gates unless force_override is True
+    if not request_body.force_override:
+        from primedata.db.models import EvalRun
+        from primedata.evaluation.gates.gate_evaluator import GateEvaluator
+        from primedata.evaluation.gates.thresholds import ThresholdManager
+        
+        # Get latest completed evaluation run for this version or any version
+        latest_run = db.query(EvalRun).filter(
+            EvalRun.product_id == product_id,
+            EvalRun.status == 'completed'
+        ).order_by(EvalRun.created_at.desc()).first()
+        
+        if latest_run and latest_run.metrics:
+            # Get product thresholds
+            custom_thresholds = product.rag_quality_thresholds or {}
+            default_thresholds = ThresholdManager.get_default_thresholds()
+            thresholds = ThresholdManager.merge_thresholds(default_thresholds, custom_thresholds)
+            
+            # Get aggregate metrics from latest run
+            aggregate_metrics = latest_run.metrics.get('aggregate', {})
+            per_query_results = latest_run.metrics.get('per_query', [])
+            
+            # Evaluate gates
+            gate_evaluator = GateEvaluator(thresholds=thresholds)
+            gate_results = gate_evaluator.evaluate_gates(
+                aggregate_metrics=aggregate_metrics,
+                per_query_results=per_query_results
+            )
+            
+            # If gates are blocking, reject promotion
+            if gate_results.get('blocking', False):
+                failed_gates = [
+                    name for name, gate in gate_results.get('gates', {}).items()
+                    if not gate.get('passed', False)
+                ]
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Quality gates failed. Failed gates: {', '.join(failed_gates)}. Use force_override=true to promote anyway."
+                )
+        else:
+            # No evaluation run - warn but don't block (allows first-time promotion)
+            # Could optionally block here if you want eval runs to be mandatory
+            pass
 
     try:
         from primedata.indexing.qdrant_client import qdrant_client
@@ -2030,25 +2102,192 @@ async def promote_version(
         if not qdrant_client.is_connected():
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Qdrant client not connected")
 
-        # Set the production alias in Qdrant (using product name for better readability)
+        # Check if vector creation is enabled
+        if product.vector_creation_enabled is False:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot promote version {version}: Vector creation is disabled for this product. Enable vector creation in product settings to promote versions."
+            )
+
+        # Fetch the actual collection name from the pipeline artifact (more reliable than reconstructing)
+        # Try multiple approaches to find the artifact:
+        # 1. By pipeline_run_id (most reliable - direct relationship)
+        # 2. By product_id + version + stage + type
+        vector_artifact = None
+        
+        # First, try to find through pipeline run relationship
+        if pipeline_run_id:
+            vector_artifact = db.query(PipelineArtifact).filter(
+                PipelineArtifact.pipeline_run_id == pipeline_run_id,
+                PipelineArtifact.stage_name == "indexing",
+                PipelineArtifact.artifact_type == ArtifactType.VECTOR,
+                PipelineArtifact.status == ArtifactStatus.ACTIVE
+            ).first()
+        
+        # If not found, try by product_id + version (fallback)
+        if not vector_artifact:
+            vector_artifact = db.query(PipelineArtifact).filter(
+                PipelineArtifact.product_id == product_id,
+                PipelineArtifact.version == version,
+                PipelineArtifact.stage_name == "indexing",
+                PipelineArtifact.artifact_type == ArtifactType.VECTOR,
+                PipelineArtifact.status == ArtifactStatus.ACTIVE
+            ).first()
+
+        # If still not found, try without status filter (in case artifact exists but status changed)
+        if not vector_artifact:
+            if pipeline_run_id:
+                vector_artifact = db.query(PipelineArtifact).filter(
+                    PipelineArtifact.pipeline_run_id == pipeline_run_id,
+                    PipelineArtifact.stage_name == "indexing",
+                    PipelineArtifact.artifact_type == ArtifactType.VECTOR
+                ).first()
+            
+            if not vector_artifact:
+                vector_artifact = db.query(PipelineArtifact).filter(
+                    PipelineArtifact.product_id == product_id,
+                    PipelineArtifact.version == version,
+                    PipelineArtifact.stage_name == "indexing",
+                    PipelineArtifact.artifact_type == ArtifactType.VECTOR
+                ).first()
+
+        if not vector_artifact:
+            # Check if any indexing artifacts exist for this version/pipeline run (for debugging)
+            all_indexing_artifacts = []
+            if pipeline_run_id:
+                all_indexing_artifacts = db.query(PipelineArtifact).filter(
+                    PipelineArtifact.pipeline_run_id == pipeline_run_id,
+                    PipelineArtifact.stage_name == "indexing"
+                ).all()
+            
+            if not all_indexing_artifacts:
+                all_indexing_artifacts = db.query(PipelineArtifact).filter(
+                    PipelineArtifact.product_id == product_id,
+                    PipelineArtifact.version == version,
+                    PipelineArtifact.stage_name == "indexing"
+                ).all()
+            
+            error_detail = f"Cannot promote version {version}: No indexing artifact found."
+            
+            if all_indexing_artifacts:
+                artifact_info = []
+                for art in all_indexing_artifacts:
+                    artifact_info.append(f"type={art.artifact_type.value}, status={art.status.value}, name={art.artifact_name}")
+                error_detail += f" Found {len(all_indexing_artifacts)} indexing artifact(s): {', '.join(artifact_info)}."
+            
+            # Check if there are artifacts for other versions
+            other_version_artifacts = db.query(PipelineArtifact).filter(
+                PipelineArtifact.product_id == product_id,
+                PipelineArtifact.stage_name == "indexing",
+                PipelineArtifact.artifact_type == ArtifactType.VECTOR,
+                PipelineArtifact.status == ArtifactStatus.ACTIVE
+            ).distinct(PipelineArtifact.version).with_entities(PipelineArtifact.version).all()
+            
+            if other_version_artifacts:
+                available_versions = [v[0] for v in other_version_artifacts]
+                available_versions.sort(reverse=True)
+                error_detail += f" Available versions with indexing artifacts: {', '.join(map(str, available_versions))}."
+            
+            error_detail += " Please ensure the indexing stage completed successfully for this version."
+            
+            logger.warning(
+                f"Promotion failed for version {version} (pipeline_run_id={pipeline_run_id}): {error_detail}. "
+                f"Pipeline run status: {pipeline_run.status.value}"
+            )
+            
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=error_detail
+            )
+
+        # Get collection name from artifact metadata (the actual name used during indexing)
+        collection_name = None
+        if vector_artifact.artifact_metadata:
+            collection_name = vector_artifact.artifact_metadata.get("collection_name")
+
+        if not collection_name:
+            # Fallback: reconstruct collection name if not stored in metadata
+            sanitized_name = qdrant_client._sanitize_collection_name(product.name)
+            collection_name = f"ws_{product.workspace_id}__{sanitized_name}__v_{version}"
+            logger.warning(
+                f"Collection name not found in artifact metadata for version {version}, "
+                f"using reconstructed name: {collection_name}"
+            )
+
+        # Verify the collection actually exists in Qdrant
+        collections = qdrant_client.client.get_collections()
+        collection_exists = any(col.name == collection_name for col in collections.collections)
+
+        if not collection_exists:
+            # Try alternative collection name format (product_id based) as fallback
+            alt_collection_name = f"ws_{product.workspace_id}__prod_{product_id}__v_{version}"
+            collection_exists = any(col.name == alt_collection_name for col in collections.collections)
+
+            if collection_exists:
+                collection_name = alt_collection_name
+                logger.info(f"Found collection using alternative format: {collection_name}")
+            else:
+                # Find available collections for this product to suggest alternatives
+                available_versions = []
+                product_collections = [
+                    col.name for col in collections.collections
+                    if (f"ws_{product.workspace_id}__" in col.name and
+                        (str(product_id) in col.name or product.name.lower().replace(" ", "_") in col.name.lower()))
+                ]
+
+                # Extract version numbers from collection names
+                import re
+                for col_name in product_collections:
+                    version_match = re.search(r'__v_(\d+)', col_name)
+                    if version_match:
+                        available_versions.append(int(version_match.group(1)))
+
+                available_versions.sort(reverse=True)
+
+                error_msg = (
+                    f"Cannot promote version {version}: Collection does not exist in Qdrant. "
+                    f"Expected collection '{collection_name}' or '{alt_collection_name}'. "
+                )
+
+                if available_versions:
+                    error_msg += (
+                        f"Available versions with collections: {', '.join(map(str, available_versions))}. "
+                        f"Please promote one of these versions or run the pipeline for version {version} first."
+                    )
+                else:
+                    error_msg += (
+                        f"No collections found for this product. "
+                        f"Please run the pipeline for version {version} first to create the collection."
+                    )
+
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=error_msg
+                )
+
+        # Set the production alias in Qdrant using the actual collection name
+        sanitized_name = qdrant_client._sanitize_collection_name(product.name)
+        alias_name = f"prod_ws_{product.workspace_id}__{sanitized_name}"
+        
+        # Use the collection name we found (either from artifact or verified in Qdrant)
         success = qdrant_client.set_prod_alias(
-            workspace_id=str(product.workspace_id), product_id=str(product_id), version=version, product_name=product.name
+            workspace_id=str(product.workspace_id),
+            product_id=str(product_id),
+            version=version,
+            product_name=product.name
         )
 
         if not success:
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to set production alias in Qdrant"
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to set production alias in Qdrant for collection '{collection_name}'. "
+                       f"Please verify the collection exists and try again."
             )
 
         # Update the product's promoted_version
         product.promoted_version = version
         db.commit()
         db.refresh(product)
-
-        # Get the actual collection name (which may use product name)
-        sanitized_name = qdrant_client._sanitize_collection_name(product.name)
-        alias_name = f"prod_ws_{product.workspace_id}__{sanitized_name}"
-        collection_name = f"ws_{product.workspace_id}__{sanitized_name}__v_{version}"
 
         return {
             "message": f"Version {version} promoted to production successfully",

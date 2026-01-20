@@ -5,10 +5,13 @@ Ports AIRD FAISS indexing logic to Qdrant, with metadata tracking.
 """
 
 import json
+import hashlib
+import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
+import numpy as np
 from loguru import logger
 from primedata.indexing.embeddings import EmbeddingGenerator
 
@@ -219,7 +222,6 @@ class IndexingStage(AirdStage):
             # Process all files - collect all records first, then batch-embed
             all_records_data = []  # Store record data for batch processing
             total_chunks = 0
-            import hashlib
 
             # First pass: Collect all records and their metadata
             for file_stem in processed_files:
@@ -326,9 +328,6 @@ class IndexingStage(AirdStage):
                     f"or ensure the task has sufficient timeout (currently 2 hours)."
                 )
             all_embeddings = []
-
-            import time
-
             start_time = time.time()
 
             for i in range(0, len(all_records_data), embedding_batch_size):
@@ -453,11 +452,287 @@ class IndexingStage(AirdStage):
             scores = [p["payload"]["score"] for p in all_points]
             avg_trust_score = round(sum(scores) / len(scores), 4) if scores else 0.0
 
+            # --- Vector Metrics Calculation ---
+            vector_metrics: Dict[str, Any] = {}
+            try:
+                self.logger.info("Calculating vector quality metrics...")
+                
+                # Get expected dimension from embedding config
+                expected_dim = dimension
+                
+                # Track vector statistics
+                attempted_vectors = len(all_points)
+                produced_count = len(all_points)  # All points have embeddings at this point
+                fallback_vectors = 0
+                dim_mismatches = 0
+                nan_inf_count = 0
+                valid_vectors = 0
+                non_zero_vectors = 0
+                norms = []
+                api_requests = 0
+                api_errors = 0
+                
+                model_info = embedder.get_model_info()
+                fallback_mode = model_info.get("fallback_mode", False)
+                
+                # Analyze vectors for quality metrics
+                for point in all_points:
+                    vec = point.get("vector", [])
+                    if not vec:
+                        continue
+                    
+                    try:
+                        vec_array = np.array(vec, dtype=np.float32)
+                        vec_dim = len(vec)
+                        
+                        # Check dimension consistency
+                        if vec_dim != expected_dim:
+                            dim_mismatches += 1
+                        
+                        # Check for NaN/Inf values
+                        if np.any(np.isnan(vec_array)) or np.any(np.isinf(vec_array)):
+                            nan_inf_count += 1
+                        else:
+                            valid_vectors += 1
+                        
+                        # Check for non-zero vectors
+                        if np.any(vec_array != 0):
+                            non_zero_vectors += 1
+                        
+                        # Calculate L2 norm for distribution analysis
+                        norm = float(np.linalg.norm(vec_array))
+                        if norm > 0 and not (np.isnan(norm) or np.isinf(norm)):
+                            norms.append(norm)
+                    except Exception as e:
+                        self.logger.warning(f"Error analyzing vector for point {point.get('id')}: {e}")
+                        continue
+                
+                # Calculate dimension consistency (percentage of vectors with correct dimension)
+                if attempted_vectors > 0:
+                    dim_consistency = max(0.0, 100.0 - (dim_mismatches / attempted_vectors * 100.0))
+                else:
+                    dim_consistency = 0.0
+                
+                # Calculate embedding success rate
+                success_rate = (produced_count / attempted_vectors * 100.0) if attempted_vectors > 0 else 0.0
+                
+                # Vector quality score components
+                valid_ratio = (valid_vectors / attempted_vectors) if attempted_vectors > 0 else 0.0
+                non_zero_ratio = (non_zero_vectors / attempted_vectors) if attempted_vectors > 0 else 0.0
+                
+                # Norm health (check for reasonable distribution - avoid outliers)
+                norm_health = 1.0
+                if norms and len(norms) > 1:
+                    try:
+                        median = float(np.median(norms))
+                        mean_norm = float(np.mean(norms))
+                        std_norm = float(np.std(norms)) if len(norms) > 1 else 0.0
+                        
+                        # Check for outliers (norms too far from median - more than 3 standard deviations)
+                        if std_norm > 0:
+                            outlier_count = sum(1 for n in norms if abs(n - median) > 3 * std_norm)
+                            outlier_rate = outlier_count / len(norms)
+                            norm_health = max(0.0, 1.0 - outlier_rate)
+                        else:
+                            # All norms are similar - good health
+                            norm_health = 1.0
+                    except Exception as e:
+                        self.logger.warning(f"Error calculating norm health: {e}")
+                        norm_health = 0.5  # Default to neutral
+                
+                # Vector Quality Score (composite: valid vectors + non-zero + norm health)
+                vqs = (valid_ratio * 0.4 + non_zero_ratio * 0.3 + norm_health * 0.3) * 100.0
+                vqs_pct = round(max(0.0, min(100.0, vqs)), 2)
+                
+                # Embedding Model Health (composite score)
+                api_error_rate = (api_errors / max(api_requests, 1)) if api_requests > 0 else 0.0
+                fallback_rate = (fallback_vectors / attempted_vectors) if attempted_vectors > 0 else (1.0 if fallback_mode else 0.0)
+                dim_mismatch_rate = (dim_mismatches / attempted_vectors) if attempted_vectors > 0 else 0.0
+                
+                # Response consistency (coefficient of variation of norms)
+                response_consistency = 1.0
+                if norms and len(norms) > 1:
+                    try:
+                        mean_norm = float(np.mean(norms))
+                        std_norm = float(np.std(norms))
+                        cv = (std_norm / mean_norm) if mean_norm > 0 else 0.0
+                        # Lower CV = more consistent = higher score
+                        response_consistency = max(0.0, 1.0 - min(1.0, cv / 0.75))
+                    except Exception:
+                        response_consistency = 0.5
+                
+                # Calculate model health (weighted composite)
+                if fallback_mode:
+                    model_health_pct = 0.0
+                else:
+                    model_health = (
+                        0.30 * max(0.0, 1.0 - api_error_rate) +
+                        0.25 * max(0.0, 1.0 - fallback_rate) +
+                        0.20 * max(0.0, 1.0 - dim_mismatch_rate) +
+                        0.15 * norm_health +
+                        0.10 * response_consistency
+                    )
+                    model_health_pct = max(0.0, min(100.0, model_health * 100.0))
+                
+                # Semantic Search Readiness (composite score for RAG readiness)
+                semantic_readiness = (
+                    0.25 * dim_consistency +
+                    0.35 * vqs_pct +
+                    0.25 * model_health_pct +
+                    0.15 * success_rate
+                )
+                semantic_readiness = max(0.0, min(100.0, semantic_readiness))
+                
+                vector_metrics = {
+                    "Embedding_Dimension_Consistency": round(dim_consistency, 2),
+                    "Embedding_Success_Rate": round(success_rate, 2),
+                    "Vector_Quality_Score": round(vqs_pct, 2),
+                    "Embedding_Model_Health": round(model_health_pct, 2),
+                    "Semantic_Search_Readiness": round(semantic_readiness, 2),
+                    # Debug/support fields (not shown in UI directly)
+                    "vector_metrics_details": {
+                        "expected_dim": expected_dim,
+                        "attempted_vectors": attempted_vectors,
+                        "produced_vectors": produced_count,
+                        "fallback_vectors": fallback_vectors,
+                        "dim_mismatch_vectors": dim_mismatches,
+                        "nan_inf_vectors": nan_inf_count,
+                        "valid_ratio": round(valid_ratio, 6),
+                        "non_zero_ratio": round(non_zero_ratio, 6),
+                        "norm_median": round(float(np.median(norms)), 6) if norms else 0.0,
+                        "norm_mean": round(float(np.mean(norms)), 6) if norms else 0.0,
+                        "norm_std": round(float(np.std(norms)), 6) if norms and len(norms) > 1 else 0.0,
+                        "norm_health": round(norm_health, 6),
+                        "api_requests": int(api_requests),
+                        "api_errors": int(api_errors),
+                        "api_error_rate": round(api_error_rate, 6),
+                        "fallback_mode": bool(fallback_mode),
+                        "model_type": model_info.get("model_type", "unknown"),
+                    },
+                }
+                
+                self.logger.info(
+                    f"Vector metrics calculated: "
+                    f"Dimension Consistency={vector_metrics['Embedding_Dimension_Consistency']}%, "
+                    f"Success Rate={vector_metrics['Embedding_Success_Rate']}%, "
+                    f"Quality Score={vector_metrics['Vector_Quality_Score']}%, "
+                    f"Model Health={vector_metrics['Embedding_Model_Health']}%, "
+                    f"Semantic Readiness={vector_metrics['Semantic_Search_Readiness']}%"
+                )
+            except Exception as e:
+                self.logger.warning(f"Vector metrics calculation failed (non-fatal): {e}", exc_info=True)
+                # Continue without vector metrics
+
+            # --- RAG Performance Metrics (self-retrieval proxy) ---
+            rag_metrics: Dict[str, Any] = {}
+            try:
+                self.logger.info("Calculating RAG performance metrics...")
+                
+                # Use playbook rag_evaluation settings if provided; otherwise default
+                playbook = context.get("playbook") or {}
+                rag_cfg = playbook.get("rag_evaluation", {}) if isinstance(playbook, dict) else {}
+                retrieval_cfg = rag_cfg.get("retrieval_settings", {}) if isinstance(rag_cfg, dict) else {}
+                top_k = int(retrieval_cfg.get("top_k", 10) or 10)
+                max_queries = int(retrieval_cfg.get("max_queries", 50) or 50)
+                
+                # Helper function to extract first sentence for query
+                def _first_sentence(text: str) -> str:
+                    """Extract first sentence from text for use as query."""
+                    if not text:
+                        return ""
+                    for sep in [". ", "? ", "! "]:
+                        idx = text.find(sep)
+                        if idx != -1 and idx < 300:
+                            return text[: idx + 1].strip()
+                    return text[:250].strip()
+                
+                # Prepare candidates for RAG evaluation (use first sentence of chunks as queries)
+                rag_eval_candidates: List[Dict[str, Any]] = []
+                for point in all_points[:max_queries]:  # Limit to max_queries for performance
+                    payload = point.get("payload", {})
+                    chunk_text = payload.get("text", "")
+                    query_text = _first_sentence(chunk_text)
+                    if query_text and len(query_text) > 10:  # Minimum query length
+                        rag_eval_candidates.append({
+                            "point_id": point["id"],
+                            "query_text": query_text,
+                            "expected_chunk_id": payload.get("chunk_id"),
+                        })
+                
+                if rag_eval_candidates:
+                    hits = 0
+                    ap_sum = 0.0
+                    
+                    self.logger.info(f"Evaluating RAG performance with {len(rag_eval_candidates)} queries (top_k={top_k})...")
+                    
+                    for idx, candidate in enumerate(rag_eval_candidates, 1):
+                        target_id = candidate["point_id"]
+                        query_text = candidate["query_text"]
+                        
+                        try:
+                            # Embed query
+                            qvec = embedder.embed(query_text)
+                            qvec_list = qvec.tolist() if hasattr(qvec, "tolist") else list(qvec)
+                            
+                            # Search in Qdrant
+                            results = qdrant_client.search_points(collection_name, qvec_list, limit=top_k)
+                            
+                            # Check if target chunk is in results
+                            rank = None
+                            for i_r, r in enumerate(results, start=1):
+                                if r.get("id") == target_id:
+                                    rank = i_r
+                                    break
+                            
+                            if rank is not None:
+                                hits += 1
+                                # Average Precision: 1/rank (lower rank = higher precision)
+                                ap_sum += 1.0 / float(rank)
+                            
+                            # Log progress every 10 queries
+                            if idx % 10 == 0:
+                                self.logger.debug(f"RAG evaluation progress: {idx}/{len(rag_eval_candidates)} queries processed")
+                        except Exception as e:
+                            self.logger.debug(f"RAG eval query {idx} failed: {e}")
+                            continue
+                    
+                    qn = float(len(rag_eval_candidates))
+                    recall_at_k = (hits / qn) * 100.0 if qn > 0 else 0.0
+                    avg_precision_at_k = (ap_sum / qn) * 100.0 if qn > 0 else 0.0
+                    coverage = recall_at_k  # For self-retrieval, coverage == hit rate
+                    
+                    rag_metrics = {
+                        "Retrieval_Recall_At_K": round(recall_at_k, 2),
+                        "Average_Precision_At_K": round(avg_precision_at_k, 2),
+                        "Query_Coverage": round(coverage, 2),
+                        "rag_metrics_details": {
+                            "top_k": top_k,
+                            "queries_evaluated": int(qn),
+                            "hits": hits,
+                            "query_mode": "first_sentence_embed",
+                        },
+                    }
+                    
+                    self.logger.info(
+                        f"RAG metrics calculated: "
+                        f"Recall@K={rag_metrics['Retrieval_Recall_At_K']}%, "
+                        f"Precision@K={rag_metrics['Average_Precision_At_K']}%, "
+                        f"Coverage={rag_metrics['Query_Coverage']}%"
+                    )
+            except Exception as e:
+                self.logger.warning(f"RAG metric evaluation failed (non-fatal): {e}", exc_info=True)
+                # Continue without RAG metrics
+
+            # Build final metrics result
             metrics_result = {
                 "collection_name": collection_name,
                 "points_indexed": len(all_points),
                 "avg_trust_score": avg_trust_score,
             }
+            
+            # Merge computed metrics (vector + rag) into stage metrics so downstream can persist them
+            metrics_result.update(vector_metrics)
+            metrics_result.update(rag_metrics)
 
             return self._create_result(
                 status=StageStatus.SUCCEEDED,
