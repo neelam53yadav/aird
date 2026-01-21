@@ -1795,7 +1795,21 @@ export default function ProductDetailPage() {
                                         {artifact.download_url && (
                                           <button
                                             onClick={() => {
-                                              // Fetch the file as a blob to ensure proper download
+                                              // For GCS signed URLs, use direct download (skip fetch to avoid CORS issues)
+                                              if (artifact.download_url.includes('storage.googleapis.com') || 
+                                                  artifact.download_url.includes('X-Goog-Signature')) {
+                                                const a = document.createElement('a')
+                                                a.href = artifact.download_url
+                                                a.download = artifact.display_name || artifact.artifact_name || 'artifact'
+                                                a.target = '_blank'
+                                                a.style.display = 'none'
+                                                document.body.appendChild(a)
+                                                a.click()
+                                                document.body.removeChild(a)
+                                                return
+                                              }
+                                              
+                                              // For non-GCS URLs, use fetch approach
                                               fetch(artifact.download_url)
                                                 .then(response => {
                                                   if (!response.ok) throw new Error('Download failed')
@@ -1818,6 +1832,7 @@ export default function ProductDetailPage() {
                                                   const a = document.createElement('a')
                                                   a.href = artifact.download_url
                                                   a.download = artifact.display_name || artifact.artifact_name || 'artifact'
+                                                  a.target = '_blank'
                                                   a.style.display = 'none'
                                                   document.body.appendChild(a)
                                                   a.click()

@@ -70,7 +70,11 @@ def upgrade() -> None:
     # Check if enum exists (it may have been created by a previous migration)
     enum_already_exists = enum_exists('evaldatasetstatus')
     
-    # Use create_type=False to prevent SQLAlchemy from trying to create the enum again
+    # Create the enum if it doesn't exist (fix for fresh VMs)
+    if not enum_already_exists:
+        op.execute("CREATE TYPE evaldatasetstatus AS ENUM ('draft', 'active', 'archived')")
+    
+    # Use create_type=False since we handle enum creation manually above
     # Note: Using lowercase values to match the existing enum created by previous migration
     status_enum = postgresql.ENUM('draft', 'active', 'archived', name='evaldatasetstatus', create_type=False)
     

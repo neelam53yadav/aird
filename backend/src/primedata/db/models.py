@@ -739,7 +739,11 @@ class EvalDataset(Base):
     description = Column(Text, nullable=True)
     dataset_type = Column(String(50), nullable=False)  # 'golden_qa', 'golden_retrieval', 'adversarial'
     version = Column(Integer, nullable=True)  # Product version this dataset is for (null = all versions)
-    status = Column(SQLEnum(EvalDatasetStatus), nullable=False, default=EvalDatasetStatus.DRAFT)
+    status = Column(
+        SQLEnum(EvalDatasetStatus, native_enum=True, values_callable=lambda obj: [e.value for e in EvalDatasetStatus]),
+        nullable=False,
+        default=EvalDatasetStatus.DRAFT
+    )
     extra_metadata = Column(JSON, nullable=True, default=dict)  # Additional metadata
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

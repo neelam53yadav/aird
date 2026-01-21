@@ -58,8 +58,24 @@ export default function ArtifactsModal({
   const handleDownload = async (artifact: Artifact) => {
     if (!artifact.download_url) return
     
+    // For GCS signed URLs, use direct download (skip fetch to avoid CORS issues)
+    // GCS signed URLs with response-content-disposition=attachment work better with direct links
+    if (artifact.download_url.includes('storage.googleapis.com') || 
+        artifact.download_url.includes('X-Goog-Signature')) {
+      // Direct download for GCS URLs
+      const a = document.createElement('a')
+      a.href = artifact.download_url
+      a.download = artifact.display_name || artifact.artifact_name || 'artifact'
+      a.target = '_blank' // Open in new tab as fallback if download attribute doesn't work
+      a.style.display = 'none'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      return
+    }
+    
     try {
-      // Fetch the file as a blob to ensure proper download
+      // For non-GCS URLs (MinIO), use fetch approach
       const response = await fetch(artifact.download_url)
       
       if (!response.ok) {
@@ -82,6 +98,7 @@ export default function ArtifactsModal({
       const a = document.createElement('a')
       a.href = artifact.download_url
       a.download = artifact.display_name || artifact.artifact_name || 'artifact'
+      a.target = '_blank'
       a.style.display = 'none'
       document.body.appendChild(a)
       a.click()
