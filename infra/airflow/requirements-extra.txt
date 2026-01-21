@@ -18,7 +18,7 @@ fastembed>=0.3,<1
 onnxruntime>=1.16,<2
 tokenizers>=0.15,<1
 # LLM / embedding providers
-openai>=1.0,<2
+#openai>=1.0,<2
 
 
 # keep compatible with Airflow constraints ecosystem
