@@ -47,11 +47,15 @@ def column_exists(table_name, column_name):
 def upgrade() -> None:
     # Create EvalDatasetStatus enum if it doesn't exist
     # Check if enum already exists (it may have been created by be303e6b7efc)
-    if not enum_exists('evaldatasetstatus'):
+    enum_already_exists = enum_exists('evaldatasetstatus')
+    if not enum_already_exists:
         op.execute("CREATE TYPE evaldatasetstatus AS ENUM ('draft', 'active', 'archived')")
     
     # Create eval_datasets table if it doesn't exist
     if not table_exists('eval_datasets'):
+        # Always use create_type=False since we handle enum creation manually above
+        # This prevents SQLAlchemy from trying to create the enum type again
+        status_enum = postgresql.ENUM('draft', 'active', 'archived', name='evaldatasetstatus', create_type=False)
         op.create_table(
         'eval_datasets',
         sa.Column('id', postgresql.UUID(), nullable=False, server_default=sa.text('gen_random_uuid()')),
@@ -61,7 +65,7 @@ def upgrade() -> None:
         sa.Column('description', sa.Text(), nullable=True),
         sa.Column('dataset_type', sa.String(50), nullable=False),
         sa.Column('version', sa.Integer(), nullable=True),
-        sa.Column('status', postgresql.ENUM('draft', 'active', 'archived', name='evaldatasetstatus'), nullable=False, server_default='draft'),
+        sa.Column('status', status_enum, nullable=False, server_default='draft'),
         sa.Column('extra_metadata', postgresql.JSON(), nullable=True, server_default='{}'),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()')),
         sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
