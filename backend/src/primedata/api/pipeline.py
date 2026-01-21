@@ -19,7 +19,7 @@ from primedata.core.settings import get_settings
 from primedata.core.scope import allowed_workspaces, ensure_product_access
 from primedata.core.security import get_current_user
 from primedata.db.database import get_db
-from primedata.db.models import ArtifactStatus, BillingProfile, PipelineArtifact, PipelineRun, PipelineRunStatus, Product, RawFile, RawFileStatus
+from primedata.db.models import ArtifactStatus, PipelineArtifact, PipelineRun, PipelineRunStatus, Product, RawFile, RawFileStatus
 from primedata.storage.minio_client import minio_client
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import and_, func

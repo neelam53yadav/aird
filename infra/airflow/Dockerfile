@@ -23,6 +23,12 @@ USER airflow
 COPY constraints/constraints-3.11.txt /opt/airflow/constraints-3.11.txt
 COPY requirements-extra.txt /opt/airflow/requirements-extra.txt
 
+# Optional custom CA certs (place *.crt in infra/airflow/certs/)
+USER root
+COPY certs/ /usr/local/share/ca-certificates/
+RUN update-ca-certificates
+USER airflow
+
 # Keep pip sane; use constraints to avoid dependency conflicts
 RUN python -m pip install --no-cache-dir --upgrade "pip<25" "setuptools<67" "wheel"
 
