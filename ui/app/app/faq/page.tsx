@@ -220,7 +220,7 @@ export default function FAQPage() {
           </p>
           <ul className="list-disc list-inside space-y-1 text-gray-700 ml-4">
             <li>Generate embeddings for semantic search</li>
-            <li>Store vectors in Qdrant for retrieval</li>
+            <li>Store vectors in the vector database for retrieval</li>
             <li>Calculate Vector Metrics (5 metrics) and RAG Performance Metrics (3 metrics)</li>
             <li>Enable semantic search in the Playground</li>
             <li>Require more processing time and storage</li>
@@ -401,7 +401,7 @@ export default function FAQPage() {
             <li><strong>Common Issues:</strong>
               <ul className="list-disc list-inside ml-6 mt-1 space-y-1">
                 <li>Data source connection issues (check credentials and permissions)</li>
-                <li>Qdrant connection problems (ensure Qdrant is running)</li>
+                <li>Vector database connection problems (ensure the vector database service is running)</li>
                 <li>Embedding model errors (check API keys for OpenAI models)</li>
                 <li>Storage issues (check S3/MinIO configuration)</li>
               </ul>

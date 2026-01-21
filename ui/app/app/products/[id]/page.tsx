@@ -5,19 +5,21 @@ import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Package, Database, Settings, Settings2, Play, Pause, Search, TrendingUp, BarChart3, AlertTriangle, GitBranch, FileText, Download, FileSpreadsheet, Upload, Loader2, ArrowDownToLine, CheckCircle2, Home, Shield, Layers, Lock, FileCheck, FileJson, FileCode, FileSpreadsheet as FileCsv, RefreshCw, X, Eye, Cpu } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Package, Database, Settings, Settings2, Play, Pause, Search, TrendingUp, BarChart3, AlertTriangle, GitBranch, FileText, Download, FileSpreadsheet, Upload, Loader2, ArrowDownToLine, CheckCircle2, Home, Shield, Layers, Lock, FileCheck, FileJson, FileCode, FileSpreadsheet as FileCsv, RefreshCw, X, Eye, Cpu, Rocket } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { TableSkeleton, CardSkeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { ConfirmModal, ResultModal } from '@/components/ui/modal'
 import AppLayout from '@/components/layout/AppLayout'
 import { apiClient } from '@/lib/api-client'
+import { getApiUrl } from '@/lib/config'
 import { DataQualityBanner } from '@/components/DataQualityBanner'
 import { DataQualityViolationsDrawer } from '@/components/DataQualityViolationsDrawer'
 import { DataQualityRulesEditor } from '@/components/DataQualityRulesEditor'
 import { AITrustScoreDisplay } from '@/components/AITrustScoreDisplay'
 import { useToast } from '@/components/ui/toast'
 import PipelineDetailsModal from '@/components/PipelineDetailsModal'
+import { SectionHeader } from '@/components/ui/section-header'
 
 // Map technical gate names to user-friendly display names
 const getFriendlyGateName = (gateName: string): string => {
@@ -460,7 +462,9 @@ export default function ProductDetailPage() {
     setLoadingArtifacts(true)
     setLoadingData(prev => ({ ...prev, artifacts: true }))
     try {
-      const response = await apiClient.getPipelineArtifacts(product.id, product.current_version)
+      // Use promoted_version if available (actual production), otherwise current_version (latest)
+      const artifactsVersion = product.promoted_version || product.current_version
+      const response = await apiClient.getPipelineArtifacts(product.id, artifactsVersion)
       if (response.data) {
         setPipelineArtifacts(response.data.artifacts || [])
       }
@@ -480,7 +484,7 @@ export default function ProductDetailPage() {
     try {
       if (artifact.artifact_type?.toLowerCase() === 'vector') {
         // For vectors, show info message - no downloadable content
-        setArtifactContent('Vector artifacts are stored in Qdrant. Use the RAG Playground to query them.')
+        setArtifactContent('Vector artifacts are stored in the vector database. Use the Playground to query them.')
         setLoadingArtifactContent(false)
         return
       }
@@ -495,16 +499,29 @@ export default function ProductDetailPage() {
         return
       }
 
-      // Use backend proxy endpoint to avoid CORS issues
-      // Use relative path - Next.js will proxy to the backend
-      const proxyUrl = `/api/v1/pipeline/artifacts/${artifact.id}/content`
+      // Use full backend API URL to avoid Next.js routing
+      const apiUrl = getApiUrl()
       
-      const fetchResponse = await fetch(proxyUrl, {
+      // Get authentication token from cookie
+      const getAuthToken = () => {
+        const cookie = document.cookie
+          .split('; ')
+          .find(row => row.startsWith('primedata_api_token='))
+        if (!cookie) return null
+        const value = cookie.split('=').slice(1).join('=')
+        return value ? decodeURIComponent(value) : null
+      }
+      
+      const token = getAuthToken()
+      const headers: Record<string, string> = { 'Accept': '*/*' }
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      const fetchResponse = await fetch(`${apiUrl}/api/v1/pipeline/artifacts/${artifact.id}/content`, {
         method: 'GET',
-        headers: {
-          'Accept': '*/*',
-        },
-        credentials: 'include', // Include cookies for authentication
+        headers,
+        // Removed credentials: 'include' - using Authorization header only
       })
 
       if (!fetchResponse.ok) {
@@ -1487,86 +1504,46 @@ export default function ProductDetailPage() {
                     <p className="text-sm text-gray-600">Connect a new data source to this product</p>
                   </div>
                 </Link>
-                <div 
-                  className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer h-full flex flex-col"
-                  onClick={() => setShowPipelineModal(true)}
-                >
-                  <Play className="h-8 w-8 text-green-600 mb-2" />
-                  <h3 className="font-medium text-gray-900">Run Pipeline</h3>
-                  <p className="text-sm text-gray-600">Execute the data processing pipeline</p>
-                </div>
                 {(product.vector_creation_enabled !== false) && (
                   <Link href={`/app/products/${productId}/playground`}>
                     <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer h-full flex flex-col">
                       <Search className="h-8 w-8 text-purple-600 mb-2" />
-                      <h3 className="font-medium text-gray-900">RAG Playground</h3>
+                      <h3 className="font-medium text-gray-900">Playground</h3>
                       <p className="text-sm text-gray-600">Search and explore your indexed data</p>
                     </div>
                   </Link>
                 )}
-                <Link href={`/app/products/${productId}/ai-readiness`}>
-                  <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer h-full flex flex-col">
-                    <TrendingUp className="h-8 w-8 text-orange-600 mb-2" />
-                    <h3 className="font-medium text-gray-900">AI Readiness</h3>
-                    <p className="text-sm text-gray-600">Assess and improve data quality</p>
-                  </div>
-                </Link>
+                <ComingSoonBadge
+                  title="Data Quality Assessment"
+                  description="Assess and improve data quality with actionable recommendations"
+                  icon={TrendingUp}
+                  variant="compact"
+                  message=""
+                />
                 {(product.vector_creation_enabled !== false) && (
                   <Link href={`/app/products/${productId}/rag-quality`}>
                     <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer h-full flex flex-col">
                       <BarChart3 className="h-8 w-8 text-indigo-600 mb-2" />
-                      <h3 className="font-medium text-gray-900">RAG Quality</h3>
-                      <p className="text-sm text-gray-600">Evaluate RAG system quality metrics</p>
+                      <h3 className="font-medium text-gray-900">Retrieval Evaluation</h3>
+                      <p className="text-sm text-gray-600">Evaluate retrieval system performance and quality metrics</p>
                     </div>
                   </Link>
                 )}
-                <Link href={`/app/products/${productId}/pipeline-metrics`}>
-                  <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer h-full flex flex-col">
-                    <BarChart3 className="h-8 w-8 text-purple-600 mb-2" />
-                    <h3 className="font-medium text-gray-900">Pipeline Metrics</h3>
-                    <p className="text-sm text-gray-600">View detailed metrics for each version</p>
-                  </div>
-                </Link>
                 <Link href={`/app/products/${productId}/pipeline-runs`}>
                   <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer h-full flex flex-col">
                     <GitBranch className="h-8 w-8 text-indigo-600 mb-2" />
-                    <h3 className="font-medium text-gray-900">Recent Pipeline Runs</h3>
-                    <p className="text-sm text-gray-600">Monitor and manage pipeline executions</p>
+                    <h3 className="font-medium text-gray-900">Pipeline Runs</h3>
+                    <p className="text-sm text-gray-600">Monitor and manage data processing pipeline executions</p>
                   </div>
                 </Link>
-                <div 
-                  className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer h-full flex flex-col"
-                  onClick={() => router.push(`/app/products/${productId}/edit`)}
-                >
-                  <Settings className="h-8 w-8 text-gray-600 mb-2" />
-                  <h3 className="font-medium text-gray-900">Configure</h3>
-                  <p className="text-sm text-gray-600">Update product settings and configuration</p>
-                </div>
               </div>
             </div>
 
 
             {/* Pipeline Section */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <div className="flex justify-between items-center mb-4">
+              <div className="mb-4">
                 <h2 className="text-lg font-semibold text-gray-900">Pipeline</h2>
-                <Button
-                  onClick={() => setShowPipelineModal(true)}
-                  disabled={runningPipeline || dataSources.length === 0}
-                  className="bg-blue-600 hover:bg-blue-700 text-white"
-                >
-                  {runningPipeline ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      Starting...
-                    </>
-                  ) : (
-                    <>
-                      <Play className="h-4 w-4 mr-2" />
-                      Run Pipeline
-                    </>
-                  )}
-                </Button>
               </div>
               
               {dataSources.length === 0 ? (
@@ -1576,7 +1553,7 @@ export default function ProductDetailPage() {
                   <p className="text-gray-600">Add data sources before running the pipeline.</p>
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-6">
                   <p className="text-sm text-gray-600">
                     Run the complete data processing pipeline to ingest, clean, score with AI-Ready metrics, generate fingerprint, chunk, embed, and index your data.
                   </p>
@@ -1584,16 +1561,16 @@ export default function ProductDetailPage() {
                   {/* Recent Runs Table */}
                   <div>
                     <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-md font-medium text-gray-900">Recent Runs</h3>
-                      {pipelineRunsTotal > 5 && (
-                        <Link 
-                          href={`/app/products/${productId}/pipeline-runs`}
-                          className="text-sm text-blue-600 hover:text-blue-800 font-medium"
-                        >
-                          View All ({pipelineRunsTotal})
-                        </Link>
-                      )}
-                      </div>
+                      <h3 className="text-md font-medium text-gray-900 flex items-center gap-2">
+                        <GitBranch className="h-4 w-4 text-blue-600" />
+                        Recent Runs
+                      </h3>
+                      <Link href={`/app/products/${productId}/pipeline-runs`}>
+                        <Button variant="outline" size="sm">
+                          View All
+                        </Button>
+                      </Link>
+                    </div>
                     {loadingPipelineRuns ? (
                       <TableSkeleton rows={3} cols={5} />
                     ) : pipelineRuns.length === 0 ? (
@@ -1647,33 +1624,45 @@ export default function ProductDetailPage() {
                                     run.started_at ? 'Running...' : '-'
                                   }
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                  <div className="flex space-x-2">
-                                    <Link
-                                      href={`/app/products/${productId}/pipeline-runs`}
-                                      className="text-blue-600 hover:text-blue-900 text-sm font-medium"
-                                    >
-                                      View Details
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <div className="flex items-center gap-1">
+                                    <Link href={`/app/products/${productId}/pipeline-runs`}>
+                                      <Button 
+                                        variant="ghost" 
+                                        size="sm" 
+                                        className="h-8 w-8 p-0"
+                                        title="View Details"
+                                      >
+                                        <Eye className="h-4 w-4" />
+                                      </Button>
                                     </Link>
                                     {run.status === 'succeeded' && (
-                                      <button
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className={`h-8 w-8 p-0 ${
+                                          product?.promoted_version === run.version
+                                            ? 'text-green-600 hover:text-green-700 hover:bg-green-50'
+                                            : ''
+                                        }`}
                                         onClick={() => handlePromoteVersion(run.version)}
                                         disabled={promotingVersion === run.version || product?.promoted_version === run.version}
-                                        className={`text-sm px-2 py-1 rounded ${
+                                        title={
                                           product?.promoted_version === run.version
-                                            ? 'bg-green-100 text-green-800 cursor-default'
+                                            ? 'Already Promoted'
                                             : promotingVersion === run.version
-                                            ? 'bg-gray-100 text-gray-500 cursor-not-allowed'
-                                            : 'bg-blue-100 text-blue-800 hover:bg-blue-200'
-                                        }`}
-                                      >
-                                        {product?.promoted_version === run.version
-                                          ? '✓ Promoted'
-                                          : promotingVersion === run.version
-                                          ? 'Promoting...'
-                                          : 'Promote to Prod'
+                                            ? 'Promoting...'
+                                            : 'Promote to Production'
                                         }
-                                      </button>
+                                      >
+                                        {promotingVersion === run.version ? (
+                                          <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : product?.promoted_version === run.version ? (
+                                          <CheckCircle2 className="h-4 w-4" />
+                                        ) : (
+                                          <Rocket className="h-4 w-4" />
+                                        )}
+                                      </Button>
                                     )}
                                   </div>
                                 </td>
@@ -1685,133 +1674,177 @@ export default function ProductDetailPage() {
                       </div>
                     )}
                   </div>
+
+                  {/* Artifacts Section */}
+                  {product.current_version > 0 && (() => {
+                    // Determine which version to show
+                    const artifactsVersion = product.promoted_version || product.current_version
+                    const isProductionVersion = product.promoted_version !== null && product.promoted_version === artifactsVersion
+                    
+                    return (
+                      <div>
+                        <SectionHeader
+                          title="Artifacts"
+                          icon={Package}
+                          subtitle={`Version ${artifactsVersion}`}
+                          status={{
+                            label: isProductionVersion ? 'Production' : 'Latest Version',
+                            color: isProductionVersion ? 'green' : 'blue',
+                          }}
+                          tooltip={
+                            <>
+                              <p className="font-semibold mb-1.5 text-gray-900">About These Artifacts</p>
+                              <p className="text-gray-600 mb-2">
+                                {isProductionVersion 
+                                  ? `These artifacts are from version ${artifactsVersion}, which is the current production version.`
+                                  : `These artifacts are from version ${artifactsVersion} (latest version). ${product.promoted_version ? `Production version is ${product.promoted_version}.` : 'No version has been promoted to production yet.'}`
+                                }
+                              </p>
+                              <p className="text-gray-600">
+                                Each pipeline execution generates new artifacts. To view artifacts from specific pipeline runs, 
+                                visit the <span className="font-medium">Pipeline Runs</span> page.
+                              </p>
+                            </>
+                          }
+                        />
+                      {loadingData.artifacts ? (
+                        <div className="flex items-center justify-center py-12">
+                          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                        </div>
+                      ) : pipelineArtifacts.length === 0 ? (
+                        <div className="text-center py-8">
+                          <Package className="h-10 w-10 text-gray-400 mx-auto mb-3" />
+                          <p className="text-gray-600">No artifacts available for this version</p>
+                          <p className="text-sm text-gray-500 mt-2">Artifacts will appear here after pipeline execution</p>
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
+                          <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gradient-to-r from-gray-50 to-blue-50">
+                              <tr>
+                                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                                  Artifact Name
+                                </th>
+                                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                                  Type
+                                </th>
+                                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                                  Size
+                                </th>
+                                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                                  Actions
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                              {pipelineArtifacts.map((artifact: any, index: number) => {
+                                const formatFileSize = (bytes: number) => {
+                                  if (bytes < 1024) return `${bytes} B`
+                                  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+                                  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+                                  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
+                                }
+
+                                const getArtifactIcon = (type: string) => {
+                                  switch (type?.toLowerCase()) {
+                                    case 'json':
+                                    case 'jsonl':
+                                      return <FileJson className="h-4 w-4 text-yellow-600" />
+                                    case 'csv':
+                                      return <FileSpreadsheet className="h-4 w-4 text-green-600" />
+                                    case 'pdf':
+                                      return <FileText className="h-4 w-4 text-red-600" />
+                                    case 'vector':
+                                      return <Layers className="h-4 w-4 text-purple-600" />
+                                    default:
+                                      return <FileText className="h-4 w-4 text-gray-600" />
+                                  }
+                                }
+
+                                return (
+                                  <tr key={artifact.id || index} className="hover:bg-blue-50/50 transition-colors">
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                      <div className="flex items-center gap-2">
+                                        {getArtifactIcon(artifact.artifact_type)}
+                                        <span className="text-sm font-medium text-gray-900">
+                                          {artifact.display_name || artifact.artifact_name?.replace(/_/g, ' ') || 'Unknown Artifact'}
+                                        </span>
+                                      </div>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                      <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
+                                        {artifact.artifact_type?.toUpperCase() || 'UNKNOWN'}
+                                      </span>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                      <span className="text-sm text-gray-600">
+                                        {artifact.file_size ? formatFileSize(artifact.file_size) : 'N/A'}
+                                      </span>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                      <div className="flex items-center gap-2">
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => handleViewArtifact(artifact)}
+                                          className="p-2"
+                                          title="View artifact"
+                                        >
+                                          <Eye className="h-4 w-4" />
+                                        </Button>
+                                        {artifact.download_url && (
+                                          <button
+                                            onClick={() => {
+                                              // Fetch the file as a blob to ensure proper download
+                                              fetch(artifact.download_url)
+                                                .then(response => {
+                                                  if (!response.ok) throw new Error('Download failed')
+                                                  return response.blob()
+                                                })
+                                                .then(blob => {
+                                                  const url = window.URL.createObjectURL(blob)
+                                                  const a = document.createElement('a')
+                                                  a.href = url
+                                                  a.download = artifact.display_name || artifact.artifact_name || 'artifact'
+                                                  a.style.display = 'none'
+                                                  document.body.appendChild(a)
+                                                  a.click()
+                                                  window.URL.revokeObjectURL(url)
+                                                  document.body.removeChild(a)
+                                                })
+                                                .catch(err => {
+                                                  console.error('Download failed:', err)
+                                                  // Fallback: try direct link
+                                                  const a = document.createElement('a')
+                                                  a.href = artifact.download_url
+                                                  a.download = artifact.display_name || artifact.artifact_name || 'artifact'
+                                                  a.style.display = 'none'
+                                                  document.body.appendChild(a)
+                                                  a.click()
+                                                  document.body.removeChild(a)
+                                                })
+                                            }}
+                                            className="inline-flex items-center justify-center p-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                                            title="Download artifact"
+                                          >
+                                            <Download className="h-4 w-4" />
+                                          </button>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                      </div>
+                    )
+                  })()}
                 </div>
               )}
             </div>
-
-            {/* Pipeline Artifacts Section */}
-            {product.current_version > 0 && (
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                      <Package className="h-5 w-5 text-blue-600" />
-                      Pipeline Artifacts
-                    </h2>
-                    <p className="text-sm text-gray-600 mt-1">
-                      View and manage all artifacts generated during pipeline execution
-                    </p>
-                  </div>
-                </div>
-                
-                {loadingData.artifacts ? (
-                  <div className="flex items-center justify-center py-12">
-                    <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-                  </div>
-                ) : pipelineArtifacts.length === 0 ? (
-                  <div className="text-center py-12">
-                    <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-600">No artifacts available for this version</p>
-                    <p className="text-sm text-gray-500 mt-2">Artifacts will appear here after pipeline execution</p>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Artifact Name
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Type
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Size
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Actions
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {pipelineArtifacts.map((artifact: any, index: number) => {
-                          const formatFileSize = (bytes: number) => {
-                            if (bytes < 1024) return `${bytes} B`
-                            if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-                            if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
-                            return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
-                          }
-
-                          const getArtifactIcon = (type: string) => {
-                            switch (type?.toLowerCase()) {
-                              case 'json':
-                              case 'jsonl':
-                                return <FileJson className="h-4 w-4 text-yellow-600" />
-                              case 'csv':
-                                return <FileSpreadsheet className="h-4 w-4 text-green-600" />
-                              case 'pdf':
-                                return <FileText className="h-4 w-4 text-red-600" />
-                              case 'vector':
-                                return <Layers className="h-4 w-4 text-purple-600" />
-                              default:
-                                return <FileText className="h-4 w-4 text-gray-600" />
-                            }
-                          }
-
-                          return (
-                            <tr key={artifact.id || index} className="hover:bg-gray-50">
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="flex items-center gap-2">
-                                  {getArtifactIcon(artifact.artifact_type)}
-                                  <span className="text-sm font-medium text-gray-900">
-                                    {artifact.display_name || artifact.artifact_name?.replace(/_/g, ' ') || 'Unknown Artifact'}
-                                  </span>
-                                </div>
-                            </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
-                                  {artifact.artifact_type?.toUpperCase() || 'UNKNOWN'}
-                                </span>
-                            </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <span className="text-sm text-gray-600">
-                                  {artifact.file_size ? formatFileSize(artifact.file_size) : 'N/A'}
-                                </span>
-                            </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                <div className="flex items-center gap-2">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleViewArtifact(artifact)}
-                                    className="p-2"
-                                    title="View artifact"
-                                  >
-                                    <Eye className="h-4 w-4" />
-                                  </Button>
-                                  {artifact.download_url && (
-                                    <a
-                                      href={artifact.download_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                      download
-                                      className="inline-flex items-center justify-center p-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
-                                      title="Download artifact"
-                              >
-                                      <Download className="h-4 w-4" />
-                              </a>
-                                  )}
-                                </div>
-                            </td>
-                          </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            )}
 
           </div>
         )}
@@ -2028,7 +2061,7 @@ export default function ProductDetailPage() {
                 <li>• Evaluate policy compliance</li>
                 <li>• Chunk documents for processing</li>
                 <li>• Generate embeddings</li>
-                <li>• Index to Qdrant for search</li>
+                <li>• Index to vector database for search</li>
                 <li>• Validate and finalize</li>
               </ul>
               <div className="flex justify-end space-x-3">

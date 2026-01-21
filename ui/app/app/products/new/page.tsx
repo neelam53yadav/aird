@@ -276,7 +276,7 @@ export default function NewProductPage() {
                 <span className="font-medium">Enable Vector Creation</span>
               </Label>
               <p className="mt-1 ml-6 text-sm text-gray-500">
-                Enable vector/embedding creation and indexing in Qdrant during pipeline runs. Uncheck to skip vector creation.
+                Enable vector/embedding creation and indexing in the vector database during pipeline runs. Uncheck to skip vector creation.
               </p>
             </div>
 

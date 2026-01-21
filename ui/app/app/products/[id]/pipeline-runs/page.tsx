@@ -4,13 +4,14 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import React from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Play, Clock, CheckCircle, XCircle, AlertTriangle, Loader2, X, Eye, Square, Settings } from 'lucide-react'
+import { ArrowLeft, Play, Clock, CheckCircle, XCircle, AlertTriangle, Loader2, X, Eye, Square, Settings, Package } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import AppLayout from '@/components/layout/AppLayout'
 import { apiClient, PipelineRun } from '@/lib/api-client'
 import { useToast } from '@/components/ui/toast'
 import PipelineDetailsModal from '@/components/PipelineDetailsModal'
 import ChunkingConfigModal from '@/components/ChunkingConfigModal'
+import ArtifactsModal from '@/components/ArtifactsModal'
 
 // Map technical gate names to user-friendly display names
 const getFriendlyGateName = (gateName: string): string => {
@@ -57,6 +58,9 @@ export default function PipelineRunsPage() {
   const [selectedRunForDetails, setSelectedRunForDetails] = useState<PipelineRun | null>(null)
   const [selectedChunkingConfig, setSelectedChunkingConfig] = useState<any | null>(null)
   const [loadingChunkingConfig, setLoadingChunkingConfig] = useState(false)
+  const [selectedArtifacts, setSelectedArtifacts] = useState<any[]>([])
+  const [loadingArtifacts, setLoadingArtifacts] = useState(false)
+  const [artifactsRunVersion, setArtifactsRunVersion] = useState<number | null>(null)
   const [showPromoteConfirm, setShowPromoteConfirm] = useState(false)
   const [pendingPromoteVersion, setPendingPromoteVersion] = useState<number | null>(null)
   const [qualityGatesStatus, setQualityGatesStatus] = useState<{ blocking: boolean; failedGates?: string[] } | null>(null)
@@ -497,9 +501,44 @@ export default function PipelineRunsPage() {
     }
   }
 
+  const handleViewArtifacts = async (run: PipelineRun) => {
+    setLoadingArtifacts(true)
+    setSelectedArtifacts([])
+    setArtifactsRunVersion(run.version)
+    
+    try {
+      const response = await apiClient.getPipelineArtifacts(productId, run.version)
+      if (response.error) {
+        addToast({
+          type: 'error',
+          message: 'Failed to fetch artifacts',
+        })
+        setSelectedArtifacts([])
+      } else {
+        setSelectedArtifacts(response.data.artifacts || [])
+      }
+    } catch (err) {
+      console.error('Failed to fetch artifacts:', err)
+      addToast({
+        type: 'error',
+        message: 'Failed to fetch artifacts',
+      })
+      setSelectedArtifacts([])
+    } finally {
+      setLoadingArtifacts(false)
+    }
+  }
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
+  }
+
   return (
     <AppLayout>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="w-full px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-6">
           <Link
@@ -513,7 +552,7 @@ export default function PipelineRunsPage() {
             <div>
               <h1 className="text-3xl font-bold text-gray-900">Pipeline Runs</h1>
               <p className="mt-2 text-sm text-gray-600">
-                Monitor and manage data pipeline execution runs
+                Monitor and manage data processing pipeline execution runs
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -523,7 +562,7 @@ export default function PipelineRunsPage() {
                 className="flex items-center gap-2"
               >
                 <Play className="h-4 w-4" />
-                {triggering ? 'Triggering...' : 'Trigger Pipeline'}
+                {triggering ? 'Triggering...' : 'Run Pipeline'}
               </Button>
             </div>
           </div>
@@ -598,17 +637,17 @@ export default function PipelineRunsPage() {
             <Clock className="h-12 w-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No pipeline runs yet</h3>
             <p className="text-gray-600 mb-6">
-              Trigger a pipeline run to start processing your data product.
+              Trigger a data processing pipeline run to start processing your data product.
             </p>
             <Button onClick={() => handleTriggerPipeline(false)} disabled={triggering}>
               <Play className="h-4 w-4 mr-2" />
-              {triggering ? 'Triggering...' : 'Trigger First Pipeline Run'}
+              {triggering ? 'Triggering...' : 'Run First Pipeline'}
             </Button>
           </div>
         ) : (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
+              <table className="w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -628,6 +667,9 @@ export default function PipelineRunsPage() {
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Chunking Config
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Artifacts
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
@@ -718,6 +760,33 @@ export default function PipelineRunsPage() {
                             </Button>
                           ) : (
                             <span className="text-sm text-gray-400">No config</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4">
+                          {run.status === 'succeeded' ? (
+                            <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleViewArtifacts(run)}
+                                disabled={loadingArtifacts}
+                                className="flex items-center gap-1"
+                              >
+                                {loadingArtifacts ? (
+                                  <>
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Loading...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Package className="h-4 w-4" />
+                                    View Artifacts
+                                  </>
+                                )}
+                              </Button>
+                            </>
+                          ) : (
+                            <span className="text-sm text-gray-400">—</span>
                           )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
@@ -874,6 +943,17 @@ export default function PipelineRunsPage() {
           isOpen={!!selectedChunkingConfig}
           onClose={() => setSelectedChunkingConfig(null)}
           config={selectedChunkingConfig}
+        />
+
+        {/* Artifacts Modal */}
+        <ArtifactsModal
+          isOpen={artifactsRunVersion !== null}
+          onClose={() => {
+            setSelectedArtifacts([])
+            setArtifactsRunVersion(null)
+          }}
+          artifacts={selectedArtifacts}
+          loading={loadingArtifacts}
         />
       </div>
     </AppLayout>

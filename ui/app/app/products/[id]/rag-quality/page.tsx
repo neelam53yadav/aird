@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, CheckCircle2, XCircle, AlertTriangle, TrendingUp, BarChart3, Settings, FileText, Lightbulb, Play, Loader2 } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, XCircle, AlertTriangle, TrendingUp, BarChart3, Settings, FileText, Lightbulb, Play, Loader2, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ResultModal } from '@/components/ui/modal'
 import AppLayout from '@/components/layout/AppLayout'
@@ -180,7 +180,7 @@ export default function RAGQualityPage() {
             <AlertTriangle className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
             <h2 className="text-xl font-semibold text-gray-900 mb-2">Vector Creation Disabled</h2>
             <p className="text-gray-600 mb-6">
-              RAG Quality evaluation requires vector creation to be enabled for this product. 
+              Retrieval Evaluation requires vector creation to be enabled for this product. 
               Please enable vector creation in the product settings to use this feature.
             </p>
             <div className="flex gap-4 justify-center">
@@ -210,14 +210,14 @@ export default function RAGQualityPage() {
             {product.name}
           </Link>
           <span className="mx-2 text-gray-400">/</span>
-          <span className="text-sm font-medium text-gray-900">RAG Quality</span>
+          <span className="text-sm font-medium text-gray-900">Retrieval Evaluation</span>
         </div>
 
         {/* Page Header */}
         <div className="mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">RAG Quality Metrics</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Retrieval Evaluation</h1>
           <p className="text-gray-600 mt-1">
-            Evaluate and monitor the quality of your RAG system with comprehensive metrics and quality gates. 
+            Evaluate and monitor retrieval system performance with comprehensive metrics and quality gates. 
             Quality gates must pass before promoting versions to production.
           </p>
         </div>
@@ -386,12 +386,16 @@ export default function RAGQualityPage() {
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                           {duration}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          <Link
-                            href={`/app/products/${productId}/rag-quality/evaluations/${run.id}`}
-                            className="text-blue-600 hover:text-blue-900 text-sm font-medium"
-                          >
-                            View Details
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <Link href={`/app/products/${productId}/rag-quality/evaluations/${run.id}`}>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="h-8 w-8 p-0"
+                              title="View Details"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
                           </Link>
                         </td>
                       </tr>

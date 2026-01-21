@@ -77,7 +77,7 @@ export function ComingSoonBadge({
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-white"></span>
               </span>
-              Soon
+              Coming Soon
             </span>
           </div>
           
@@ -87,11 +87,13 @@ export function ComingSoonBadge({
           {/* Description */}
           <p className="text-sm text-gray-600 mb-3">{description}</p>
           
-          {/* Compact message badge */}
-          <div className="inline-flex items-center px-2.5 py-1 rounded-md bg-gradient-to-r from-blue-500 to-indigo-600 text-white text-xs font-medium shadow-sm">
-            <span className="mr-1.5 text-[10px]">🚀</span>
-            {message}
-          </div>
+          {/* Compact message badge - only show if message is provided */}
+          {message && (
+            <div className="inline-flex items-center px-2.5 py-1 rounded-md bg-gradient-to-r from-blue-500 to-indigo-600 text-white text-xs font-medium shadow-sm">
+              <span className="mr-1.5 text-[10px]">🚀</span>
+              {message}
+            </div>
+          )}
         </div>
       </div>
     )

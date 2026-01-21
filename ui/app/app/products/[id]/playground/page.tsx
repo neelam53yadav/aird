@@ -221,7 +221,7 @@ export default function PlaygroundPage() {
             <AlertCircle className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
             <h2 className="text-xl font-semibold text-gray-900 mb-2">Vector Creation Disabled</h2>
             <p className="text-gray-600 mb-6">
-              RAG Playground requires vector creation to be enabled for this product. 
+              Playground requires vector creation to be enabled for this product. 
               Please enable vector creation in the product settings to use this feature.
             </p>
             <div className="flex gap-4 justify-center">
@@ -263,7 +263,7 @@ export default function PlaygroundPage() {
               <Search className="h-6 w-6 text-white" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">RAG Playground</h1>
+              <h1 className="text-3xl font-bold text-gray-900">Playground</h1>
               <p className="text-sm text-gray-600 mt-1">Search and explore your indexed data with semantic queries</p>
             </div>
           </div>

@@ -176,7 +176,7 @@ export default function RecommendationsPage() {
         <div className="flex items-center mb-6">
           <Link href={`/app/products/${productId}/rag-quality`} className="flex items-center text-sm text-gray-500 hover:text-gray-700 transition-colors">
             <ArrowLeft className="h-4 w-4 mr-1" />
-            RAG Quality
+            Retrieval Evaluation
           </Link>
           <span className="mx-2 text-gray-400">/</span>
           <span className="text-sm font-medium text-gray-900">Recommendations</span>
@@ -186,7 +186,7 @@ export default function RecommendationsPage() {
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-gray-900">Improvement Recommendations</h1>
           <p className="text-gray-600 mt-1">
-            View and apply recommendations to improve your RAG system quality based on evaluation results.
+            View and apply recommendations to improve your retrieval system performance based on evaluation results.
           </p>
         </div>
 
@@ -247,7 +247,7 @@ export default function RecommendationsPage() {
             <Lightbulb className="h-12 w-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No recommendations available</h3>
             <p className="text-gray-600 mb-6">
-              Run an evaluation first to get recommendations based on your RAG system's performance.
+              Run an evaluation first to get recommendations based on your retrieval system's performance.
             </p>
             <Link href={`/app/products/${productId}/rag-quality/evaluations`}>
               <Button className="bg-blue-600 hover:bg-blue-700 text-white">

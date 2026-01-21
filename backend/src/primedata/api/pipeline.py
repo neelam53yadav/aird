@@ -966,6 +966,7 @@ class PipelineArtifactResponse(BaseModel):
 async def get_pipeline_artifacts(
     product_id: UUID,
     version: Optional[int] = Query(None, description="Version number (defaults to latest)"),
+    pipeline_run_id: Optional[UUID] = Query(None, description="Pipeline run ID (optional, for more specific query)"),
     request_obj: Request = None,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
@@ -973,25 +974,54 @@ async def get_pipeline_artifacts(
     """
     Get pipeline artifacts for a product and version.
     Returns artifacts grouped by stage from successful pipeline runs.
+    
+    If pipeline_run_id is provided, queries artifacts for that specific run.
+    Otherwise, queries by product_id and version.
     """
     # Ensure user has access to the product
     product = ensure_product_access(db, request_obj, product_id)
 
     # Determine version
+    # Use promoted_version if available (actual production), otherwise current_version (latest)
     if version is None:
-        version = product.current_version
+        version = product.promoted_version if product.promoted_version is not None else product.current_version
 
-    # Get artifacts for this product and version
-    artifacts = (
-        db.query(PipelineArtifact)
-        .filter(
+    # Build query - prefer pipeline_run_id if provided, otherwise use product_id + version
+    query = db.query(PipelineArtifact).filter(
+        PipelineArtifact.status == ArtifactStatus.ACTIVE,  # Only show active artifacts
+    )
+    
+    if pipeline_run_id:
+        # Query by specific pipeline run (most reliable)
+        query = query.filter(PipelineArtifact.pipeline_run_id == pipeline_run_id)
+        logger.info(f"Querying artifacts by pipeline_run_id={pipeline_run_id}")
+    else:
+        # Query by product_id and version
+        query = query.filter(
             PipelineArtifact.product_id == product_id,
             PipelineArtifact.version == version,
-            PipelineArtifact.status == ArtifactStatus.ACTIVE,  # Only show active artifacts
         )
-        .order_by(PipelineArtifact.stage_name, PipelineArtifact.created_at.desc())
-        .all()
-    )
+        logger.info(f"Querying artifacts by product_id={product_id}, version={version}")
+
+    # Get artifacts
+    artifacts = query.order_by(PipelineArtifact.stage_name, PipelineArtifact.created_at.desc()).all()
+    
+    # Debug logging: Check what artifacts exist for this product
+    if len(artifacts) == 0:
+        # Log all artifacts for this product to debug
+        all_artifacts = (
+            db.query(PipelineArtifact)
+            .filter(PipelineArtifact.product_id == product_id)
+            .all()
+        )
+        logger.warning(
+            f"No artifacts found for product_id={product_id}, version={version}, pipeline_run_id={pipeline_run_id}. "
+            f"Total artifacts for product: {len(all_artifacts)}. "
+            f"Versions found: {sorted(set(a.version for a in all_artifacts))} "
+            f"Statuses found: {sorted(set(a.status.value for a in all_artifacts))}"
+        )
+    else:
+        logger.info(f"Found {len(artifacts)} artifacts for product_id={product_id}, version={version}, pipeline_run_id={pipeline_run_id}")
 
     # Initialize Qdrant client for vector artifacts
     from primedata.indexing.qdrant_client import QdrantClient
@@ -1142,13 +1172,6 @@ async def get_artifact_content(
     # Ensure user has access to the product
     ensure_product_access(db, request, artifact.product_id)
     
-    # Check if artifact has storage info
-    if not artifact.storage_bucket or not artifact.storage_key:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Artifact does not have storage information"
-        )
-    
     # Skip vector artifacts
     if artifact.artifact_type.value.lower() == 'vector':
         raise HTTPException(
@@ -1156,14 +1179,52 @@ async def get_artifact_content(
             detail="Vector artifacts cannot be viewed as files. Use the RAG Playground to query them."
         )
     
+    # Handle metadata-only artifacts (e.g., policy evaluation results)
+    # These artifacts have storage_bucket="none" and store data in artifact_metadata
+    if not artifact.storage_bucket or artifact.storage_bucket.lower() == "none":
+        logger.info(f"Artifact {artifact_id} is metadata-only, returning artifact_metadata as JSON")
+        import json
+        from fastapi.responses import Response
+        
+        # Return artifact metadata as JSON
+        metadata_content = artifact.artifact_metadata or {}
+        # Include additional artifact info for context
+        response_data = {
+            "artifact_id": str(artifact.id),
+            "artifact_name": artifact.artifact_name,
+            "artifact_type": artifact.artifact_type.value,
+            "stage_name": artifact.stage_name,
+            "version": artifact.version,
+            "metadata": metadata_content,
+        }
+        
+        json_content = json.dumps(response_data, indent=2, default=str)
+        return Response(
+            content=json_content.encode('utf-8'),
+            media_type="application/json",
+            headers={
+                "Content-Disposition": "inline",
+                "Cache-Control": "private, max-age=3600",
+            }
+        )
+    
+    # Check if artifact has storage info for file-based artifacts
+    if not artifact.storage_key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Artifact does not have storage information"
+        )
+    
     try:
+        logger.info(f"Fetching artifact content: id={artifact_id}, bucket={artifact.storage_bucket}, key={artifact.storage_key}")
         # Fetch file content from storage
         file_content = minio_client.get_bytes(artifact.storage_bucket, artifact.storage_key)
         
         if not file_content:
+            logger.error(f"Artifact file not found in storage: bucket={artifact.storage_bucket}, key={artifact.storage_key}")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Artifact file not found in storage"
+                detail=f"Artifact file not found in storage (bucket: {artifact.storage_bucket}, key: {artifact.storage_key})"
             )
         
         # Determine content type based on artifact type or file extension

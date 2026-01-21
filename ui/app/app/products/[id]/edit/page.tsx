@@ -1689,7 +1689,7 @@ export default function EditProductPage() {
                     <span className="font-medium">Enable Vector Creation</span>
                   </Label>
                   <p className="mt-1 ml-6 text-sm text-gray-500">
-                    When enabled, vectors/embeddings will be created and indexed in Qdrant during pipeline runs. 
+                    When enabled, vectors/embeddings will be created and indexed in the vector database during pipeline runs. 
                     When disabled, the indexing stage will be skipped.
                   </p>
                 </div>

@@ -167,7 +167,7 @@ export default function DatasetsPage() {
         <div className="flex items-center mb-6">
           <Link href={`/app/products/${productId}/rag-quality`} className="flex items-center text-sm text-gray-500 hover:text-gray-700 transition-colors">
             <ArrowLeft className="h-4 w-4 mr-1" />
-            RAG Quality
+            Retrieval Evaluation
           </Link>
           <span className="mx-2 text-gray-400">/</span>
           <span className="text-sm font-medium text-gray-900">Datasets</span>
@@ -241,7 +241,7 @@ export default function DatasetsPage() {
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
             <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No datasets yet</h3>
-            <p className="text-gray-600 mb-6">Create your first evaluation dataset to start assessing RAG quality.</p>
+            <p className="text-gray-600 mb-6">Create your first evaluation dataset to start assessing retrieval system performance.</p>
             <Link href={`/app/products/${productId}/rag-quality/datasets/new`}>
               <Button className="bg-blue-600 hover:bg-blue-700 text-white">
                 <Plus className="h-4 w-4 mr-2" />

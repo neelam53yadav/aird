@@ -421,7 +421,7 @@ export default function EvaluationsPage() {
         <div className="flex items-center mb-6">
           <Link href={`/app/products/${productId}/rag-quality`} className="flex items-center text-sm text-gray-600 hover:text-gray-900 transition-colors">
             <ArrowLeft className="h-4 w-4 mr-2" />
-            RAG Quality
+            Retrieval Evaluation
           </Link>
           <span className="mx-2 text-gray-400">/</span>
           <span className="text-sm font-medium text-gray-900">Evaluations</span>
@@ -537,7 +537,7 @@ export default function EvaluationsPage() {
                           <DurationCell run={run} currentTime={currentTime} />
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1">
                             {isRunning ? (
                               <div className="flex items-center gap-2 text-sm text-blue-600">
                                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -547,9 +547,9 @@ export default function EvaluationsPage() {
                               <>
                                 <Link href={`/app/products/${productId}/rag-quality/evaluations/${run.id}`}>
                                   <Button 
-                                    variant="outline" 
+                                    variant="ghost" 
                                     size="sm" 
-                                    className="p-2"
+                                    className="h-8 w-8 p-0"
                                     title="View Details"
                                   >
                                     <Eye className="h-4 w-4" />
@@ -557,11 +557,11 @@ export default function EvaluationsPage() {
                                 </Link>
                                 {run.status === 'completed' && (
                                   <Button 
-                                    variant="outline" 
+                                    variant="ghost" 
                                     size="sm"
                                     onClick={() => handleDownloadReport(run.id)}
                                     disabled={downloadingReport === run.id}
-                                    className="p-2"
+                                    className="h-8 w-8 p-0"
                                     title="Download Report"
                                   >
                                     {downloadingReport === run.id ? (
@@ -625,7 +625,7 @@ export default function EvaluationsPage() {
           onClose={() => setShowConfirmModal(false)}
           onConfirm={confirmRunEvaluation}
           title="Run Evaluation"
-          message="Are you sure you want to run an evaluation on the selected dataset? This will evaluate your RAG system's quality metrics including groundedness, context relevance, answer relevance, and citation coverage."
+          message="Are you sure you want to run an evaluation on the selected dataset? This will evaluate your retrieval system's performance metrics including groundedness, context relevance, answer relevance, and citation coverage."
           confirmText="Run Evaluation"
           cancelText="Cancel"
           variant="info"
