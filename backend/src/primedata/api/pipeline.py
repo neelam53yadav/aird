@@ -13,12 +13,10 @@ from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from primedata.api.billing import check_billing_limits
-from primedata.core.plan_limits import get_plan_limit
 from primedata.core.scope import allowed_workspaces, ensure_product_access
 from primedata.core.security import get_current_user
 from primedata.db.database import get_db
-from primedata.db.models import ArtifactStatus, BillingProfile, PipelineArtifact, PipelineRun, PipelineRunStatus, Product, RawFile, RawFileStatus
+from primedata.db.models import ArtifactStatus, PipelineArtifact, PipelineRun, PipelineRunStatus, Product, RawFile, RawFileStatus
 from primedata.storage.minio_client import minio_client
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import and_, func
@@ -97,37 +95,6 @@ async def trigger_pipeline(
     product = db.query(Product).filter(Product.id == request.product_id).first()
     if not product:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
-
-    # Check pipeline runs limit for current month
-    billing_profile = db.query(BillingProfile).filter(
-        BillingProfile.workspace_id == product.workspace_id
-    ).first()
-
-    if billing_profile:
-        plan_name = billing_profile.plan.value.lower() if hasattr(billing_profile.plan, "value") else str(billing_profile.plan).lower()
-        max_runs = get_plan_limit(plan_name, "max_pipeline_runs_per_month")
-        
-        if max_runs != -1:  # If not unlimited
-            # Count pipeline runs in current month
-            now = datetime.now(timezone.utc)
-            month_start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
-            current_month_runs = (
-                db.query(func.count(PipelineRun.id))
-                .filter(
-                    and_(
-                        PipelineRun.workspace_id == product.workspace_id,
-                        PipelineRun.started_at >= month_start
-                    )
-                )
-                .scalar() or 0
-            )
-            
-            if current_month_runs >= max_runs:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"Pipeline runs limit exceeded. You have used {current_month_runs} of {max_runs} runs this month. "
-                           f"Please upgrade your plan or wait until next month."
-                )
 
     # Option C: Smart Version Resolution (Enterprise Best Practice)
     # If version is explicitly provided, validate it exists
