@@ -267,6 +267,7 @@ export default function DatasetsPage() {
 
         {showResultModal && resultModalData && (
           <ResultModal
+            isOpen={showResultModal}
             type={resultModalData.type}
             title={resultModalData.title}
             message={resultModalData.message}

@@ -612,6 +612,7 @@ export default function EvaluationsPage() {
 
         {showResultModal && resultModalData && (
           <ResultModal
+            isOpen={showResultModal}
             type={resultModalData.type}
             title={resultModalData.title}
             message={resultModalData.message}

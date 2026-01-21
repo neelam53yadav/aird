@@ -259,21 +259,22 @@ export default function RecommendationsPage() {
 
         {showApplyModal && selectedRecommendation && (
           <ConfirmModal
+            isOpen={showApplyModal}
             title="Apply Recommendation"
             message={`Are you sure you want to apply this recommendation? This will update your product configuration and trigger a pipeline re-run.`}
             onConfirm={handleApply}
-            onCancel={() => {
+            onClose={() => {
               setShowApplyModal(false)
               setSelectedRecommendation(null)
             }}
             confirmText="Apply"
             cancelText="Cancel"
-            loading={applying === selectedRecommendation.type}
           />
         )}
 
         {showResultModal && resultModalData && (
           <ResultModal
+            isOpen={showResultModal}
             type={resultModalData.type}
             title={resultModalData.title}
             message={resultModalData.message}

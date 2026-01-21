@@ -18,7 +18,8 @@ import {
   Sparkles,
   CheckCircle,
   AlertTriangle,
-  Info
+  Info,
+  type LucideIcon
 } from 'lucide-react'
 
 interface FAQItem {
@@ -27,7 +28,18 @@ interface FAQItem {
   category: 'getting-started' | 'features' | 'metrics' | 'troubleshooting'
 }
 
-const METRIC_CATEGORIES = {
+interface MetricCategoryConfig {
+  name: string
+  icon: LucideIcon
+  metrics: {
+    key: string
+    name: string
+    description: string
+  }[]
+  note?: string
+}
+
+const METRIC_CATEGORIES: Record<string, MetricCategoryConfig> = {
   governance: {
     name: 'Governance & Compliance',
     icon: Shield,

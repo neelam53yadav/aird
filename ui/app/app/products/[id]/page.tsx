@@ -43,7 +43,7 @@ const getFriendlyGateName = (gateName: string): string => {
 // Format failed gates list for display
 const formatFailedGates = (gates: string[]): string[] => {
   // Remove duplicates and sort
-  const uniqueGates = [...new Set(gates)]
+  const uniqueGates = Array.from(new Set(gates))
   return uniqueGates.map(gate => getFriendlyGateName(gate)).sort()
 }
 import { ComingSoonBadge } from '@/components/ui/coming-soon-badge'
