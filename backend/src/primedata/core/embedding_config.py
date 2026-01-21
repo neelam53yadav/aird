@@ -48,7 +48,7 @@ class EmbeddingModelRegistry:
             description="Lightweight sentence transformer model optimized for speed",
             model_type=EmbeddingModelType.SENTENCE_TRANSFORMERS,
             dimension=384,
-            model_path="all-MiniLM-L6-v2",
+            model_path="sentence-transformers/all-MiniLM-L6-v2",
             is_available=True,
             requires_api_key=False,
             metadata={"provider": "sentence-transformers", "license": "apache-2.0", "performance": "fast", "quality": "good"},
@@ -59,7 +59,7 @@ class EmbeddingModelRegistry:
             description="Higher quality MiniLM model with 12 layers",
             model_type=EmbeddingModelType.SENTENCE_TRANSFORMERS,
             dimension=384,
-            model_path="all-MiniLM-L12-v2",
+            model_path="sentence-transformers/all-MiniLM-L12-v2",
             is_available=True,
             requires_api_key=False,
             metadata={
