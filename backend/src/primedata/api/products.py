@@ -1133,20 +1133,24 @@ async def get_rag_quality_gates(
     ).order_by(EvalRun.created_at.desc()).first()
     
     if not latest_run or not latest_run.metrics:
-        # No evaluation run yet - return empty gates
+        # No evaluation run yet - return non-blocking gates
+        # Quality gates should not block when no evaluation has been run
         default_thresholds = ThresholdManager.get_default_thresholds()
         gates = {}
         for key, threshold in default_thresholds.items():
             gates[key] = {
                 "threshold": threshold,
                 "actual": None,
-                "passed": False
+                "passed": False,
+                "evaluated": False  # Indicate this hasn't been evaluated yet
             }
         
         return {
             "all_passed": False,
-            "blocking": True,
-            "gates": gates
+            "blocking": False,  # Changed from True to False - don't block if no eval run
+            "evaluated": False,  # New field to indicate evaluation hasn't been run
+            "gates": gates,
+            "message": "No evaluation run found. Run an evaluation to check quality gates."
         }
     
     # Get product thresholds (custom or defaults)
@@ -1164,6 +1168,9 @@ async def get_rag_quality_gates(
         aggregate_metrics=aggregate_metrics,
         per_query_results=per_query_results
     )
+    
+    # Add evaluated flag to indicate evaluation has been run
+    gate_results["evaluated"] = True
     
     return gate_results
 

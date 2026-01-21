@@ -47,10 +47,13 @@ interface EvaluationRun {
 interface QualityGate {
   all_passed: boolean
   blocking: boolean
+  evaluated?: boolean  // New optional field to indicate if evaluation has been run
+  message?: string     // Optional message from backend
   gates: Record<string, {
     threshold: number
-    actual: number
+    actual: number | null
     passed: boolean
+    evaluated?: boolean  // New optional field for individual gates
   }>
 }
 
@@ -225,33 +228,59 @@ export default function RAGQualityPage() {
         {/* Quality Gates Status */}
         {qualityGates && (
           <div className="mb-6">
-            <div className={`rounded-lg border p-6 ${qualityGates.all_passed ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  {qualityGates.all_passed ? (
-                    <CheckCircle2 className="h-6 w-6 text-green-600 mr-3" />
-                  ) : (
-                    <XCircle className="h-6 w-6 text-red-600 mr-3" />
-                  )}
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900">
-                      Quality Gates: {qualityGates.all_passed ? 'Passed' : 'Failed'}
-                    </h3>
-                    <p className="text-sm text-gray-600 mt-1">
-                      {qualityGates.blocking 
-                        ? 'Blocking promotion to production - Quality gates must pass before promotion' 
-                        : 'Ready for production - All quality gates passed'}
-                    </p>
+            {!qualityGates.evaluated ? (
+              // Show info message when no evaluation has been run
+              <div className="rounded-lg border p-6 bg-blue-50 border-blue-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    <AlertTriangle className="h-6 w-6 text-blue-600 mr-3" />
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900">
+                        Quality Gates: Not Evaluated
+                      </h3>
+                      <p className="text-sm text-gray-600 mt-1">
+                        {qualityGates.message || "No evaluation run found. Create a dataset and run an evaluation to check quality gates."}
+                      </p>
+                    </div>
                   </div>
+                  <Link href={`/app/products/${productId}/rag-quality/datasets`}>
+                    <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white">
+                      <Play className="h-4 w-4 mr-2" />
+                      Create Dataset
+                    </Button>
+                  </Link>
                 </div>
-                <Link href={`/app/products/${productId}/rag-quality/settings`}>
-                  <Button variant="outline" size="sm">
-                    <Settings className="h-4 w-4 mr-2" />
-                    Configure Thresholds
-                  </Button>
-                </Link>
               </div>
-            </div>
+            ) : (
+              // Show normal quality gates status when evaluated
+              <div className={`rounded-lg border p-6 ${qualityGates.all_passed ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    {qualityGates.all_passed ? (
+                      <CheckCircle2 className="h-6 w-6 text-green-600 mr-3" />
+                    ) : (
+                      <XCircle className="h-6 w-6 text-red-600 mr-3" />
+                    )}
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900">
+                        Quality Gates: {qualityGates.all_passed ? 'Passed' : 'Failed'}
+                      </h3>
+                      <p className="text-sm text-gray-600 mt-1">
+                        {qualityGates.blocking 
+                          ? 'Blocking promotion to production - Quality gates must pass before promotion' 
+                          : 'Ready for production - All quality gates passed'}
+                      </p>
+                    </div>
+                  </div>
+                  <Link href={`/app/products/${productId}/rag-quality/settings`}>
+                    <Button variant="outline" size="sm">
+                      <Settings className="h-4 w-4 mr-2" />
+                      Configure Thresholds
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
