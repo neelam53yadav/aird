@@ -2022,10 +2022,29 @@ async def promote_version(
     """
     Promote a specific version to production by setting up a Qdrant alias.
     """
+    # Log promotion attempt with full context
+    user_id = current_user.get("user_id") or current_user.get("id") or "unknown"
+    user_email = current_user.get("email") or "unknown"
+    version = request_body.version
+    force_override = request_body.force_override
+    
+    logger.info(
+        f"PROMOTION ATTEMPT: User {user_id} ({user_email}) attempting to promote version {version} "
+        f"for product {product_id}. Force override: {force_override}. "
+        f"Request IP: {request.client.host if request.client else 'unknown'}"
+    )
+    
     # Ensure user has access to the product
     product = ensure_product_access(db, request, product_id)
-
-    version = request_body.version
+    
+    # Log current state before promotion
+    current_promoted = product.promoted_version
+    current_version = product.current_version
+    logger.info(
+        f"PROMOTION STATE: Product {product_id} ({product.name}) - "
+        f"Current promoted_version: {current_promoted}, current_version: {current_version}, "
+        f"Requested promotion to version: {version}"
+    )
 
     # Check if the version exists and has succeeded
     pipeline_run = (
@@ -2046,11 +2065,20 @@ async def promote_version(
         ).first()
         
         if pipeline_run_any_status:
+            logger.warning(
+                f"PROMOTION VALIDATION FAILED: User {user_id} ({user_email}) attempted to promote version {version} "
+                f"for product {product_id}, but pipeline run exists with status '{pipeline_run_any_status.status.value}' "
+                f"(not 'succeeded'). Pipeline run ID: {pipeline_run_any_status.id}"
+            )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Version {version} exists but has status '{pipeline_run_any_status.status.value}', not 'succeeded'. Cannot promote a version that hasn't completed successfully."
             )
         else:
+            logger.warning(
+                f"PROMOTION VALIDATION FAILED: User {user_id} ({user_email}) attempted to promote version {version} "
+                f"for product {product_id}, but no pipeline run found for this version."
+            )
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Version {version} not found. Please run the pipeline for this version first."
@@ -2094,6 +2122,10 @@ async def promote_version(
                     name for name, gate in gate_results.get('gates', {}).items()
                     if not gate.get('passed', False)
                 ]
+                logger.warning(
+                    f"PROMOTION BLOCKED BY QUALITY GATES: User {user_id} ({user_email}) attempted to promote version {version} "
+                    f"for product {product_id}, but quality gates failed. Failed gates: {', '.join(failed_gates)}"
+                )
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Quality gates failed. Failed gates: {', '.join(failed_gates)}. Use force_override=true to promote anyway."
@@ -2207,17 +2239,18 @@ async def promote_version(
                 detail=error_detail
             )
 
-        # Get collection name from artifact metadata (the actual name used during indexing)
+        # Get collection name from PipelineRun (primary source - enterprise-grade)
         collection_name = None
-        if vector_artifact.artifact_metadata:
-            collection_name = vector_artifact.artifact_metadata.get("collection_name")
-
+        if pipeline_run and pipeline_run.collection_name:
+            collection_name = pipeline_run.collection_name
+            logger.info(f"Found collection name from PipelineRun: {collection_name}")
+        
         if not collection_name:
-            # Fallback: reconstruct collection name if not stored in metadata
+            # Fallback: reconstruct collection name if not stored in PipelineRun
             sanitized_name = qdrant_client._sanitize_collection_name(product.name)
             collection_name = f"ws_{product.workspace_id}__{sanitized_name}__v_{version}"
             logger.warning(
-                f"Collection name not found in artifact metadata for version {version}, "
+                f"Collection name not found in PipelineRun for version {version}, "
                 f"using reconstructed name: {collection_name}"
             )
 
@@ -2292,9 +2325,19 @@ async def promote_version(
             )
 
         # Update the product's promoted_version
+        old_promoted_version = product.promoted_version
         product.promoted_version = version
         db.commit()
         db.refresh(product)
+        
+        # Log successful promotion with full details
+        logger.info(
+            f"PROMOTION SUCCESS: Version {version} promoted to production for product {product_id} ({product.name}). "
+            f"Previous promoted_version: {old_promoted_version} -> New promoted_version: {version}. "
+            f"Promoted by user {user_id} ({user_email}). "
+            f"Force override used: {force_override}. "
+            f"Collection: {collection_name}, Alias: {alias_name}"
+        )
 
         return {
             "message": f"Version {version} promoted to production successfully",
@@ -2303,9 +2346,20 @@ async def promote_version(
             "collection_name": collection_name,
         }
 
-    except HTTPException:
+    except HTTPException as http_exc:
+        # Log HTTP exceptions (validation errors, etc.)
+        logger.warning(
+            f"PROMOTION FAILED (HTTP): User {user_id} ({user_email}) failed to promote version {version} "
+            f"for product {product_id}. Status: {http_exc.status_code}, Detail: {http_exc.detail}"
+        )
         raise
     except Exception as e:
+        # Log unexpected errors
+        logger.error(
+            f"PROMOTION FAILED (ERROR): User {user_id} ({user_email}) failed to promote version {version} "
+            f"for product {product_id}. Error: {str(e)}",
+            exc_info=True
+        )
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to promote version: {str(e)}")
 
 

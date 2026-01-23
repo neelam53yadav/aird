@@ -869,6 +869,10 @@ jobs:
           STRIPE_SECRET_KEY=${{ secrets.STRIPE_SECRET_KEY }}
           STRIPE_WEBHOOK_SECRET=${{ secrets.STRIPE_WEBHOOK_SECRET }}
 
+          # Ollama Configuration (for LLM-as-judge evaluation)
+          OLLAMA_BASE_URL=${{ vars.OLLAMA_BASE_URL }}
+          OLLAMA_MODEL=${{ vars.OLLAMA_MODEL }}
+
           # Environment
           ENV=${{ vars.ENV }}
           ENVEOF
@@ -1026,6 +1030,38 @@ jobs:
           ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
             ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
             "bash /tmp/deploy_script.sh"
+
+      - name: Pull Ollama model
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Pulling Ollama model (if not already present)..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          
+          # Determine Docker command
+          DOCKER_CMD="docker"
+          if ! ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} "docker ps" > /dev/null 2>&1; then
+            DOCKER_CMD="sudo docker"
+          fi
+          
+          # Get model name from vars or use default
+          OLLAMA_MODEL="${{ vars.OLLAMA_MODEL }}"
+          if [ -z "$OLLAMA_MODEL" ]; then
+            OLLAMA_MODEL="llama2"
+          fi
+          
+          echo "Pulling Ollama model: ${OLLAMA_MODEL}"
+          echo "This may take several minutes on first deployment..."
+          
+          # Pull the model (this is idempotent - won't re-download if already present)
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ steps.get-vm-ip.outputs.vm_ip }} \
+            "${DOCKER_CMD} exec primedata-ollama ollama pull ${OLLAMA_MODEL}" || {
+              echo "⚠️  Warning: Failed to pull Ollama model. It may already be present or Ollama may not be ready yet."
+              echo "   You can manually pull it later with: docker exec primedata-ollama ollama pull ${OLLAMA_MODEL}"
+            }
+          
+          echo ""
+          echo "✅ Ollama model pull completed (or already present)"
 
       - name: Restart Nginx after deployment
         run: |

@@ -135,8 +135,6 @@ export default function NewProductPage() {
         }
       }
       
-      console.log('Creating product with chunking config:', chunkingConfig)
-      
       const response = await apiClient.createProduct({
         workspace_id: workspaceId,
         name: name.trim(),

@@ -117,7 +117,69 @@ class GroundednessMetric:
         """
         Check if a claim is supported by any chunk.
         
-        Uses simple keyword matching. For production, use LLM-based evaluation.
+        Uses LLM-as-judge if available, falls back to keyword matching.
+        """
+        # Try LLM-based evaluation first if available
+        if self.llm_client:
+            return self._is_claim_supported_llm(claim, chunks)
+        
+        # Fallback to keyword matching
+        return self._is_claim_supported_keyword(claim, chunks)
+    
+    def _is_claim_supported_llm(self, claim: str, chunks: List[Dict]) -> bool:
+        """
+        Use LLM-as-judge to check if claim is supported by chunks.
+        
+        This provides more accurate semantic evaluation than keyword matching.
+        """
+        if not chunks:
+            return False
+        
+        try:
+            # Build context from top chunks (limit to avoid token limits)
+            context_chunks = chunks[:3]  # Use top 3 chunks
+            context = "\n\n".join([
+                f"[Chunk {i+1}]: {chunk.get('text', '')[:500]}"  # Limit chunk size
+                for i, chunk in enumerate(context_chunks)
+            ])
+            
+            # Create structured prompt for LLM judge
+            prompt = f"""You are evaluating whether a claim is supported by the provided context.
+
+Context:
+{context}
+
+Claim: {claim}
+
+Determine if the claim is directly supported by the context. The claim must be:
+1. Factually stated in the context (not inferred or assumed)
+2. Not contradicted by the context
+3. Not requiring external knowledge beyond what's in the context
+
+Answer ONLY with "yes" or "no". Do not provide explanation."""
+            
+            # Call LLM with low temperature for consistent results
+            response = self.llm_client.generate(
+                prompt=prompt,
+                temperature=0.0,  # Deterministic
+                max_tokens=10,  # Just need yes/no
+            )
+            
+            answer = response.get("text", "").strip().lower()
+            
+            # Check for yes/no response
+            if "yes" in answer and "no" not in answer[:10]:  # Avoid "no" in "not supported"
+                return True
+            return False
+            
+        except Exception as e:
+            from loguru import logger
+            logger.warning(f"LLM-based groundedness check failed: {e}, falling back to keyword matching")
+            return self._is_claim_supported_keyword(claim, chunks)
+    
+    def _is_claim_supported_keyword(self, claim: str, chunks: List[Dict]) -> bool:
+        """
+        Fallback keyword-based claim support check.
         """
         claim_lower = claim.lower()
         claim_keywords = set(claim_lower.split())
@@ -132,10 +194,11 @@ class GroundednessMetric:
             overlap = claim_keywords.intersection(chunk_words)
             
             # If >30% of claim keywords appear in chunk, consider it supported
-            if len(overlap) / len(claim_keywords) > 0.3:
+            if len(claim_keywords) > 0 and len(overlap) / len(claim_keywords) > 0.3:
                 return True
         
         return False
+
 
 
 

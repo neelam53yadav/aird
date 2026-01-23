@@ -12,6 +12,7 @@ import { useToast } from '@/components/ui/toast'
 import PipelineDetailsModal from '@/components/PipelineDetailsModal'
 import ChunkingConfigModal from '@/components/ChunkingConfigModal'
 import ArtifactsModal from '@/components/ArtifactsModal'
+import { RUNS_PER_PAGE } from '@/lib/constants'
 
 // Map technical gate names to user-friendly display names
 const getFriendlyGateName = (gateName: string): string => {
@@ -64,7 +65,7 @@ export default function PipelineRunsPage() {
   const [showPromoteConfirm, setShowPromoteConfirm] = useState(false)
   const [pendingPromoteVersion, setPendingPromoteVersion] = useState<number | null>(null)
   const [qualityGatesStatus, setQualityGatesStatus] = useState<{ blocking: boolean; failedGates?: string[] } | null>(null)
-  const RUNS_PER_PAGE = 20
+  const [showPipelineModal, setShowPipelineModal] = useState(false)
   
   // Ref to track the polling interval
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
@@ -507,7 +508,9 @@ export default function PipelineRunsPage() {
     setArtifactsRunVersion(run.version)
     
     try {
-      const response = await apiClient.getPipelineArtifacts(productId, run.version)
+      // Pass pipeline_run_id for more reliable querying - this ensures we get artifacts
+      // for this specific run even if version hasn't been fully propagated yet
+      const response = await apiClient.getPipelineArtifacts(productId, run.version, run.id)
       if (response.error) {
         addToast({
           type: 'error',
@@ -557,7 +560,7 @@ export default function PipelineRunsPage() {
             </div>
             <div className="flex items-center gap-3">
               <Button
-                onClick={() => handleTriggerPipeline(false)}
+                onClick={() => setShowPipelineModal(true)}
                 disabled={triggering}
                 className="flex items-center gap-2"
               >
@@ -639,7 +642,7 @@ export default function PipelineRunsPage() {
             <p className="text-gray-600 mb-6">
               Trigger a data processing pipeline run to start processing your data product.
             </p>
-            <Button onClick={() => handleTriggerPipeline(false)} disabled={triggering}>
+            <Button onClick={() => setShowPipelineModal(true)} disabled={triggering}>
               <Play className="h-4 w-4 mr-2" />
               {triggering ? 'Triggering...' : 'Run First Pipeline'}
             </Button>
@@ -678,7 +681,6 @@ export default function PipelineRunsPage() {
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {pipelineRuns.map((run) => {
-                    const stagesInfo = getAirdStagesInfo(run.metrics)
                     const chunkingConfig = getChunkingConfigForRun(run)
                     const configSummary = formatChunkingConfigSummary(chunkingConfig)
                     return (
@@ -712,30 +714,15 @@ export default function PipelineRunsPage() {
                           <DurationCell run={run} currentTime={currentTime} />
                         </td>
                         <td className="px-6 py-4">
-                          {stagesInfo ? (
-                            <div className="text-sm text-gray-900 mb-2">
-                              <div className="font-medium">
-                                {stagesInfo.completed}/{stagesInfo.total} completed
-                              </div>
-                              {stagesInfo.stages.length > 0 && (
-                                <div className="text-xs text-gray-500 mt-1">
-                                  {stagesInfo.stages.slice(0, 3).join(', ')}
-                                  {stagesInfo.stages.length > 3 && '...'}
-                                </div>
-                              )}
-                            </div>
-                          ) : null}
-                          <div>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleViewDetails(run)}
-                              className="flex items-center gap-1"
-                            >
-                              <Eye className="h-4 w-4" />
-                              View Stages
-                            </Button>
-                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleViewDetails(run)}
+                            className="flex items-center gap-1"
+                          >
+                            <Eye className="h-4 w-4" />
+                            View Stages
+                          </Button>
                         </td>
                         <td className="px-6 py-4">
                           {chunkingConfig !== null ? (
@@ -955,6 +942,57 @@ export default function PipelineRunsPage() {
           artifacts={selectedArtifacts}
           loading={loadingArtifacts}
         />
+
+        {/* Pipeline Modal */}
+        {showPipelineModal && (
+          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+            <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+              <div className="mt-3">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">Run Pipeline</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Run the complete data processing pipeline for this product. This will:
+                </p>
+                <ul className="text-sm text-gray-600 mb-6 space-y-1">
+                  <li>• Automatically ingest data from all data sources</li>
+                  <li>• Clean and preprocess the data</li>
+                  <li>• Score chunks with AI-Ready metrics (coherence, noise detection, boundary quality)</li>
+                  <li>• Generate readiness fingerprint</li>
+                  <li>• Evaluate policy compliance</li>
+                  <li>• Chunk documents for processing</li>
+                  <li>• Generate embeddings</li>
+                  <li>• Index to vector database for search</li>
+                  <li>• Validate and finalize</li>
+                </ul>
+                <div className="flex justify-end space-x-3">
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowPipelineModal(false)}
+                    disabled={triggering}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setShowPipelineModal(false)
+                      handleTriggerPipeline(false)
+                    }}
+                    disabled={triggering}
+                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                  >
+                    {triggering ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        Starting...
+                      </>
+                    ) : (
+                      'Run Pipeline'
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </AppLayout>
   )

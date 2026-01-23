@@ -205,42 +205,25 @@ export default function ProductDetailPage() {
     }
   }, [status, router, productId])
 
-  // Fix 1 & 2: Parallelize product-dependent calls when product loads
+  // Fix 1 & 2: Load pipeline runs first, then artifacts (artifacts need pipeline runs to determine correct version)
   useEffect(() => {
     if (!product) return
 
-    // Load critical data in parallel (artifacts and pipeline runs)
-    const promises: Promise<void>[] = []
-    
-    if (product.current_version > 0) {
-      promises.push(loadPipelineArtifacts())
+    // Load pipeline runs first, then artifacts (artifacts need pipeline runs to determine correct version)
+    const loadData = async () => {
+      const runs = await loadPipelineRuns()
+      // After pipeline runs are loaded, load artifacts with correct version
+      // Pass the runs data directly to avoid async state issues
+      await loadPipelineArtifacts(runs)
     }
-    promises.push(loadPipelineRuns())
     
-    Promise.all(promises).catch(err => {
+    loadData().catch(err => {
       console.error('Failed to load product-dependent data:', err)
     })
 
     // Fix 4: Lazy load non-critical data - only load when needed (in tab change handler)
   }, [product])
 
-  // Fix 7: Optimize auto-refresh - only refresh when pipeline is running
-  useEffect(() => {
-    if (!product) return
-    
-    // Check if there are any running pipelines
-    const hasRunningPipelines = pipelineRuns.some(run => 
-      run.status === 'running' || run.status === 'queued'
-    )
-    
-    if (!hasRunningPipelines) return // Don't auto-refresh if nothing is running
-    
-    const interval = setInterval(() => {
-      loadPipelineRuns()
-    }, 15000) // Increased from 10s to 15s to reduce load
-    
-    return () => clearInterval(interval)
-  }, [product, pipelineRuns])
 
   // Fix 4: Lazy load data when switching to relevant tabs
   useEffect(() => {
@@ -326,15 +309,6 @@ export default function ProductDetailPage() {
 
   const getDataSourceDisplayInfo = (datasource: DataSource) => {
     const config = datasource.config || {}
-    
-    // Debug logging for confluence
-    if (datasource.type === 'confluence') {
-      console.log('Confluence datasource config:', config)
-      console.log('Space key (singular):', config.space_key)
-      console.log('Space keys (plural):', config.space_keys)
-      console.log('Final space keys value:', config.space_keys || config.space_key)
-      console.log('Has space keys:', !!(config.space_keys || config.space_key))
-    }
     
     switch (datasource.type) {
       case 'web':
@@ -456,20 +430,59 @@ export default function ProductDetailPage() {
   }
 
 
-  const loadPipelineArtifacts = async () => {
+  const loadPipelineArtifacts = async (runsOverride?: PipelineRun[]) => {
     if (!product) return
     
     setLoadingArtifacts(true)
     setLoadingData(prev => ({ ...prev, artifacts: true }))
     try {
-      // Use promoted_version if available (actual production), otherwise current_version (latest)
-      const artifactsVersion = product.promoted_version || product.current_version
-      const response = await apiClient.getPipelineArtifacts(product.id, artifactsVersion)
+      let artifactsVersion: number | null = null
+      let pipelineRunId: string | undefined = undefined
+      
+      // Priority 1: Use promoted_version if available (actual production)
+      if (product.promoted_version !== null && product.promoted_version !== undefined) {
+        artifactsVersion = product.promoted_version
+      } else {
+        // Priority 2: Find the most recent succeeded pipeline run
+        // Use runsOverride if provided (from async call), otherwise use state
+        const runsToCheck = runsOverride || pipelineRuns
+        const succeededRuns = runsToCheck.filter(run => run.status === 'succeeded')
+        
+        if (succeededRuns.length > 0) {
+          // Sort by created_at descending to get most recent
+          const mostRecentSucceeded = succeededRuns.sort((a, b) => {
+            const dateA = new Date(a.started_at || a.created_at || 0).getTime()
+            const dateB = new Date(b.started_at || b.created_at || 0).getTime()
+            return dateB - dateA
+          })[0]
+          artifactsVersion = mostRecentSucceeded.version
+          pipelineRunId = mostRecentSucceeded.id
+        } else {
+          // No succeeded runs found, don't load artifacts
+          setPipelineArtifacts([])
+          setLoadingArtifacts(false)
+          setLoadingData(prev => ({ ...prev, artifacts: false }))
+          return
+        }
+      }
+      
+      if (artifactsVersion === null) {
+        setPipelineArtifacts([])
+        setLoadingArtifacts(false)
+        setLoadingData(prev => ({ ...prev, artifacts: false }))
+        return
+      }
+      
+      const response = await apiClient.getPipelineArtifacts(product.id, artifactsVersion, pipelineRunId)
+      
       if (response.data) {
         setPipelineArtifacts(response.data.artifacts || [])
+      } else {
+        setPipelineArtifacts([])
       }
     } catch (err) {
       console.error('Failed to load pipeline artifacts:', err)
+      setPipelineArtifacts([])
     } finally {
       setLoadingArtifacts(false)
       setLoadingData(prev => ({ ...prev, artifacts: false }))
@@ -559,8 +572,8 @@ export default function ProductDetailPage() {
     }
   }
 
-  const loadPipelineRuns = async () => {
-    if (!product) return
+  const loadPipelineRuns = async (): Promise<PipelineRun[]> => {
+    if (!product) return []
     
     setLoadingPipelineRuns(true)
     setLoadingData(prev => ({ ...prev, pipelineRuns: true }))
@@ -568,18 +581,24 @@ export default function ProductDetailPage() {
       // Always load only the first 5 runs (no pagination on overview page)
       const response = await apiClient.getPipelineRuns(product.id, 5, 0)
       if (response.data) {
+        let runs: PipelineRun[] = []
         // Handle both old format (array) and new format (object with runs, total, etc.)
         if (Array.isArray(response.data)) {
-          setPipelineRuns(response.data.slice(0, 5)) // Ensure only 5
+          runs = response.data.slice(0, 5) // Ensure only 5
+          setPipelineRuns(runs)
           setPipelineRunsTotal(response.data.length)
         } else {
-          setPipelineRuns((response.data.runs || []).slice(0, 5)) // Ensure only 5
+          runs = (response.data.runs || []).slice(0, 5) // Ensure only 5
+          setPipelineRuns(runs)
           setPipelineRunsTotal(response.data.total || 0)
         }
         setPipelineRunsPage(0) // Always reset to page 0
+        return runs
       }
+      return []
     } catch (err) {
       console.error('Failed to load pipeline runs:', err)
+      return []
     } finally {
       setLoadingPipelineRuns(false)
       setLoadingData(prev => ({ ...prev, pipelineRuns: false }))
@@ -620,7 +639,6 @@ export default function ProductDetailPage() {
     if (!product) return
     
     try {
-      console.log('Saving data quality rules:', rules)
       const response = await apiClient.put(`/data-quality/products/${product.id}/rules`, { rules })
       
       if (response.error) {
@@ -1574,8 +1592,22 @@ export default function ProductDetailPage() {
                     {loadingPipelineRuns ? (
                       <TableSkeleton rows={3} cols={5} />
                     ) : pipelineRuns.length === 0 ? (
-                      <div className="text-center py-4">
-                        <p className="text-gray-500">No pipeline runs yet</p>
+                      <div className="text-center py-8">
+                        <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                        <p className="text-gray-500 mb-4">No pipeline runs yet</p>
+                        {dataSources.length === 0 ? (
+                          <p className="text-sm text-gray-400">Add data sources before running the pipeline.</p>
+                        ) : (
+                          <Button
+                            size="sm"
+                            onClick={() => setShowPipelineModal(true)}
+                            disabled={runningPipeline}
+                            className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg"
+                          >
+                            <Play className="h-4 w-4 mr-2" />
+                            Run First Pipeline
+                          </Button>
+                        )}
                       </div>
                     ) : (
                       <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
@@ -1676,7 +1708,7 @@ export default function ProductDetailPage() {
                   </div>
 
                   {/* Artifacts Section */}
-                  {product.current_version > 0 && (() => {
+                  {((product.current_version > 0 || product.promoted_version) && (pipelineArtifacts.length > 0 || pipelineRuns.length > 0)) && (() => {
                     // Determine which version to show
                     const artifactsVersion = product.promoted_version || product.current_version
                     const isProductionVersion = product.promoted_version !== null && product.promoted_version === artifactsVersion
@@ -1686,24 +1718,29 @@ export default function ProductDetailPage() {
                         <SectionHeader
                           title="Artifacts"
                           icon={Package}
-                          subtitle={`Version ${artifactsVersion}`}
-                          status={{
+                          subtitle={pipelineArtifacts.length > 0 ? `Version ${artifactsVersion}` : undefined}
+                          status={pipelineArtifacts.length > 0 ? {
                             label: isProductionVersion ? 'Production' : 'Latest Version',
                             color: isProductionVersion ? 'green' : 'blue',
-                          }}
+                          } : undefined}
                           tooltip={
                             <>
                               <p className="font-semibold mb-1.5 text-gray-900">About These Artifacts</p>
                               <p className="text-gray-600 mb-2">
-                                {isProductionVersion 
-                                  ? `These artifacts are from version ${artifactsVersion}, which is the current production version.`
-                                  : `These artifacts are from version ${artifactsVersion} (latest version). ${product.promoted_version ? `Production version is ${product.promoted_version}.` : 'No version has been promoted to production yet.'}`
-                                }
+                                {pipelineArtifacts.length > 0 ? (
+                                  isProductionVersion 
+                                    ? `These artifacts are from version ${artifactsVersion}, which is the current production version.`
+                                    : `These artifacts are from version ${artifactsVersion} (latest version). ${product.promoted_version ? `Production version is ${product.promoted_version}.` : 'No version has been promoted to production yet.'}`
+                                ) : (
+                                  'No artifacts are available yet. Artifacts will appear here after pipeline execution.'
+                                )}
                               </p>
-                              <p className="text-gray-600">
-                                Each pipeline execution generates new artifacts. To view artifacts from specific pipeline runs, 
-                                visit the <span className="font-medium">Pipeline Runs</span> page.
-                              </p>
+                              {pipelineArtifacts.length > 0 && (
+                                <p className="text-gray-600">
+                                  Each pipeline execution generates new artifacts. To view artifacts from specific pipeline runs, 
+                                  visit the <span className="font-medium">Pipeline Runs</span> page.
+                                </p>
+                              )}
                             </>
                           }
                         />
@@ -2395,11 +2432,11 @@ export default function ProductDetailPage() {
           runVersion={selectedRunForDetails.version}
           runStatus={selectedRunForDetails.status}
           initialMetrics={selectedRunForDetails.metrics}
-          onPipelineCancelled={() => {
+          onPipelineCancelled={async () => {
             // Refresh pipeline runs list
-            loadPipelineRuns()
+            const runs = await loadPipelineRuns()
             // Optionally refresh artifacts too
-            loadPipelineArtifacts()
+            loadPipelineArtifacts(runs)
           }}
         />
       )}

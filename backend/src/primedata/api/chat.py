@@ -181,14 +181,24 @@ def build_rag_prompt(query: str, chunks: List[Dict[str, Any]]) -> str:
     """Build RAG prompt from query and retrieved chunks."""
     context = "\n\n".join([f"[{i+1}] {chunk.get('text', '')}" for i, chunk in enumerate(chunks)])
     
-    prompt = f"""Answer the following question using only the provided context. If the answer is not in the context, say "I don't have enough information to answer this question."
+    prompt = f"""You are answering a question using the provided context. You MUST cite your sources.
+
+RULES FOR CITATIONS:
+1. Every factual claim or piece of information you use from the context MUST be followed by a citation in the format [1], [2], [3], etc.
+2. The citation number corresponds to the numbered chunk above (e.g., [1] refers to the first chunk, [2] to the second, etc.).
+3. Place citations immediately after the information you're citing, like this: "Amazon's revenue was $574.8 billion [1]."
+4. If you use information from multiple chunks, cite all of them: "The company reported strong growth [1][2]."
+
+EXAMPLE:
+Question: What was Amazon's revenue?
+Answer: Amazon's total revenue in 2024 was $574.8 billion [1]. This represents significant growth compared to previous years [2].
 
 Context:
 {context}
 
 Question: {query}
 
-Answer:"""
+Answer (MUST include citations [1], [2], [3] etc. after every fact from the context):"""
     return prompt
 
 
@@ -262,7 +272,7 @@ async def chat_query(
         model_name = embedding_config.get("embedder_name", "minilm")
         
         embedder = EmbeddingGenerator(model_name=model_name, workspace_id=product.workspace_id, db=db)
-        query_embedding = embedder.generate_embeddings([request.query])[0]
+        query_embedding = embedder.embed_batch([request.query])[0]
 
         # Search Qdrant
         search_results = qdrant_client.search(

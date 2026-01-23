@@ -83,6 +83,7 @@ export default function RAGQualityPage() {
   const [product, setProduct] = useState<Product | null>(null)
   const [datasets, setDatasets] = useState<EvaluationDataset[]>([])
   const [runs, setRuns] = useState<EvaluationRun[]>([])
+  const [totalRuns, setTotalRuns] = useState(0)
   const [qualityGates, setQualityGates] = useState<QualityGate | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadingGates, setLoadingGates] = useState(false)
@@ -123,10 +124,20 @@ export default function RAGQualityPage() {
         setDatasets(datasetsResponse.data as EvaluationDataset[])
       }
 
-      // Load recent runs
-      const runsResponse = await apiClient.listEvaluationRuns(productId)
+      // Load recent runs - backend returns total count in paginated response
+      const runsResponse = await apiClient.listEvaluationRuns(productId, 5, 0)
       if (!runsResponse.error && runsResponse.data) {
-        setRuns((runsResponse.data as EvaluationRun[]).slice(0, 5))
+        // Handle both old format (array) and new format (object with runs, total, etc.)
+        if (Array.isArray(runsResponse.data)) {
+          // Old format fallback
+          setRuns(runsResponse.data.slice(0, 5))
+          setTotalRuns(runsResponse.data.length)
+        } else {
+          // New paginated format - extract both runs and total
+          const responseData = runsResponse.data as any
+          setRuns(responseData.runs || [])
+          setTotalRuns(responseData.total || 0) // Extract total from response
+        }
       }
 
       // Load quality gates
@@ -299,7 +310,7 @@ export default function RAGQualityPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-500">Evaluation Runs</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">{runs.length}</p>
+                <p className="text-2xl font-bold text-gray-900 mt-1">{totalRuns}</p>
               </div>
               <BarChart3 className="h-8 w-8 text-purple-600" />
             </div>

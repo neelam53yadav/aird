@@ -186,16 +186,12 @@ export default function EditDataSourcePage() {
 
   const loadDataSource = async () => {
     try {
-      console.log('Loading data source:', datasourceId)
       const response = await apiClient.getDataSource(datasourceId)
-      console.log('Data source response:', response)
       
       if (response.error) {
-        console.error('Data source error:', response.error)
         setError(response.error)
       } else if (response.data) {
         const data = response.data as DataSource
-        console.log('Data source data:', data)
         setDataSource(data)
         const loadedConfig = data.config || {}
         setConfig(loadedConfig)

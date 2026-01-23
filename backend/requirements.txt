@@ -47,6 +47,7 @@ openai>=1.0.0,<2.0.0  # Compatible with Python 3.11 and 3.12
 pandas>=2.0.0,<3.0.0  # Compatible with Python 3.11 and 3.12
 regex>=2023.0.0,<2024.0.0  # Compatible with Python 3.11 and 3.12
 numpy<2.0.0,>=1.24.0  # Compatible with Python 3.11 and 3.12 (explicit upper bound for compatibility)
+matplotlib>=3.7.0,<4.0.0  # For PDF report generation (AI Trust Report visualization)
 
 # Utilities
 tenacity==8.2.3  # Compatible with Python 3.11 and 3.12

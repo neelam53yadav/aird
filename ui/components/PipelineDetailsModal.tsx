@@ -28,6 +28,12 @@ interface PipelineDetailsModalProps {
   onPipelineCancelled?: () => void
 }
 
+interface TaskLog {
+  content?: string
+  status?: string
+  error?: string
+}
+
 export default function PipelineDetailsModal({
   isOpen,
   onClose,
@@ -122,6 +128,52 @@ export default function PipelineDetailsModal({
     }
   }
 
+  // Helper function to map task_id to stage_name
+  const getStageFromTaskId = (taskId: string): string | null => {
+    // Map task IDs to stage names
+    const taskToStageMap: Record<string, string> = {
+      'task_preprocess': 'preprocess',
+      'task_scoring': 'scoring',
+      'task_fingerprint': 'fingerprint',
+      'task_validation': 'validation',
+      'task_policy': 'policy',
+      'task_reporting': 'reporting',
+      'task_indexing': 'indexing',
+      'task_validate_data_quality': 'validate_data_quality',
+      'task_finalize': 'finalize',
+    }
+    
+    // Check direct mapping
+    if (taskToStageMap[taskId]) {
+      return taskToStageMap[taskId]
+    }
+    
+    // Fallback: try to extract stage name from task_id
+    // e.g., "task_preprocess" -> "preprocess"
+    const match = taskId.match(/^task_(.+)$/)
+    return match ? match[1] : null
+  }
+
+  // Helper function to format skip reasons in a human-readable way
+  const formatSkipReason = (reason: string): string => {
+    const reasonMap: Record<string, string> = {
+      'matplotlib_not_available': 'Matplotlib library is not installed. PDF report generation requires matplotlib to be installed.',
+      'no_metrics': 'No metrics available. The reporting stage requires metrics from previous stages.',
+      'no_processed_files': 'No processed files available. The indexing stage requires files from the preprocessing stage.',
+    }
+    
+    // Return mapped reason or format the technical reason
+    if (reasonMap[reason]) {
+      return reasonMap[reason]
+    }
+    
+    // Fallback: convert snake_case to Title Case
+    return reason
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ')
+  }
+
   // Helper function to sort tasks by execution order
   const sortTasksByOrder = (tasks: [string, any][]): [string, any][] => {
     return tasks.sort(([taskA], [taskB]) => {
@@ -133,6 +185,130 @@ export default function PipelineDetailsModal({
       if (indexB === -1) return -1
       return indexA - indexB
     })
+  }
+
+  // Helper function to format duration
+  const formatDuration = (startedAt: string | null, finishedAt: string | null): string | null => {
+    if (!startedAt || !finishedAt) return null
+    try {
+      const start = new Date(startedAt)
+      const end = new Date(finishedAt)
+      const diffMs = end.getTime() - start.getTime()
+      const diffSec = Math.floor(diffMs / 1000)
+      const diffMin = Math.floor(diffSec / 60)
+      const diffHour = Math.floor(diffMin / 60)
+      
+      if (diffHour > 0) {
+        return `${diffHour}h ${diffMin % 60}m ${diffSec % 60}s`
+      } else if (diffMin > 0) {
+        return `${diffMin}m ${diffSec % 60}s`
+      } else {
+        return `${diffSec}s`
+      }
+    } catch {
+      return null
+    }
+  }
+
+  // Helper function to format file size
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return '0 Bytes'
+    const k = 1024
+    const sizes = ['Bytes', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  }
+
+  // Helper function to format metrics in a human-readable way
+  const formatStageMetrics = (stageName: string, metrics: any): Array<{ label: string; value: string; icon?: string }> => {
+    if (!metrics || typeof metrics !== 'object') return []
+    
+    const formatted: Array<{ label: string; value: string; icon?: string }> = []
+    
+    // Common metrics across stages
+    if (metrics.files_processed !== undefined) {
+      formatted.push({ label: 'Files Processed', value: metrics.files_processed.toString(), icon: '📁' })
+    }
+    if (metrics.processed_file_list && Array.isArray(metrics.processed_file_list)) {
+      formatted.push({ label: 'Files Processed', value: metrics.processed_file_list.length.toString(), icon: '📁' })
+    }
+    
+    // Stage-specific metrics
+    switch (stageName) {
+      case 'preprocess':
+        if (metrics.chunks_created !== undefined) {
+          formatted.push({ label: 'Chunks Created', value: metrics.chunks_created.toLocaleString(), icon: '📝' })
+        }
+        if (metrics.sections !== undefined) {
+          formatted.push({ label: 'Sections', value: metrics.sections.toString(), icon: '📑' })
+        }
+        if (metrics.mid_sentence_boundary_rate !== undefined) {
+          formatted.push({ label: 'Boundary Quality', value: `${(metrics.mid_sentence_boundary_rate * 100).toFixed(1)}%`, icon: '✓' })
+        }
+        break
+      
+      case 'scoring':
+        if (metrics.total_chunks !== undefined) {
+          formatted.push({ label: 'Chunks Scored', value: metrics.total_chunks.toLocaleString(), icon: '📊' })
+        }
+        if (metrics.scored_files !== undefined) {
+          formatted.push({ label: 'Files Scored', value: metrics.scored_files.toString(), icon: '📁' })
+        }
+        if (metrics.failed_files !== undefined && metrics.failed_files.length > 0) {
+          formatted.push({ label: 'Failed Files', value: metrics.failed_files.length.toString(), icon: '⚠️' })
+        }
+        break
+      
+      case 'fingerprint':
+        if (metrics.entries_processed !== undefined) {
+          formatted.push({ label: 'Entries Processed', value: metrics.entries_processed.toLocaleString(), icon: '🔍' })
+        }
+        break
+      
+      case 'validation':
+        if (metrics.entries_processed !== undefined) {
+          formatted.push({ label: 'Entries Validated', value: metrics.entries_processed.toLocaleString(), icon: '✅' })
+        }
+        if (metrics.violations_count !== undefined) {
+          formatted.push({ label: 'Violations Found', value: metrics.violations_count.toString(), icon: '⚠️' })
+        }
+        break
+      
+      case 'policy':
+        if (metrics.entries_processed !== undefined) {
+          formatted.push({ label: 'Entries Evaluated', value: metrics.entries_processed.toLocaleString(), icon: '🛡️' })
+        }
+        if (metrics.policy_violations !== undefined) {
+          formatted.push({ label: 'Policy Violations', value: metrics.policy_violations.toString(), icon: '⚠️' })
+        }
+        break
+      
+      case 'reporting':
+        if (metrics.entries_processed !== undefined) {
+          formatted.push({ label: 'Entries Processed', value: metrics.entries_processed.toLocaleString(), icon: '📄' })
+        }
+        if (metrics.pdf_size_bytes !== undefined) {
+          formatted.push({ label: 'Report Size', value: formatFileSize(metrics.pdf_size_bytes), icon: '📊' })
+        }
+        if (metrics.threshold !== undefined) {
+          formatted.push({ label: 'Threshold', value: metrics.threshold.toString(), icon: '📈' })
+        }
+        break
+      
+      case 'indexing':
+        if (metrics.chunks_indexed !== undefined) {
+          formatted.push({ label: 'Chunks Indexed', value: metrics.chunks_indexed.toLocaleString(), icon: '🔍' })
+        }
+        if (metrics.collection_name !== undefined) {
+          formatted.push({ label: 'Collection', value: metrics.collection_name, icon: '🗂️' })
+        }
+        if (metrics.vectors_created !== undefined) {
+          formatted.push({ label: 'Vectors Created', value: metrics.vectors_created.toLocaleString(), icon: '🔢' })
+        }
+        break
+    }
+    
+    return formatted
   }
 
   const stageMetrics = logs?.stage_metrics || initialMetrics?.aird_stages || {}
@@ -234,37 +410,165 @@ export default function PipelineDetailsModal({
                           </button>
 
                           {expandedStages.has(stageName) && (
-                            <div className="px-4 py-3 bg-white border-t border-gray-200">
+                            <div className="px-4 py-3 bg-white border-t border-gray-200 space-y-3">
                               {stageData?.error && (
-                                <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded">
+                                <div className="p-3 bg-red-50 border border-red-200 rounded">
                                   <p className="text-sm font-medium text-red-800">Error:</p>
                                   <p className="text-sm text-red-700 mt-1">{stageData.error}</p>
                                 </div>
                               )}
                               {stageData?.status === 'skipped' && stageData?.metrics?.reason && (
-                                <div className="mb-3 p-3 bg-yellow-50 border border-yellow-200 rounded">
+                                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded">
                                   <p className="text-sm font-medium text-yellow-800">Skipped:</p>
-                                  <p className="text-sm text-yellow-700 mt-1">{stageData.metrics.reason}</p>
+                                  <p className="text-sm text-yellow-700 mt-1">{formatSkipReason(stageData.metrics.reason)}</p>
                                 </div>
                               )}
+                              
+                              {/* Human-readable metrics */}
                               {stageData?.metrics && Object.keys(stageData.metrics).length > 0 && (
-                                <div className="text-sm text-gray-600">
-                                  <p className="font-medium mb-1">Metrics:</p>
-                                  <pre className="text-xs bg-gray-50 p-2 rounded overflow-x-auto">
-                                    {JSON.stringify(stageData.metrics, null, 2)}
-                                  </pre>
+                                <div>
+                                  <p className="text-sm font-medium text-gray-900 mb-2">Metrics</p>
+                                  {(() => {
+                                    const formattedMetrics = formatStageMetrics(stageName, stageData.metrics)
+                                    if (formattedMetrics.length > 0) {
+                                      return (
+                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-3">
+                                          {formattedMetrics.map((metric, idx) => (
+                                            <div key={idx} className="flex items-center gap-2 p-2 bg-gray-50 rounded border border-gray-200">
+                                              {metric.icon && <span className="text-base">{metric.icon}</span>}
+                                              <div className="flex-1 min-w-0">
+                                                <p className="text-xs text-gray-500 truncate">{metric.label}</p>
+                                                <p className="text-sm font-semibold text-gray-900">{metric.value}</p>
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )
+                                    }
+                                    return null
+                                  })()}
+                                  
+                                  {/* Duration */}
+                                  {stageData?.started_at && stageData?.finished_at && (() => {
+                                    const duration = formatDuration(stageData.started_at, stageData.finished_at)
+                                    if (duration) {
+                                      return (
+                                        <div className="flex items-center gap-2 p-2 bg-gray-50 rounded border border-gray-200 mb-3">
+                                          <span className="text-base">⏱️</span>
+                                          <div>
+                                            <p className="text-xs text-gray-500">Duration</p>
+                                            <p className="text-sm font-semibold text-gray-900">{duration}</p>
+                                          </div>
+                                        </div>
+                                      )
+                                    }
+                                    return null
+                                  })()}
+                                  
+                                  {/* Timestamps */}
+                                  <div className="flex flex-wrap gap-4 text-xs text-gray-500">
+                                    {stageData?.started_at && (
+                                      <div>
+                                        <span className="font-medium">Started:</span>{' '}
+                                        {new Date(stageData.started_at).toLocaleString()}
+                                      </div>
+                                    )}
+                                    {stageData?.finished_at && (
+                                      <div>
+                                        <span className="font-medium">Finished:</span>{' '}
+                                        {new Date(stageData.finished_at).toLocaleString()}
+                                      </div>
+                                    )}
+                                  </div>
+                                  
+                                  {/* Raw JSON (collapsible) */}
+                                  <details className="mt-3">
+                                    <summary className="text-xs font-medium text-gray-600 cursor-pointer hover:text-gray-800">
+                                      View Raw Metrics (JSON)
+                                    </summary>
+                                    <pre className="text-xs bg-gray-50 p-2 rounded overflow-x-auto mt-2 border border-gray-200">
+                                      {JSON.stringify(stageData.metrics, null, 2)}
+                                    </pre>
+                                  </details>
                                 </div>
                               )}
-                              {stageData?.started_at && (
-                                <p className="text-xs text-gray-500 mt-2">
-                                  Started: {new Date(stageData.started_at).toLocaleString()}
-                                </p>
+                              
+                              {/* Show timestamps even if no metrics */}
+                              {(!stageData?.metrics || Object.keys(stageData.metrics).length === 0) && (
+                                <div className="flex flex-wrap gap-4 text-xs text-gray-500">
+                                  {stageData?.started_at && (
+                                    <div>
+                                      <span className="font-medium">Started:</span>{' '}
+                                      {new Date(stageData.started_at).toLocaleString()}
+                                    </div>
+                                  )}
+                                  {stageData?.finished_at && (
+                                    <div>
+                                      <span className="font-medium">Finished:</span>{' '}
+                                      {new Date(stageData.finished_at).toLocaleString()}
+                                    </div>
+                                  )}
+                                </div>
                               )}
-                              {stageData?.finished_at && (
-                                <p className="text-xs text-gray-500">
-                                  Finished: {new Date(stageData.finished_at).toLocaleString()}
-                                </p>
-                              )}
+                              
+                              {/* Task Logs for this stage */}
+                              {logs?.logs && (() => {
+                                const stageTasks = Object.entries(logs.logs)
+                                  .filter(([taskId]) => getStageFromTaskId(taskId) === stageName)
+                                  .map(([taskId, taskLog]): { taskId: string } & TaskLog => ({ 
+                                    taskId, 
+                                    ...(taskLog && typeof taskLog === 'object' ? taskLog as TaskLog : {} as TaskLog) 
+                                  }))
+                                
+                                if (stageTasks.length === 0) return null
+                                
+                                return (
+                                  <div className="mt-4 pt-4 border-t border-gray-200">
+                                    <p className="text-sm font-medium text-gray-900 mb-2 flex items-center gap-2">
+                                      <FileText className="h-4 w-4 text-gray-500" />
+                                      Task Logs
+                                    </p>
+                                    <div className="space-y-2">
+                                      {stageTasks.map(({ taskId, content, status, error }) => (
+                                        <div key={taskId} className="border border-gray-200 rounded-lg overflow-hidden">
+                                          <button
+                                            onClick={() => toggleTask(taskId)}
+                                            className="w-full px-3 py-2 bg-gray-50 hover:bg-gray-100 border-b border-gray-200 flex items-center justify-between transition-colors"
+                                          >
+                                            <div className="flex items-center space-x-2">
+                                              <FileText className="h-3 w-3 text-gray-500" />
+                                              <span className="text-xs font-medium text-gray-700">{taskId}</span>
+                                              {status && (
+                                                <span className={`text-xs px-1.5 py-0.5 rounded ${getStatusColor(status)}`}>
+                                                  {status}
+                                                </span>
+                                              )}
+                                            </div>
+                                            {expandedTasks.has(taskId) ? (
+                                              <ChevronUp className="h-3 w-3 text-gray-500" />
+                                            ) : (
+                                              <ChevronDown className="h-3 w-3 text-gray-500" />
+                                            )}
+                                          </button>
+                                          {expandedTasks.has(taskId) && (
+                                            <div className="px-3 py-2 bg-gray-900 text-gray-100">
+                                              {content ? (
+                                                <pre className="text-xs font-mono whitespace-pre-wrap overflow-x-auto">
+                                                  {content}
+                                                </pre>
+                                              ) : error ? (
+                                                <p className="text-xs text-red-400">{error}</p>
+                                              ) : (
+                                                <p className="text-xs text-gray-400">No logs available</p>
+                                              )}
+                                            </div>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )
+                              })()}
                             </div>
                           )}
                         </div>
@@ -273,54 +577,61 @@ export default function PipelineDetailsModal({
                   </div>
                 )}
 
-                {/* Task Logs */}
-                {logs?.logs && Object.keys(logs.logs).length > 0 && (
-                  <div>
-                    <h4 className="text-sm font-semibold text-gray-900 mb-3">Task Logs</h4>
-                    <div className="space-y-2">
-                      {sortTasksByOrder(Object.entries(logs.logs)).map(([taskId, taskLog]: [string, any]) => (
-                        <div
-                          key={taskId}
-                          className="border border-gray-200 rounded-lg overflow-hidden"
-                        >
-                          <button
-                            onClick={() => toggleTask(taskId)}
-                            className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
+                {/* Unmapped Task Logs (fallback for tasks that don't map to any stage) */}
+                {logs?.logs && (() => {
+                  const unmappedTasks = Object.entries(logs.logs)
+                    .filter(([taskId]) => !getStageFromTaskId(taskId))
+                  
+                  if (unmappedTasks.length === 0) return null
+                  
+                  return (
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-900 mb-3">Additional Task Logs</h4>
+                      <div className="space-y-2">
+                        {sortTasksByOrder(unmappedTasks).map(([taskId, taskLog]: [string, any]) => (
+                          <div
+                            key={taskId}
+                            className="border border-gray-200 rounded-lg overflow-hidden"
                           >
-                            <div className="flex items-center space-x-2">
-                              <FileText className="h-4 w-4 text-gray-500" />
-                              <span className="font-medium text-gray-900">{taskId}</span>
-                              {taskLog.status && (
-                                <span className={`text-xs px-2 py-0.5 rounded ${getStatusColor(taskLog.status)}`}>
-                                  {taskLog.status}
-                                </span>
-                              )}
-                            </div>
-                            {expandedTasks.has(taskId) ? (
-                              <ChevronUp className="h-4 w-4 text-gray-500" />
-                            ) : (
-                              <ChevronDown className="h-4 w-4 text-gray-500" />
-                            )}
-                          </button>
-
-                          {expandedTasks.has(taskId) && (
-                            <div className="px-4 py-3 bg-gray-900 text-gray-100 border-t border-gray-200">
-                              {taskLog.content ? (
-                                <pre className="text-xs font-mono whitespace-pre-wrap overflow-x-auto">
-                                  {taskLog.content}
-                                </pre>
-                              ) : taskLog.error ? (
-                                <p className="text-xs text-red-400">{taskLog.error}</p>
+                            <button
+                              onClick={() => toggleTask(taskId)}
+                              className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
+                            >
+                              <div className="flex items-center space-x-2">
+                                <FileText className="h-4 w-4 text-gray-500" />
+                                <span className="font-medium text-gray-900">{taskId}</span>
+                                {taskLog.status && (
+                                  <span className={`text-xs px-2 py-0.5 rounded ${getStatusColor(taskLog.status)}`}>
+                                    {taskLog.status}
+                                  </span>
+                                )}
+                              </div>
+                              {expandedTasks.has(taskId) ? (
+                                <ChevronUp className="h-4 w-4 text-gray-500" />
                               ) : (
-                                <p className="text-xs text-gray-400">No logs available</p>
+                                <ChevronDown className="h-4 w-4 text-gray-500" />
                               )}
-                            </div>
-                          )}
-                        </div>
-                      ))}
+                            </button>
+
+                            {expandedTasks.has(taskId) && (
+                              <div className="px-4 py-3 bg-gray-900 text-gray-100 border-t border-gray-200">
+                                {taskLog.content ? (
+                                  <pre className="text-xs font-mono whitespace-pre-wrap overflow-x-auto">
+                                    {taskLog.content}
+                                  </pre>
+                                ) : taskLog.error ? (
+                                  <p className="text-xs text-red-400">{taskLog.error}</p>
+                                ) : (
+                                  <p className="text-xs text-gray-400">No logs available</p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )
+                })()}
 
                 {logs?.error && (
                   <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">

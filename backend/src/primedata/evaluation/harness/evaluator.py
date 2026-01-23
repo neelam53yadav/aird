@@ -40,6 +40,8 @@ class Evaluator:
         acl_denied: bool = False,
         expected_refusal: bool = False,
         has_evidence: bool = True,
+        expected_chunk_ids: Optional[List[str]] = None,
+        expected_docs: Optional[List[str]] = None,
         thresholds: Optional[Dict[str, float]] = None,
     ) -> Dict[str, any]:
         """
@@ -67,6 +69,8 @@ class Evaluator:
                 acl_denied=acl_denied,
                 expected_refusal=expected_refusal,
                 has_evidence=has_evidence,
+                expected_chunk_ids=expected_chunk_ids,
+                expected_docs=expected_docs,
                 thresholds=thresholds,
             )
             
@@ -81,6 +85,7 @@ class Evaluator:
                 "citation_coverage": {"score": 0.0, "passed": False},
                 "refusal_correctness": {"score": 0.0, "passed": False},
             }
+
 
 
 

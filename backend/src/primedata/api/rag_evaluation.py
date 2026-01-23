@@ -16,6 +16,7 @@ from fastapi.responses import StreamingResponse
 from loguru import logger
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from primedata.core.plan_limits import get_plan_limit
@@ -58,6 +59,16 @@ class EvalRunResponse(BaseModel):
     created_at: str
     report_path: Optional[str] = None
     dag_run_id: Optional[str] = None
+    dataset_name: Optional[str] = None  # Dataset name used for evaluation
+    pipeline_version: Optional[int] = None  # Pipeline version that was evaluated
+
+
+class EvalRunsPaginatedResponse(BaseModel):
+    """Paginated response for evaluation runs."""
+    runs: List[EvalRunResponse]
+    total: int
+    limit: int
+    offset: int
 
 
 @router.post("/products/{product_id}/generate-queries")
@@ -278,16 +289,18 @@ def _sync_eval_runs_with_airflow(db: Session) -> int:
         return 0
 
 
-@router.get("/products/{product_id}/runs", response_model=List[EvalRunResponse])
+@router.get("/products/{product_id}/runs", response_model=EvalRunsPaginatedResponse)
 async def get_eval_runs(
     product_id: UUID,
     version: Optional[int] = Query(None, description="Version number (optional, if not provided returns all runs for the product)"),
+    limit: int = Query(10, ge=1, le=100, description="Number of runs to return"),
+    offset: int = Query(0, ge=0, description="Number of runs to skip"),
     sync: bool = Query(True, description="Sync with Airflow before returning"),
     request_obj: Request = None,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    """Get evaluation runs for a product. If version is provided, filters by that version, otherwise returns all runs."""
+    """Get evaluation runs for a product with pagination support. If version is provided, filters by that version, otherwise returns all runs."""
     product = ensure_product_access(db, request_obj, product_id)
     
     # Sync with Airflow if requested
@@ -300,24 +313,35 @@ async def get_eval_runs(
     if version is not None:
         query = query.filter(EvalRun.version == version)
     
-    runs = query.order_by(EvalRun.created_at.desc()).all()
+    # Get total count for pagination
+    total_count = query.count()
     
-    return [
-        EvalRunResponse(
-            id=str(r.id),
-            product_id=str(r.product_id),
-            version=r.version,
-            status=r.status,
-            metrics=r.metrics,
-            metrics_path=r.metrics_path,
-            started_at=r.started_at.isoformat() if r.started_at else None,
-            finished_at=r.finished_at.isoformat() if r.finished_at else None,
-            created_at=r.created_at.isoformat(),
-            report_path=r.report_path,
-            dag_run_id=r.dag_run_id,
-        )
-        for r in runs
-    ]
+    # Apply pagination
+    runs = query.order_by(EvalRun.created_at.desc()).offset(offset).limit(limit).all()
+    
+    return EvalRunsPaginatedResponse(
+        runs=[
+            EvalRunResponse(
+                id=str(r.id),
+                product_id=str(r.product_id),
+                version=r.version,
+                status=r.status,
+                metrics=r.metrics,
+                metrics_path=r.metrics_path,
+                started_at=r.started_at.isoformat() if r.started_at else None,
+                finished_at=r.finished_at.isoformat() if r.finished_at else None,
+                created_at=r.created_at.isoformat(),
+                report_path=r.report_path,
+                dag_run_id=r.dag_run_id,
+                dataset_name=r.dataset_name,
+                pipeline_version=r.pipeline_version,
+            )
+            for r in runs
+        ],
+        total=total_count,
+        limit=limit,
+        offset=offset,
+    )
 
 
 # Dataset Management Endpoints
@@ -364,16 +388,51 @@ async def create_dataset(
     product = ensure_product_access(db, request, product_id)
     user_id = get_user_id(current_user)
     
-    dataset = DatasetManager.create_dataset(
-        db=db,
-        workspace_id=product.workspace_id,
-        product_id=product_id,
-        name=request_body.name,
-        dataset_type=request_body.dataset_type,
-        description=request_body.description,
-        version=request_body.version,
-        metadata=request_body.metadata,
+    # Check if dataset with same name already exists for this product (application-level validation)
+    existing_dataset = (
+        db.query(EvalDataset)
+        .filter(EvalDataset.product_id == product_id, EvalDataset.name == request_body.name)
+        .first()
     )
+    if existing_dataset:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Dataset with name '{request_body.name}' already exists for this product"
+        )
+    
+    try:
+        dataset = DatasetManager.create_dataset(
+            db=db,
+            workspace_id=product.workspace_id,
+            product_id=product_id,
+            name=request_body.name,
+            dataset_type=request_body.dataset_type,
+            description=request_body.description,
+            version=request_body.version,
+            metadata=request_body.metadata,
+        )
+    except IntegrityError as e:
+        # Database-level constraint violation (handles race conditions)
+        db.rollback()
+        error_str = str(e.orig).lower()
+        constraint_name = "unique_product_dataset_name"
+        
+        if constraint_name in error_str or "duplicate key value violates unique constraint" in error_str:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Dataset with name '{request_body.name}' already exists for this product"
+            )
+        # Re-raise if it's a different integrity error
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database error occurred while creating dataset"
+        )
+    except ValueError as e:
+        # Application-level validation errors (from DatasetManager)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
     
     return DatasetResponse(
         id=str(dataset.id),
@@ -491,18 +550,24 @@ async def list_dataset_items(
     
     items = DatasetManager.list_items(db, dataset_id)
     
-    return [
-        {
+    from primedata.services.s3_content_storage import load_text_from_s3
+    
+    result = []
+    for item in items:
+        expected_answer = None
+        if item.expected_answer_path:
+            expected_answer = load_text_from_s3(item.expected_answer_path)
+        
+        result.append({
             "id": str(item.id),
             "query": item.query,
-            "expected_answer": item.expected_answer,
+            "expected_answer": expected_answer,
             "expected_chunks": item.expected_chunks,
             "expected_docs": item.expected_docs,
             "question_type": item.question_type,
             "metadata": item.extra_metadata or {},
-        }
-        for item in items
-    ]
+        })
+    return result
 
 
 @router.delete("/datasets/{dataset_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -1006,6 +1071,8 @@ async def create_eval_run(
             product_id=product_id,
             version=eval_run_version,  # Unique version for this evaluation run
             dataset_id=request_body.dataset_id,
+            dataset_name=dataset.name,  # Store dataset name for easy display
+            pipeline_version=data_version,  # Store pipeline version that was evaluated
             status="queued",
         )
         db.add(eval_run)
@@ -1084,25 +1151,60 @@ async def get_eval_run(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    """Get a single evaluation run by ID."""
+    """Get a single evaluation run by ID. Loads metrics from S3 if metrics_path exists."""
     eval_run = db.query(EvalRun).filter(EvalRun.id == run_id).first()
     if not eval_run:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evaluation run not found")
     
     ensure_product_access(db, request, eval_run.product_id)
     
+    # Load metrics from S3 if path exists and metrics not in DB (or prefer S3 for large datasets)
+    metrics = eval_run.metrics
+    if eval_run.metrics_path:
+        try:
+            from primedata.storage.minio_client import minio_client
+            
+            # Extract bucket and key from metrics_path
+            # Format: "ws/{workspace_id}/prod/{product_id}/eval/v{version}/{year}/{month}/{day}/{run_id}/metrics.json"
+            if eval_run.metrics_path.startswith("primedata-exports/"):
+                # Old format - strip bucket prefix
+                key = eval_run.metrics_path.replace("primedata-exports/", "")
+                bucket = "primedata-exports"
+            elif eval_run.metrics_path.startswith("ws/"):
+                # New format - bucket is primedata-exports
+                key = eval_run.metrics_path
+                bucket = "primedata-exports"
+            else:
+                # Assume it's just the key, use default bucket
+                key = eval_run.metrics_path
+                bucket = "primedata-exports"
+            
+            # Try to load from S3
+            s3_metrics_data = minio_client.get_object(bucket, key)
+            if s3_metrics_data:
+                # Decode bytes to string, then parse JSON
+                metrics = json.loads(s3_metrics_data.decode('utf-8'))
+                logger.info(f"Loaded evaluation metrics from S3: {eval_run.metrics_path}")
+            else:
+                logger.warning(f"Metrics path exists but file not found in S3: {eval_run.metrics_path}, using DB metrics")
+        except Exception as s3_error:
+            logger.warning(f"Failed to load metrics from S3 ({eval_run.metrics_path}): {s3_error}, using DB metrics")
+            # Fall back to DB metrics if S3 load fails
+    
     return EvalRunResponse(
         id=str(eval_run.id),
         product_id=str(eval_run.product_id),
         version=eval_run.version,
         status=eval_run.status,
-        metrics=eval_run.metrics,
+        metrics=metrics,
         metrics_path=eval_run.metrics_path,
         started_at=eval_run.started_at.isoformat() if eval_run.started_at else None,
         finished_at=eval_run.finished_at.isoformat() if eval_run.finished_at else None,
         created_at=eval_run.created_at.isoformat(),
         report_path=eval_run.report_path,
         dag_run_id=eval_run.dag_run_id,
+        dataset_name=eval_run.dataset_name,
+        pipeline_version=eval_run.pipeline_version,
     )
 
 

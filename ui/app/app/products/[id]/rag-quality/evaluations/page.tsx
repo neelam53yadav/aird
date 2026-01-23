@@ -13,11 +13,13 @@ import AppLayout from '@/components/layout/AppLayout'
 import { apiClient } from '@/lib/api-client'
 import { CardSkeleton } from '@/components/ui/skeleton'
 import { StatusBadge } from '@/components/ui/status-badge'
+import { EVALUATIONS_PER_PAGE } from '@/lib/constants'
 
 interface Product {
   id: string
   name: string
   current_version: number
+  promoted_version?: number
 }
 
 interface EvaluationDataset {
@@ -48,6 +50,8 @@ interface EvaluationRun {
   created_at: string
   report_path?: string
   dag_run_id?: string | null
+  dataset_name?: string | null
+  pipeline_version?: number | null
 }
 
 // Map evaluation status to StatusBadge status type
@@ -76,11 +80,15 @@ export default function EvaluationsPage() {
   const [product, setProduct] = useState<Product | null>(null)
   const [datasets, setDatasets] = useState<EvaluationDataset[]>([])
   const [runs, setRuns] = useState<EvaluationRun[]>([])
+  const [pipelineRuns, setPipelineRuns] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [running, setRunning] = useState(false)
   const [selectedDataset, setSelectedDataset] = useState<string>('')
+  const [selectedVersion, setSelectedVersion] = useState<number | null>(null)
   const [polling, setPolling] = useState(false)
   const [downloadingReport, setDownloadingReport] = useState<string | null>(null)
+  const [currentPage, setCurrentPage] = useState(0)
+  const [totalRuns, setTotalRuns] = useState(0)
 
   // Ref to track the polling interval
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
@@ -109,28 +117,46 @@ export default function EvaluationsPage() {
     try {
       const productResponse = await apiClient.getProduct(productId)
       if (!productResponse.error && productResponse.data) {
-        setProduct(productResponse.data as Product)
+        const productData = productResponse.data as Product
+        setProduct(productData)
+        // Don't auto-select version - let user choose explicitly
+      }
+
+      // Load pipeline runs to get available versions
+      const pipelineRunsResponse = await apiClient.getPipelineRuns(productId, 100, 0)
+      if (!pipelineRunsResponse.error && pipelineRunsResponse.data) {
+        const runsData = Array.isArray(pipelineRunsResponse.data) 
+          ? pipelineRunsResponse.data 
+          : (pipelineRunsResponse.data as any)?.runs || []
+        setPipelineRuns(runsData)
       }
 
       const datasetsResponse = await apiClient.listEvaluationDatasets(productId)
       if (!datasetsResponse.error && datasetsResponse.data) {
         const datasetsList = datasetsResponse.data as EvaluationDataset[]
         setDatasets(datasetsList)
-        if (datasetsList.length > 0 && !selectedDataset) {
-          setSelectedDataset(datasetsList[0].id)
-        }
+        // Don't auto-select dataset - let user choose explicitly
       }
 
-      const runsResponse = await apiClient.listEvaluationRuns(productId)
+      // Load evaluation runs with pagination
+      const offset = currentPage * EVALUATIONS_PER_PAGE
+      const runsResponse = await apiClient.listEvaluationRuns(productId, EVALUATIONS_PER_PAGE, offset)
       if (!runsResponse.error && runsResponse.data) {
-        setRuns(runsResponse.data as EvaluationRun[])
+        // Handle both old format (array) and new format (object with runs, total, etc.)
+        if (Array.isArray(runsResponse.data)) {
+          setRuns(runsResponse.data as EvaluationRun[])
+          setTotalRuns(runsResponse.data.length)
+        } else {
+          setRuns((runsResponse.data as any).runs || [])
+          setTotalRuns((runsResponse.data as any).total || 0)
+        }
       }
     } catch (err) {
       console.error('Failed to load data:', err)
     } finally {
       if (showLoading) setLoading(false)
     }
-  }, [productId, selectedDataset])
+  }, [productId, currentPage]) // Add currentPage as dependency
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -239,6 +265,16 @@ export default function EvaluationsPage() {
       return
     }
 
+    if (selectedVersion === null) {
+      setResultModalData({
+        type: 'error',
+        title: 'No Pipeline Version Selected',
+        message: 'Please select a pipeline version to run evaluation'
+      })
+      setShowResultModal(true)
+      return
+    }
+
     // Show confirmation modal first
     setShowConfirmModal(true)
   }
@@ -246,14 +282,16 @@ export default function EvaluationsPage() {
   const confirmRunEvaluation = async () => {
     setShowConfirmModal(false)
     
-    if (!selectedDataset) {
+    if (!selectedDataset || selectedVersion === null) {
       return
     }
 
     setRunning(true)
     try {
+      
       const response = await apiClient.createEvaluationRun(productId, {
-        dataset_id: selectedDataset
+        dataset_id: selectedDataset,
+        version: selectedVersion
       })
 
       if (response.error) {
@@ -314,16 +352,36 @@ export default function EvaluationsPage() {
   const handleDownloadReport = async (runId: string) => {
     setDownloadingReport(runId)
     try {
-      const blob = await apiClient.downloadEvaluationReport(runId)
+      const result = await apiClient.downloadEvaluationReport(runId)
       
-      if (!blob) {
+      if (!result || !result.blob) {
         throw new Error('Failed to download report')
       }
 
-      const url = window.URL.createObjectURL(blob)
+      // Determine filename and extension from response or default
+      let filename: string
+      let extension: string
+      
+      if (result.filename) {
+        // Use filename from Content-Disposition header
+        filename = result.filename
+        extension = filename.split('.').pop() || 'csv'
+      } else {
+        // Determine extension from content type or default to CSV
+        if (result.contentType?.includes('text/csv')) {
+          extension = 'csv'
+        } else if (result.contentType?.includes('application/pdf')) {
+          extension = 'pdf'
+        } else {
+          extension = 'csv' // Default to CSV as that's what's generated
+        }
+        filename = `evaluation-report-${runId}.${extension}`
+      }
+
+      const url = window.URL.createObjectURL(result.blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `evaluation-report-${runId}.pdf`
+      a.download = filename
       document.body.appendChild(a)
       a.click()
       window.URL.revokeObjectURL(url)
@@ -434,7 +492,7 @@ export default function EvaluationsPage() {
             <p className="mt-2 text-sm text-gray-600">
               Run evaluations on your datasets and view detailed results.
             </p>
-            {product && product.current_version <= 0 && (
+            {pipelineRuns.filter((run: any) => run.status === 'succeeded' && run.version).length === 0 && (
               <div className="mt-3 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
                 <div className="flex items-start">
                   <div className="flex-shrink-0">
@@ -444,7 +502,7 @@ export default function EvaluationsPage() {
                   </div>
                   <div className="ml-3 flex-1">
                     <p className="text-sm text-yellow-800">
-                      <strong>No pipeline run yet.</strong> You need to run a pipeline first to process your data before running evaluations.
+                      <strong>No successful pipeline run yet.</strong> You need to run a pipeline first to process your data before running evaluations.
                     </p>
                     <Link href={`/app/products/${productId}/pipeline-runs`} className="mt-2 inline-block">
                       <Button size="sm" className="bg-yellow-600 hover:bg-yellow-700 text-white">
@@ -458,21 +516,70 @@ export default function EvaluationsPage() {
           </div>
           {datasets.length > 0 && (
             <div className="flex items-center gap-3">
+              {/* Dataset Selector */}
               <select
-                value={selectedDataset}
-                onChange={(e) => setSelectedDataset(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                aria-label="Dataset"
+                value={selectedDataset || ''}
+                onChange={(e) => {
+                  const value = e.target.value
+                  setSelectedDataset(value || '')
+                }}
+                className="px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm min-w-[150px]"
               >
-                <option value="">Select dataset...</option>
+                <option value="" disabled={!!selectedDataset}>
+                  --Select Dataset--
+                </option>
                 {datasets.map((dataset) => (
                   <option key={dataset.id} value={dataset.id}>
                     {dataset.name}
                   </option>
                 ))}
               </select>
+              {/* Pipeline Version Selector */}
+              {pipelineRuns.filter((run: any) => run.status === 'succeeded' && run.version).length > 0 && (
+                <select
+                  aria-label="Pipeline Version"
+                  value={selectedVersion || ''}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    setSelectedVersion(value ? parseInt(value) : null)
+                  }}
+                  className="px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm min-w-[180px]"
+                >
+                  <option value="" disabled={selectedVersion !== null}>
+                    --Select Pipeline Version--
+                  </option>
+                  {/* Get unique successful pipeline versions */}
+                  {(() => {
+                    // Filter only succeeded pipeline runs and get unique versions
+                    const successfulVersions = Array.from(
+                      new Set(
+                        pipelineRuns
+                          .filter((run: any) => run.status === 'succeeded' && run.version)
+                          .map((run: any) => run.version)
+                      )
+                    ).sort((a: number, b: number) => b - a) // Sort descending (newest first)
+                    
+                    // The first item in sorted array is the latest succeeded version
+                    const latestVersion = successfulVersions.length > 0 ? successfulVersions[0] : null
+                    
+                    return successfulVersions.map((version: number) => (
+                      <option key={version} value={version}>
+                        Version {version} {version === latestVersion ? '(Latest)' : ''}
+                        {product.promoted_version === version ? ' (Production)' : ''}
+                      </option>
+                    ))
+                  })()}
+                </select>
+              )}
               <Button
                 onClick={handleRunEvaluation}
-                disabled={running || !selectedDataset || (product && product.current_version <= 0)}
+                disabled={
+                  running || 
+                  !selectedDataset || 
+                  selectedVersion === null || 
+                  pipelineRuns.filter((run: any) => run.status === 'succeeded' && run.version).length === 0
+                }
                 className="flex items-center gap-2"
               >
                 <Play className="h-4 w-4" />
@@ -492,96 +599,150 @@ export default function EvaluationsPage() {
 
         {/* Runs List */}
         {runs.length > 0 ? (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Version
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Started
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Duration
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {runs.map((run) => {
-                    const isRunning = run.status === 'running' || run.status === 'queued' || run.status === 'pending'
-                    
-                    return (
-                      <tr key={run.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900">v{run.version}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <StatusBadge status={mapEvaluationStatus(run.status)} size="sm" />
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">
-                            {run.started_at
-                              ? new Date(run.started_at).toLocaleString()
-                              : 'Not started'}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <DurationCell run={run} currentTime={currentTime} />
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center gap-1">
-                            {isRunning ? (
-                              <div className="flex items-center gap-2 text-sm text-blue-600">
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                                <span>Running</span>
-                              </div>
-                            ) : (
-                              <>
-                                <Link href={`/app/products/${productId}/rag-quality/evaluations/${run.id}`}>
-                                  <Button 
-                                    variant="ghost" 
-                                    size="sm" 
-                                    className="h-8 w-8 p-0"
-                                    title="View Details"
-                                  >
-                                    <Eye className="h-4 w-4" />
-                                  </Button>
-                                </Link>
-                                {run.status === 'completed' && (
-                                  <Button 
-                                    variant="ghost" 
-                                    size="sm"
-                                    onClick={() => handleDownloadReport(run.id)}
-                                    disabled={downloadingReport === run.id}
-                                    className="h-8 w-8 p-0"
-                                    title="Download Report"
-                                  >
-                                    {downloadingReport === run.id ? (
-                                      <Loader2 className="h-4 w-4 animate-spin" />
-                                    ) : (
-                                      <Download className="h-4 w-4" />
-                                    )}
-                                  </Button>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+          <>
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Version
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Dataset
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Pipeline Version
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Started
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Duration
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {runs.map((run) => {
+                      const isRunning = run.status === 'running' || run.status === 'queued' || run.status === 'pending'
+                      
+                      return (
+                        <tr key={run.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm font-medium text-gray-900">v{run.version}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-900">
+                              {run.dataset_name || 'N/A'}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-900">
+                              {run.pipeline_version !== null && run.pipeline_version !== undefined 
+                                ? `v${run.pipeline_version}` 
+                                : 'N/A'}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <StatusBadge status={mapEvaluationStatus(run.status)} size="sm" />
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-900">
+                              {run.started_at
+                                ? new Date(run.started_at).toLocaleString()
+                                : 'Not started'}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <DurationCell run={run} currentTime={currentTime} />
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center gap-1">
+                              {isRunning ? (
+                                <div className="flex items-center gap-2 text-sm text-blue-600">
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  <span>Running</span>
+                                </div>
+                              ) : (
+                                <>
+                                  <Link href={`/app/products/${productId}/rag-quality/evaluations/${run.id}`}>
+                                    <Button 
+                                      variant="ghost" 
+                                      size="sm" 
+                                      className="h-8 w-8 p-0"
+                                      title="View Details"
+                                    >
+                                      <Eye className="h-4 w-4" />
+                                    </Button>
+                                  </Link>
+                                  {run.status === 'completed' && (
+                                    <Button 
+                                      variant="ghost" 
+                                      size="sm"
+                                      onClick={() => handleDownloadReport(run.id)}
+                                      disabled={downloadingReport === run.id}
+                                      className="h-8 w-8 p-0"
+                                      title="Download Report"
+                                    >
+                                      {downloadingReport === run.id ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                      ) : (
+                                        <Download className="h-4 w-4" />
+                                      )}
+                                    </Button>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+            {/* Pagination Controls */}
+            {totalRuns > EVALUATIONS_PER_PAGE && (
+              <div className="mt-4 flex items-center justify-between border-t border-gray-200 px-6 py-4 bg-white rounded-lg shadow-sm">
+                <div className="text-sm text-gray-700">
+                  Showing {currentPage * EVALUATIONS_PER_PAGE + 1} to{' '}
+                  {Math.min((currentPage + 1) * EVALUATIONS_PER_PAGE, totalRuns)} of{' '}
+                  {totalRuns} evaluations
+                </div>
+                <div className="flex space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setCurrentPage(prev => Math.max(0, prev - 1))
+                    }}
+                    disabled={currentPage === 0 || loading}
+                    className="px-3 py-1.5"
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setCurrentPage(prev => prev + 1)
+                    }}
+                    disabled={(currentPage + 1) * EVALUATIONS_PER_PAGE >= totalRuns || loading}
+                    className="px-3 py-1.5"
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
+          </>
         ) : (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
             <BarChart3 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
@@ -598,14 +759,75 @@ export default function EvaluationsPage() {
                 </Button>
               </Link>
             ) : (
-              <Button
-                onClick={handleRunEvaluation}
-                disabled={!selectedDataset || (product && product.current_version <= 0)}
-                className="flex items-center gap-2"
-              >
-                <Play className="h-4 w-4" />
-                Run Evaluation
-              </Button>
+              <div className="flex items-center justify-center gap-3">
+                {/* Dataset Selector */}
+                <select
+                  aria-label="Dataset"
+                  value={selectedDataset || ''}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    setSelectedDataset(value || '')
+                  }}
+                  className="px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm min-w-[150px]"
+                >
+                  <option value="" disabled={!!selectedDataset}>
+                    --Select Dataset--
+                  </option>
+                  {datasets.map((dataset) => (
+                    <option key={dataset.id} value={dataset.id}>
+                      {dataset.name}
+                    </option>
+                  ))}
+                </select>
+                {/* Pipeline Version Selector */}
+                {pipelineRuns.filter((run: any) => run.status === 'succeeded' && run.version).length > 0 && (
+                  <select
+                    aria-label="Pipeline Version"
+                    value={selectedVersion || ''}
+                    onChange={(e) => {
+                      const value = e.target.value
+                      setSelectedVersion(value ? parseInt(value) : null)
+                    }}
+                    className="px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm min-w-[180px]"
+                  >
+                    <option value="" disabled={selectedVersion !== null}>
+                      --Select Pipeline Version--
+                    </option>
+                    {(() => {
+                      // Filter only succeeded pipeline runs and get unique versions
+                      const successfulVersions = Array.from(
+                        new Set(
+                          pipelineRuns
+                            .filter((run: any) => run.status === 'succeeded' && run.version)
+                            .map((run: any) => run.version)
+                        )
+                      ).sort((a: number, b: number) => b - a) // Sort descending (newest first)
+                      
+                      // The first item in sorted array is the latest succeeded version
+                      const latestVersion = successfulVersions.length > 0 ? successfulVersions[0] : null
+                      
+                      return successfulVersions.map((version: number) => (
+                        <option key={version} value={version}>
+                          Version {version} {version === latestVersion ? '(Latest)' : ''}
+                          {product.promoted_version === version ? ' (Production)' : ''}
+                        </option>
+                      ))
+                    })()}
+                  </select>
+                )}
+                <Button
+                  onClick={handleRunEvaluation}
+                  disabled={
+                    !selectedDataset || 
+                    selectedVersion === null || 
+                    pipelineRuns.filter((run: any) => run.status === 'succeeded' && run.version).length === 0
+                  }
+                  className="flex items-center gap-2"
+                >
+                  <Play className="h-4 w-4" />
+                  Run Evaluation
+                </Button>
+              </div>
             )}
           </div>
         )}

@@ -442,7 +442,15 @@ async def generate_compliance_report(
                 "rules_by_type": {},
             }
 
-        # Save report
+        # Save report data to S3
+        from primedata.services.s3_content_storage import (
+            get_compliance_report_data_path,
+            save_text_to_s3,
+        )
+        from primedata.storage.minio_client import MinIOClient
+        import json
+        
+        # Create report first to get ID
         report = DataQualityComplianceReport(
             workspace_id=workspace_id,
             report_name=request.report_name,
@@ -450,11 +458,32 @@ async def generate_compliance_report(
             compliance_framework=request.compliance_framework,
             period_start=request.period_start,
             period_end=request.period_end,
-            report_data=report_data,
+            report_data=None,  # Will store small summary only
+            report_data_path="",  # Temporary, will be set after saving to S3
             generated_by=get_user_id(current_user),
         )
 
         db.add(report)
+        db.flush()  # Flush to get the ID
+        
+        # Save full report data to S3
+        report_data_path = get_compliance_report_data_path(workspace_id, report.id)
+        minio_client = MinIOClient()
+        if not minio_client.put_json("primedata-exports", report_data_path, report_data):
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to save report data to storage"
+            )
+        
+        # Update path
+        report.report_data_path = report_data_path
+        # Store small summary in DB
+        report.report_data = {
+            "report_name": report_data.get("report_metadata", {}).get("name"),
+            "report_type": report_data.get("report_metadata", {}).get("type"),
+            "total_rules": report_data.get("metrics", {}).get("total_rules", 0) if "metrics" in report_data else 0,
+        }
+        
         db.commit()
 
         return report_data

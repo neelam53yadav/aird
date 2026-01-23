@@ -442,6 +442,9 @@ async def trigger_pipeline(
     try:
         # Create pipeline run record with the NEW pipeline run version
         # Store raw file version in metrics for traceability
+        from primedata.services.s3_content_storage import get_pipeline_run_metrics_path
+        
+        # Create pipeline run
         pipeline_run = PipelineRun(
             workspace_id=product.workspace_id,
             product_id=request.product_id,
@@ -451,8 +454,39 @@ async def trigger_pipeline(
             metrics={
                 "raw_file_version": raw_file_version,  # Store the raw file version in metrics for reference
             },
+            metrics_path="",  # Temporary, will be set after creation
         )
         db.add(pipeline_run)
+        db.flush()  # Flush to get the ID
+        
+        # Set metrics_path with actual pipeline run ID
+        metrics_path = get_pipeline_run_metrics_path(
+            product.workspace_id,
+            product.id,
+            pipeline_run_version,
+            pipeline_run.id,
+        )
+        pipeline_run.metrics_path = metrics_path
+        
+        # Save initial metrics to S3
+        from primedata.storage.minio_client import MinIOClient
+        minio_client = MinIOClient()
+        initial_metrics = {
+            "raw_file_version": raw_file_version,
+            "aird_stages": {},
+            "aird_stages_completed": [],
+        }
+        if minio_client.put_json("primedata-exports", metrics_path, initial_metrics):
+            # Store small summary in DB
+            pipeline_run.metrics = {
+                "raw_file_version": raw_file_version,
+                "total_stages": 0,
+                "completed_stages": 0,
+            }
+        else:
+            # Fallback: keep full metrics in DB
+            pipeline_run.metrics = initial_metrics
+        
         db.commit()
         db.refresh(pipeline_run)
 
@@ -706,10 +740,37 @@ async def update_pipeline_run(
             )
 
     if request_body.metrics is not None:
-        if run.metrics:
-            run.metrics.update(request_body.metrics)
+        from primedata.services.lazy_json_loader import load_pipeline_run_metrics
+        from primedata.storage.minio_client import MinIOClient
+        
+        # Load current metrics from S3 or DB
+        current_metrics = load_pipeline_run_metrics(run)
+        if not current_metrics:
+            current_metrics = {}
+        
+        # Update metrics
+        current_metrics.update(request_body.metrics)
+        
+        # Save to S3
+        if not run.metrics_path:
+            from primedata.services.s3_content_storage import get_pipeline_run_metrics_path
+            run.metrics_path = get_pipeline_run_metrics_path(
+                run.workspace_id,
+                run.product_id,
+                run.version,
+                run.id,
+            )
+        
+        minio_client = MinIOClient()
+        if minio_client.put_json("primedata-exports", run.metrics_path, current_metrics):
+            # Store small summary in DB
+            run.metrics = {
+                "total_stages": len(current_metrics.get("aird_stages", {})),
+                "completed_stages": len(current_metrics.get("aird_stages_completed", [])),
+            }
         else:
-            run.metrics = request_body.metrics
+            # Fallback: keep in DB
+            run.metrics = current_metrics
 
     db.commit()
     db.refresh(run)

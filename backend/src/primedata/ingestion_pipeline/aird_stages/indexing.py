@@ -193,7 +193,25 @@ class IndexingStage(AirdStage):
             self.logger.info(f"Product name from database: '{product.name}'")
             sanitized_product_name = qdrant_client._sanitize_collection_name(product.name)
             self.logger.info(f"Sanitized product name for collection: '{sanitized_product_name}'")
-            collection_name = f"ws_{self.workspace_id}__{sanitized_product_name}__v_{self.version}"
+            
+            # Use pipeline_run.version (pipeline_run_version, e.g., 8) instead of self.version (raw_file_version, e.g., 7)
+            # This ensures the collection name matches the actual pipeline run version
+            pipeline_run = context.get("pipeline_run")
+            if pipeline_run and pipeline_run.version:
+                collection_version = pipeline_run.version
+                self.logger.info(
+                    f"Using pipeline_run.version={collection_version} for collection name "
+                    f"(instead of raw_file_version={self.version})"
+                )
+            else:
+                # Fallback to self.version if pipeline_run not available (shouldn't happen, but safe)
+                collection_version = self.version
+                self.logger.warning(
+                    f"pipeline_run not found in context, falling back to raw_file_version={self.version}. "
+                    f"This may result in incorrect collection naming."
+                )
+            
+            collection_name = f"ws_{self.workspace_id}__{sanitized_product_name}__v_{collection_version}"
             self.logger.info(f"Creating Qdrant collection: '{collection_name}'")
 
             if not qdrant_client.is_connected():

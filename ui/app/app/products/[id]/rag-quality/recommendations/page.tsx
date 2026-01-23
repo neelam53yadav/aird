@@ -75,15 +75,21 @@ export default function RecommendationsPage() {
       }
 
       // Get latest evaluation run to generate recommendations
-      const runsResponse = await apiClient.listEvaluationRuns(productId)
-      if (!runsResponse.error && runsResponse.data && runsResponse.data.length > 0) {
-        const latestRun = runsResponse.data[0]
-        if (latestRun.status === 'completed' && latestRun.metrics) {
-          // Generate recommendations based on latest evaluation
-          const recResponse = await apiClient.getRAGRecommendations(productId)
-          if (!recResponse.error && recResponse.data) {
-            const recData = recResponse.data as RecommendationsResponse
-            setRecommendations(recData.recommendations || [])
+      const runsResponse = await apiClient.listEvaluationRuns(productId, 1, 0)
+      if (!runsResponse.error && runsResponse.data) {
+        // Handle both old format (array) and new format (object with runs, total, etc.)
+        const runsData = Array.isArray(runsResponse.data) 
+          ? runsResponse.data 
+          : (runsResponse.data as any)?.runs || []
+        if (runsData.length > 0) {
+          const latestRun = runsData[0]
+          if (latestRun.status === 'completed' && latestRun.metrics) {
+            // Generate recommendations based on latest evaluation
+            const recResponse = await apiClient.getRAGRecommendations(productId)
+            if (!recResponse.error && recResponse.data) {
+              const recData = recResponse.data as RecommendationsResponse
+              setRecommendations(recData.recommendations || [])
+            }
           }
         }
       }

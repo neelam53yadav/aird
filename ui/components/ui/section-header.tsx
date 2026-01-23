@@ -83,7 +83,6 @@ export function SectionHeader({
                 )}
               </>
             )}
-            {subtitle && status && <span className="text-gray-400">•</span>}
             {status && (
               <span className="inline-flex items-center gap-1">
                 {status.dot !== false && (
