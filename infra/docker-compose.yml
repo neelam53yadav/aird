@@ -44,26 +44,6 @@ services:
     networks:
       - primedata-network
 
-  ollama:
-    image: ollama/ollama:latest
-    container_name: primedata-ollama
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    restart: unless-stopped
-    networks:
-      - primedata-network
-    # Health check to ensure Ollama is ready
-    # Check if Ollama process is running (more reliable than curl/wget which may not be available)
-    # Using ps which is available in most containers
-    healthcheck:
-      test: ["CMD-SHELL", "ps aux | grep -v grep | grep ollama || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
-
   minio:
     image: minio/minio:latest
     container_name: primedata-minio
@@ -202,7 +182,6 @@ services:
 volumes:
   postgres_data:
   qdrant_data:
-  ollama_data:
   minio_data:
   airflow_dags:
   airflow_logs:
