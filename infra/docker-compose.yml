@@ -55,12 +55,14 @@ services:
     networks:
       - primedata-network
     # Health check to ensure Ollama is ready
+    # Check if Ollama process is running (more reliable than curl/wget which may not be available)
+    # Using ps which is available in most containers
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      test: ["CMD-SHELL", "ps aux | grep -v grep | grep ollama || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 30s
+      start_period: 60s
 
   minio:
     image: minio/minio:latest

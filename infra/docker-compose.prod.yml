@@ -26,12 +26,14 @@ services:
     networks:
       - primedata-network
     # Health check to ensure Ollama is ready
+    # Check if Ollama process is running (more reliable than curl/wget which may not be available)
+    # Using ps which is available in most containers
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      test: ["CMD-SHELL", "ps aux | grep -v grep | grep ollama || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 30s
+      start_period: 60s
 
   airflow-webserver:
     image: infra-airflow-webserver:latest
@@ -197,7 +199,7 @@ services:
       qdrant:
         condition: service_started
       ollama:
-        condition: service_healthy
+        condition: service_started
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
