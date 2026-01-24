@@ -1,7 +1,7 @@
 """add_rag_quality_metrics
 
 Revision ID: 0fb4eacc78e6
-Revises: bda98fc65abe
+Revises: 248c786dde45
 Create Date: 2025-01-15 12:00:00.000000
 
 """
@@ -13,7 +13,7 @@ from sqlalchemy import inspect, text
 
 # revision identifiers, used by Alembic.
 revision = '0fb4eacc78e6'
-down_revision = 'bda98fc65abe'
+down_revision = '248c786dde45'  # Changed from 'bda98fc65abe' to ensure eval_runs table exists first
 branch_labels = None
 depends_on = None
 
@@ -101,13 +101,14 @@ def upgrade() -> None:
         # Create index for eval_dataset_items
         op.create_index('idx_eval_dataset_items_dataset', 'eval_dataset_items', ['dataset_id'])
     
-    # Extend eval_runs table with new fields (only if they don't exist)
-    if not column_exists('eval_runs', 'dataset_id'):
-        op.add_column('eval_runs', sa.Column('dataset_id', postgresql.UUID(), nullable=True))
-    if not column_exists('eval_runs', 'report_path'):
-        op.add_column('eval_runs', sa.Column('report_path', sa.String(1000), nullable=True))
-    if not column_exists('eval_runs', 'trend_data'):
-        op.add_column('eval_runs', sa.Column('trend_data', postgresql.JSONB(), nullable=True))
+    # Extend eval_runs table with new fields (only if table exists and columns don't exist)
+    if table_exists('eval_runs'):
+        if not column_exists('eval_runs', 'dataset_id'):
+            op.add_column('eval_runs', sa.Column('dataset_id', postgresql.UUID(), nullable=True))
+        if not column_exists('eval_runs', 'report_path'):
+            op.add_column('eval_runs', sa.Column('report_path', sa.String(1000), nullable=True))
+        if not column_exists('eval_runs', 'trend_data'):
+            op.add_column('eval_runs', sa.Column('trend_data', postgresql.JSONB(), nullable=True))
     
     # Create foreign key and indexes if they don't exist
     bind = op.get_bind()

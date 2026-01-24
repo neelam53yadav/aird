@@ -221,9 +221,26 @@ class DatasetManager:
         return created_items
 
     @staticmethod
-    def list_items(db: Session, dataset_id: UUID) -> List[EvalDatasetItem]:
-        """List all items in a dataset."""
-        return db.query(EvalDatasetItem).filter(EvalDatasetItem.dataset_id == dataset_id).all()
+    def list_items(
+        db: Session, 
+        dataset_id: UUID, 
+        limit: Optional[int] = None, 
+        offset: Optional[int] = None
+    ) -> List[EvalDatasetItem]:
+        """List items in a dataset with optional pagination."""
+        query = db.query(EvalDatasetItem).filter(EvalDatasetItem.dataset_id == dataset_id)
+        
+        if offset is not None:
+            query = query.offset(offset)
+        if limit is not None:
+            query = query.limit(limit)
+            
+        return query.all()
+    
+    @staticmethod
+    def count_items(db: Session, dataset_id: UUID) -> int:
+        """Get total count of items in a dataset."""
+        return db.query(EvalDatasetItem).filter(EvalDatasetItem.dataset_id == dataset_id).count()
 
     @staticmethod
     def delete_item(db: Session, item_id: UUID) -> bool:

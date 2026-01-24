@@ -538,17 +538,23 @@ async def add_dataset_items(
 async def list_dataset_items(
     dataset_id: UUID,
     request: Request,
+    limit: int = Query(10, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    """List items in a dataset."""
+    """List items in a dataset with pagination."""
     dataset = DatasetManager.get_dataset(db, dataset_id)
     if not dataset:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found")
     
     ensure_product_access(db, request, dataset.product_id)
     
-    items = DatasetManager.list_items(db, dataset_id)
+    # Get total count for pagination
+    total_count = DatasetManager.count_items(db, dataset_id)
+    
+    # Get paginated items
+    items = DatasetManager.list_items(db, dataset_id, limit=limit, offset=offset)
     
     from primedata.services.s3_content_storage import load_text_from_s3
     
@@ -567,7 +573,13 @@ async def list_dataset_items(
             "question_type": item.question_type,
             "metadata": item.extra_metadata or {},
         })
-    return result
+    
+    return {
+        "items": result,
+        "total": total_count,
+        "limit": limit,
+        "offset": offset,
+    }
 
 
 @router.delete("/datasets/{dataset_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -1205,6 +1217,71 @@ async def get_eval_run(
         dag_run_id=eval_run.dag_run_id,
         dataset_name=eval_run.dataset_name,
         pipeline_version=eval_run.pipeline_version,
+    )
+
+
+class PerQueryResultsResponse(BaseModel):
+    """Paginated response for per-query evaluation results."""
+    
+    queries: List[Dict[str, Any]]
+    total: int
+    limit: int
+    offset: int
+
+
+@router.get("/runs/{run_id}/queries", response_model=PerQueryResultsResponse)
+async def get_eval_run_queries(
+    run_id: UUID,
+    request: Request,
+    limit: int = Query(10, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Get paginated per-query results for an evaluation run."""
+    eval_run = db.query(EvalRun).filter(EvalRun.id == run_id).first()
+    if not eval_run:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evaluation run not found")
+    
+    ensure_product_access(db, request, eval_run.product_id)
+    
+    # Load metrics from S3 if path exists
+    metrics = eval_run.metrics
+    if eval_run.metrics_path:
+        try:
+            from primedata.storage.minio_client import minio_client
+            
+            # Extract bucket and key from metrics_path
+            if eval_run.metrics_path.startswith("primedata-exports/"):
+                key = eval_run.metrics_path.replace("primedata-exports/", "")
+                bucket = "primedata-exports"
+            elif eval_run.metrics_path.startswith("ws/"):
+                key = eval_run.metrics_path
+                bucket = "primedata-exports"
+            else:
+                key = eval_run.metrics_path
+                bucket = "primedata-exports"
+            
+            # Try to load from S3
+            s3_metrics_data = minio_client.get_object(bucket, key)
+            if s3_metrics_data:
+                metrics = json.loads(s3_metrics_data.decode('utf-8'))
+                logger.info(f"Loaded evaluation metrics from S3: {eval_run.metrics_path}")
+        except Exception as s3_error:
+            logger.warning(f"Failed to load metrics from S3 ({eval_run.metrics_path}): {s3_error}, using DB metrics")
+    
+    # Get per_query results
+    per_query = metrics.get("per_query", []) if metrics else []
+    total_queries = len(per_query)
+    
+    # Paginate results
+    paginated_queries = per_query[offset:offset + limit]
+    
+    return PerQueryResultsResponse(
+        queries=paginated_queries,
+        total=total_queries,
+        limit=limit,
+        offset=offset,
     )
 
 

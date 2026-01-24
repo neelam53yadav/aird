@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useParams } from 'next/navigation'
@@ -11,6 +11,7 @@ import AppLayout from '@/components/layout/AppLayout'
 import { apiClient } from '@/lib/api-client'
 import { CardSkeleton } from '@/components/ui/skeleton'
 import { StatusBadge } from '@/components/ui/status-badge'
+import { DEFAULT_ITEMS_PER_PAGE } from '@/lib/constants'
 
 interface EvaluationRun {
   id: string
@@ -73,19 +74,71 @@ export default function EvaluationRunDetailPage() {
   const [loading, setLoading] = useState(true)
   const [downloadingReport, setDownloadingReport] = useState(false)
   const [polling, setPolling] = useState(false)
+  const [perQuery, setPerQuery] = useState<Array<{
+    item_id: string
+    query: string
+    metrics: Record<string, {
+      score: number
+      passed: boolean
+      details?: any
+    }>
+    error?: string
+    retrieved_chunks_count?: number
+    answer_method?: string
+  }>>([])
+  const [currentPage, setCurrentPage] = useState(0)
+  const [totalQueries, setTotalQueries] = useState(0)
+  const [loadingQueries, setLoadingQueries] = useState(false)
   
   // Ref to track the polling interval
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
+
+  const loadQueries = useCallback(async (page: number = 0) => {
+    setLoadingQueries(true)
+    try {
+      const offset = page * DEFAULT_ITEMS_PER_PAGE
+      const response = await apiClient.getEvaluationRunQueries(runId, DEFAULT_ITEMS_PER_PAGE, offset)
+      if (!response.error && response.data) {
+        setPerQuery(response.data.queries || [])
+        setTotalQueries(response.data.total || 0)
+        setCurrentPage(page)
+      }
+    } catch (err) {
+      console.error('Failed to load evaluation queries:', err)
+    } finally {
+      setLoadingQueries(false)
+    }
+  }, [runId])
+
+  const loadData = useCallback(async (showLoading = true) => {
+    if (showLoading) setLoading(true)
+    try {
+      const response = await apiClient.getEvaluationRun(runId)
+      if (!response.error && response.data) {
+        setRun(response.data as EvaluationRun)
+        // Load paginated queries if evaluation is completed
+        const evalRun = response.data as EvaluationRun
+        if (evalRun.status === 'completed') {
+          loadQueries(0)
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load evaluation run:', err)
+    } finally {
+      if (showLoading) setLoading(false)
+    }
+  }, [runId, loadQueries])
 
   useEffect(() => {
     if (status === 'authenticated' && runId) {
       loadData()
     }
-  }, [status, runId])
+  }, [status, runId, loadData])
 
   // Auto-refresh if evaluation is running
   useEffect(() => {
     const isRunning = run?.status === 'running' || run?.status === 'queued' || run?.status === 'pending'
+    const isCompleted = run?.status === 'completed'
     
     if (isRunning && !intervalRef.current) {
       setPolling(true)
@@ -98,27 +151,18 @@ export default function EvaluationRunDetailPage() {
       setPolling(false)
     }
 
+    // Load queries when evaluation completes
+    if (isCompleted && totalQueries === 0 && !loadingQueries) {
+      loadQueries(0)
+    }
+
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current)
         intervalRef.current = null
       }
     }
-  }, [run?.status])
-
-  const loadData = async (showLoading = true) => {
-    if (showLoading) setLoading(true)
-    try {
-      const response = await apiClient.getEvaluationRun(runId)
-      if (!response.error && response.data) {
-        setRun(response.data as EvaluationRun)
-      }
-    } catch (err) {
-      console.error('Failed to load evaluation run:', err)
-    } finally {
-      if (showLoading) setLoading(false)
-    }
-  }
+  }, [run?.status, totalQueries, loadingQueries, loadQueries, loadData])
 
   const handleDownloadReport = async () => {
     setDownloadingReport(true)
@@ -237,7 +281,6 @@ export default function EvaluationRunDetailPage() {
   }
 
   const aggregate = run.metrics?.aggregate || {}
-  const perQuery = run.metrics?.per_query || []
   const isRunning = run.status === 'running' || run.status === 'queued' || run.status === 'pending'
   const isCompleted = run.status === 'completed'
 
@@ -371,13 +414,22 @@ export default function EvaluationRunDetailPage() {
         )}
 
         {/* Per-Query Results */}
-        {isCompleted && perQuery.length > 0 && (
+        {isCompleted && totalQueries > 0 && (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200">
             <div className="p-4 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900">Per-Query Results</h2>
+              <h2 className="text-lg font-semibold text-gray-900">
+                Per-Query Results ({totalQueries})
+              </h2>
             </div>
-            <div className="divide-y divide-gray-200">
-              {perQuery.map((result, index) => (
+            {loadingQueries ? (
+              <div className="p-8 text-center">
+                <Loader2 className="h-6 w-6 animate-spin mx-auto text-gray-400" />
+                <p className="text-sm text-gray-500 mt-2">Loading queries...</p>
+              </div>
+            ) : (
+              <>
+                <div className="divide-y divide-gray-200">
+                  {perQuery.map((result, index) => (
                 <div key={result.item_id || index} className="p-4">
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex-1">
@@ -434,8 +486,40 @@ export default function EvaluationRunDetailPage() {
                     </div>
                   </div>
                 </div>
-              ))}
-            </div>
+                  ))}
+                </div>
+                {/* Pagination Controls */}
+                {totalQueries > DEFAULT_ITEMS_PER_PAGE && (
+                  <div className="mt-4 flex items-center justify-between border-t border-gray-200 px-6 py-4 bg-white">
+                    <div className="text-sm text-gray-700">
+                      Showing {currentPage * DEFAULT_ITEMS_PER_PAGE + 1} to{' '}
+                      {Math.min((currentPage + 1) * DEFAULT_ITEMS_PER_PAGE, totalQueries)} of{' '}
+                      {totalQueries} queries
+                    </div>
+                    <div className="flex space-x-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => loadQueries(currentPage - 1)}
+                        disabled={currentPage === 0 || loadingQueries}
+                        className="px-3 py-1.5"
+                      >
+                        Previous
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => loadQueries(currentPage + 1)}
+                        disabled={(currentPage + 1) * DEFAULT_ITEMS_PER_PAGE >= totalQueries || loadingQueries}
+                        className="px-3 py-1.5"
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         )}
 

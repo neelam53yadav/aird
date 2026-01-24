@@ -788,8 +788,8 @@ class ApiClient {
     return this.post(`/api/v1/rag-evaluation/datasets/${datasetId}/items`, { items })
   }
 
-  async listDatasetItems(datasetId: string): Promise<ApiResponse> {
-    return this.get(`/api/v1/rag-evaluation/datasets/${datasetId}/items`)
+  async listDatasetItems(datasetId: string, limit: number = 10, offset: number = 0): Promise<ApiResponse> {
+    return this.get(`/api/v1/rag-evaluation/datasets/${datasetId}/items?limit=${limit}&offset=${offset}`)
   }
 
   async deleteDatasetItem(datasetId: string, itemId: string): Promise<ApiResponse> {
@@ -921,6 +921,10 @@ class ApiClient {
 
   async getEvaluationRun(runId: string): Promise<ApiResponse> {
     return this.get(`/api/v1/rag-evaluation/runs/${runId}`)
+  }
+
+  async getEvaluationRunQueries(runId: string, limit: number = 10, offset: number = 0): Promise<ApiResponse> {
+    return this.get(`/api/v1/rag-evaluation/runs/${runId}/queries?limit=${limit}&offset=${offset}`)
   }
 
   async listEvaluationRuns(productId: string, limit: number = 10, offset: number = 0, version?: number): Promise<ApiResponse> {
