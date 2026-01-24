@@ -402,9 +402,7 @@ export default function NewDataSourcePage() {
               message: `Data source created and ${uploadResponse.data?.uploaded_count || 0} file(s) uploaded successfully`
             })
             setShowResultModal(true)
-            setTimeout(() => {
-              router.push(`/app/products/${productId}`)
-            }, 1500)
+            // Redirect will happen when user clicks OK on the modal
           }
         }
       } else {
@@ -431,10 +429,7 @@ export default function NewDataSourcePage() {
             message: 'Data source has been successfully created'
           })
           setShowResultModal(true)
-          // Redirect back to product detail page after a short delay
-          setTimeout(() => {
-            router.push(`/app/products/${productId}`)
-          }, 1500)
+          // Redirect will happen when user clicks OK on the modal
         }
       }
     } catch (err) {
@@ -798,6 +793,10 @@ export default function NewDataSourcePage() {
             isOpen={showResultModal}
             onClose={() => {
               setShowResultModal(false)
+              // Only redirect on success, after user clicks OK
+              if (resultModalData.type === 'success') {
+                router.push(`/app/products/${productId}`)
+              }
               setResultModalData(null)
             }}
             title={resultModalData.title}

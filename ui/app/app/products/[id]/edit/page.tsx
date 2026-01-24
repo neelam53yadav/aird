@@ -466,11 +466,8 @@ export default function EditProductPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    console.log('🔄 handleSubmit called - Starting save process')
-    
     // Prevent multiple submissions
     if (saving) {
-      console.warn('⚠️ Save already in progress, ignoring duplicate submit')
       return
     }
     
@@ -479,7 +476,6 @@ export default function EditProductPage() {
     setFieldErrors({})
     
     // Validation
-    console.log('📋 Current formData:', formData)
     const newFieldErrors: Record<string, string> = {}
     
     if (!formData.name.trim()) {
@@ -524,8 +520,6 @@ export default function EditProductPage() {
       return
     }
 
-    console.log('✅ Validation passed, proceeding to save...')
-
     try {
       // Build chunking config based on mode
       const chunkingConfig: any = {
@@ -556,20 +550,6 @@ export default function EditProductPage() {
         // Don't send auto_settings when in manual mode
       }
       
-      console.log('📤 Preparing to send save request...')
-      console.log('Saving chunking config:', chunkingConfig)
-      console.log('Full update payload:', {
-        name: formData.name,
-        status: formData.status,
-        playbook_id: formData.playbook_id,
-        chunking_config: chunkingConfig,
-        embedding_config: {
-          embedder_name: formData.embedder_name,
-          embedding_dimension: formData.embedding_dimension
-        }
-      })
-      
-      console.log('🚀 Calling apiClient.updateProduct...')
       const response = await apiClient.updateProduct(productId, {
         name: formData.name,
         status: formData.status,
@@ -582,11 +562,7 @@ export default function EditProductPage() {
         vector_creation_enabled: formData.vector_creation_enabled
       })
 
-      console.log('Update response:', response)
-
       if (response.error) {
-        console.error('❌ Update failed with error:', response.error)
-        console.error('Error details:', response.errorData)
         setResultModalData({
           type: 'error',
           title: 'Update Failed',
@@ -601,22 +577,6 @@ export default function EditProductPage() {
         const savedManual = savedConfig?.manual_settings
         
         if (savedManual && formData.chunking_mode === 'manual') {
-          console.log('✅ Configuration saved successfully!')
-          console.log('Sent values:', {
-            chunk_size: chunkSize,
-            chunk_overlap: chunkOverlap,
-            min_chunk_size: minChunkSize,
-            max_chunk_size: maxChunkSize,
-            chunking_strategy: formData.chunking_strategy
-          })
-          console.log('Saved values:', {
-            chunk_size: savedManual.chunk_size,
-            chunk_overlap: savedManual.chunk_overlap,
-            min_chunk_size: savedManual.min_chunk_size,
-            max_chunk_size: savedManual.max_chunk_size,
-            chunking_strategy: savedManual.chunking_strategy
-          })
-          
           // Check for mismatches
           const mismatches: string[] = []
           if (chunkSize !== savedManual.chunk_size) mismatches.push(`chunk_size: ${chunkSize} → ${savedManual.chunk_size}`)
@@ -624,12 +584,6 @@ export default function EditProductPage() {
           if (minChunkSize !== savedManual.min_chunk_size) mismatches.push(`min_chunk_size: ${minChunkSize} → ${savedManual.min_chunk_size}`)
           if (maxChunkSize !== savedManual.max_chunk_size) mismatches.push(`max_chunk_size: ${maxChunkSize} → ${savedManual.max_chunk_size}`)
           if (formData.chunking_strategy !== savedManual.chunking_strategy) mismatches.push(`strategy: ${formData.chunking_strategy} → ${savedManual.chunking_strategy}`)
-          
-          if (mismatches.length > 0) {
-            console.warn('⚠️ Values changed during save:', mismatches)
-          } else {
-            console.log('✅ All values saved correctly!')
-          }
         }
         
         // Use the response data directly to update the form immediately
@@ -646,7 +600,6 @@ export default function EditProductPage() {
               ...prev,
               optimization_mode: cfg.optimization_mode as 'pattern' | 'hybrid' | 'llm'
             }))
-            console.log('✅ Optimization mode updated from response:', cfg.optimization_mode)
           }
           
           if (cfg.manual_settings && formData.chunking_mode === 'manual') {
@@ -659,7 +612,6 @@ export default function EditProductPage() {
               max_chunk_size: saved.max_chunk_size ?? prev.max_chunk_size,
               chunking_strategy: saved.chunking_strategy ?? prev.chunking_strategy
             }))
-            console.log('✅ Form updated with saved values from response:', saved)
           }
         }
         
@@ -1689,7 +1641,7 @@ export default function EditProductPage() {
                     <span className="font-medium">Enable Vector Creation</span>
                   </Label>
                   <p className="mt-1 ml-6 text-sm text-gray-500">
-                    When enabled, vectors/embeddings will be created and indexed in Qdrant during pipeline runs. 
+                    When enabled, vectors/embeddings will be created and indexed in the vector database during pipeline runs. 
                     When disabled, the indexing stage will be skipped.
                   </p>
                 </div>

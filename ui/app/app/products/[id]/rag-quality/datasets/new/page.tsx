@@ -80,7 +80,7 @@ export default function NewDatasetPage() {
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-gray-900">Create Evaluation Dataset</h1>
           <p className="text-gray-600 mt-1">
-            Create a new evaluation dataset for RAG quality assessment.
+            Create a new evaluation dataset for retrieval evaluation.
           </p>
         </div>
 

@@ -39,29 +39,57 @@ class StageTracker:
         Args:
             result: StageResult from stage execution
         """
-        # Initialize metrics if not present (JSON field defaults to dict but may be None)
-        if self.pipeline_run.metrics is None:
-            self.pipeline_run.metrics = {}
+        from primedata.services.s3_content_storage import get_pipeline_run_metrics_path
+        from primedata.services.s3_json_storage import save_json_to_s3
+        from primedata.storage.minio_client import MinIOClient
+        
+        # Load current metrics from S3 or DB
+        from primedata.services.lazy_json_loader import load_pipeline_run_metrics
+        
+        metrics = load_pipeline_run_metrics(self.pipeline_run)
+        if not metrics:
+            metrics = {}
 
         # Initialize aird_stages if not present
-        if "aird_stages" not in self.pipeline_run.metrics:
-            self.pipeline_run.metrics["aird_stages"] = {}
+        if "aird_stages" not in metrics:
+            metrics["aird_stages"] = {}
 
         # Store stage result
         stage_data = result.to_dict()
-        self.pipeline_run.metrics["aird_stages"][result.stage_name] = stage_data
+        metrics["aird_stages"][result.stage_name] = stage_data
 
         # Update aird_stages_completed list
-        if "aird_stages_completed" not in self.pipeline_run.metrics:
-            self.pipeline_run.metrics["aird_stages_completed"] = []
+        if "aird_stages_completed" not in metrics:
+            metrics["aird_stages_completed"] = []
 
         if result.status == StageStatus.SUCCEEDED:
-            if result.stage_name not in self.pipeline_run.metrics["aird_stages_completed"]:
-                self.pipeline_run.metrics["aird_stages_completed"].append(result.stage_name)
+            if result.stage_name not in metrics["aird_stages_completed"]:
+                metrics["aird_stages_completed"].append(result.stage_name)
         elif result.status == StageStatus.FAILED:
             # Remove from completed list if it was there
-            if result.stage_name in self.pipeline_run.metrics["aird_stages_completed"]:
-                self.pipeline_run.metrics["aird_stages_completed"].remove(result.stage_name)
+            if result.stage_name in metrics["aird_stages_completed"]:
+                metrics["aird_stages_completed"].remove(result.stage_name)
+
+        # Save metrics to S3
+        if not self.pipeline_run.metrics_path:
+            self.pipeline_run.metrics_path = get_pipeline_run_metrics_path(
+                self.pipeline_run.workspace_id,
+                self.pipeline_run.product_id,
+                self.pipeline_run.version,
+                self.pipeline_run.id,
+            )
+        
+        minio_client = MinIOClient()
+        if minio_client.put_json("primedata-exports", self.pipeline_run.metrics_path, metrics):
+            # Store small summary in DB
+            self.pipeline_run.metrics = {
+                "total_stages": len(metrics.get("aird_stages", {})),
+                "completed_stages": len(metrics.get("aird_stages_completed", [])),
+            }
+        else:
+            self.logger.warning(f"Failed to save metrics to S3, keeping in DB")
+            # Fallback: store in DB (shouldn't happen but be safe)
+            self.pipeline_run.metrics = metrics
 
         # Update overall pipeline run status based on stage results
         self._update_pipeline_status()
@@ -76,7 +104,10 @@ class StageTracker:
 
     def _update_pipeline_status(self) -> None:
         """Update pipeline run status based on stage results."""
-        stages = self.pipeline_run.metrics.get("aird_stages", {})
+        from primedata.services.lazy_json_loader import load_pipeline_run_metrics
+        
+        metrics = load_pipeline_run_metrics(self.pipeline_run)
+        stages = metrics.get("aird_stages", {})
 
         if not stages:
             return
@@ -101,7 +132,10 @@ class StageTracker:
         Returns:
             Stage result dictionary, or None if not found
         """
-        stages = self.pipeline_run.metrics.get("aird_stages", {})
+        from primedata.services.lazy_json_loader import load_pipeline_run_metrics
+        
+        metrics = load_pipeline_run_metrics(self.pipeline_run)
+        stages = metrics.get("aird_stages", {})
         return stages.get(stage_name)
 
     def get_completed_stages(self) -> list[str]:
@@ -110,7 +144,10 @@ class StageTracker:
         Returns:
             List of stage names that have succeeded
         """
-        return self.pipeline_run.metrics.get("aird_stages_completed", [])
+        from primedata.services.lazy_json_loader import load_pipeline_run_metrics
+        
+        metrics = load_pipeline_run_metrics(self.pipeline_run)
+        return metrics.get("aird_stages_completed", [])
 
 
 def track_stage_execution(

@@ -1,7 +1,7 @@
 """add_rag_quality_metrics
 
 Revision ID: 0fb4eacc78e6
-Revises: bda98fc65abe
+Revises: 248c786dde45
 Create Date: 2025-01-15 12:00:00.000000
 
 """
@@ -13,7 +13,7 @@ from sqlalchemy import inspect, text
 
 # revision identifiers, used by Alembic.
 revision = '0fb4eacc78e6'
-down_revision = 'bda98fc65abe'
+down_revision = '248c786dde45'  # Changed from 'bda98fc65abe' to ensure eval_runs table exists first
 branch_labels = None
 depends_on = None
 
@@ -47,11 +47,15 @@ def column_exists(table_name, column_name):
 def upgrade() -> None:
     # Create EvalDatasetStatus enum if it doesn't exist
     # Check if enum already exists (it may have been created by be303e6b7efc)
-    if not enum_exists('evaldatasetstatus'):
+    enum_already_exists = enum_exists('evaldatasetstatus')
+    if not enum_already_exists:
         op.execute("CREATE TYPE evaldatasetstatus AS ENUM ('draft', 'active', 'archived')")
     
     # Create eval_datasets table if it doesn't exist
     if not table_exists('eval_datasets'):
+        # Always use create_type=False since we handle enum creation manually above
+        # This prevents SQLAlchemy from trying to create the enum type again
+        status_enum = postgresql.ENUM('draft', 'active', 'archived', name='evaldatasetstatus', create_type=False)
         op.create_table(
         'eval_datasets',
         sa.Column('id', postgresql.UUID(), nullable=False, server_default=sa.text('gen_random_uuid()')),
@@ -61,7 +65,7 @@ def upgrade() -> None:
         sa.Column('description', sa.Text(), nullable=True),
         sa.Column('dataset_type', sa.String(50), nullable=False),
         sa.Column('version', sa.Integer(), nullable=True),
-        sa.Column('status', postgresql.ENUM('draft', 'active', 'archived', name='evaldatasetstatus'), nullable=False, server_default='draft'),
+        sa.Column('status', status_enum, nullable=False, server_default='draft'),
         sa.Column('extra_metadata', postgresql.JSON(), nullable=True, server_default='{}'),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()')),
         sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
@@ -97,13 +101,14 @@ def upgrade() -> None:
         # Create index for eval_dataset_items
         op.create_index('idx_eval_dataset_items_dataset', 'eval_dataset_items', ['dataset_id'])
     
-    # Extend eval_runs table with new fields (only if they don't exist)
-    if not column_exists('eval_runs', 'dataset_id'):
-        op.add_column('eval_runs', sa.Column('dataset_id', postgresql.UUID(), nullable=True))
-    if not column_exists('eval_runs', 'report_path'):
-        op.add_column('eval_runs', sa.Column('report_path', sa.String(1000), nullable=True))
-    if not column_exists('eval_runs', 'trend_data'):
-        op.add_column('eval_runs', sa.Column('trend_data', postgresql.JSONB(), nullable=True))
+    # Extend eval_runs table with new fields (only if table exists and columns don't exist)
+    if table_exists('eval_runs'):
+        if not column_exists('eval_runs', 'dataset_id'):
+            op.add_column('eval_runs', sa.Column('dataset_id', postgresql.UUID(), nullable=True))
+        if not column_exists('eval_runs', 'report_path'):
+            op.add_column('eval_runs', sa.Column('report_path', sa.String(1000), nullable=True))
+        if not column_exists('eval_runs', 'trend_data'):
+            op.add_column('eval_runs', sa.Column('trend_data', postgresql.JSONB(), nullable=True))
     
     # Create foreign key and indexes if they don't exist
     bind = op.get_bind()

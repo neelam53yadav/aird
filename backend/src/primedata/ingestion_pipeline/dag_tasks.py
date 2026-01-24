@@ -485,7 +485,8 @@ def get_dag_params(**context) -> Dict[str, Any]:
     # Get required parameters
     workspace_id = params.get("workspace_id")
     product_id = params.get("product_id")
-    version = params.get("version")
+    version = params.get("version")  # This is raw_file_version (for storage paths)
+    pipeline_run_id = params.get("pipeline_run_id")  # This is the PipelineRun ID (for DB lookup)
     playbook_id = params.get("playbook_id")
 
     # Get embedding configuration
@@ -497,7 +498,7 @@ def get_dag_params(**context) -> Dict[str, Any]:
     chunking_config = params.get("chunking_config", {})
 
     logger.info(
-        f"Extracted parameters: workspace_id={workspace_id}, product_id={product_id}, version={version}, playbook_id={playbook_id}, embedder={embedder_name}, dim={dim}"
+        f"Extracted parameters: workspace_id={workspace_id}, product_id={product_id}, version={version}, pipeline_run_id={pipeline_run_id}, playbook_id={playbook_id}, embedder={embedder_name}, dim={dim}"
     )
     logger.info(f"Chunking config: {chunking_config}")
 
@@ -507,13 +508,14 @@ def get_dag_params(**context) -> Dict[str, Any]:
         raise ValueError(error_msg)
 
     logger.info(
-        f"Pipeline parameters validated: workspace_id={workspace_id}, product_id={product_id}, version={version}, embedder={embedder_name}, dim={dim}"
+        f"Pipeline parameters validated: workspace_id={workspace_id}, product_id={product_id}, version={version}, pipeline_run_id={pipeline_run_id}, embedder={embedder_name}, dim={dim}"
     )
 
     return {
         "workspace_id": UUID(workspace_id) if isinstance(workspace_id, str) else workspace_id,
         "product_id": UUID(product_id) if isinstance(product_id, str) else product_id,
         "version": version,
+        "pipeline_run_id": pipeline_run_id,  # Include pipeline_run_id in return dict
         "playbook_id": playbook_id,
         "embedder_name": embedder_name,
         "dim": dim,
@@ -544,17 +546,47 @@ def get_aird_context(**context) -> Dict[str, Any]:
     params = get_dag_params(**context)
     workspace_id = params["workspace_id"]
     product_id = params["product_id"]
-    version = params["version"]
+    version = params["version"]  # raw_file_version (for storage paths)
+    pipeline_run_id = params.get("pipeline_run_id")  # PipelineRun ID (for DB lookup)
 
     # Get database session
     db = next(get_db())
 
-    # Get pipeline run
-    pipeline_run = db.query(PipelineRun).filter(PipelineRun.product_id == product_id, PipelineRun.version == version).first()
-
-    if not pipeline_run:
-        logger.warning(f"Pipeline run not found for product {product_id}, version {version}")
+    # Get pipeline run - use pipeline_run_id if available (primary method), otherwise fallback to version lookup
+    if pipeline_run_id:
+        try:
+            # Convert to UUID if it's a string
+            pipeline_run_uuid = UUID(pipeline_run_id) if isinstance(pipeline_run_id, str) else pipeline_run_id
+            pipeline_run = db.query(PipelineRun).filter(PipelineRun.id == pipeline_run_uuid).first()
+            if pipeline_run:
+                logger.info(f"Found pipeline run by ID: {pipeline_run_id} (version={pipeline_run.version})")
+            else:
+                logger.warning(f"Pipeline run not found by ID: {pipeline_run_id}")
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Invalid pipeline_run_id format: {pipeline_run_id}, error: {e}. Falling back to version lookup.")
+            pipeline_run = None
+    else:
         pipeline_run = None
+        logger.warning(f"pipeline_run_id not provided in DAG params. Available params: {list(params.keys())}")
+
+    # Fallback: try to find by version (for backward compatibility, but this is less reliable)
+    if not pipeline_run:
+        logger.warning(
+            f"Pipeline run not found by ID ({pipeline_run_id}), attempting fallback lookup by product_id and version (version={version})"
+        )
+        pipeline_run = db.query(PipelineRun).filter(
+            PipelineRun.product_id == product_id, 
+            PipelineRun.version == version
+        ).first()
+        if pipeline_run:
+            logger.warning(
+                f"Found pipeline run by version fallback (version={version}), but this may be incorrect. "
+                f"Pipeline run ID: {pipeline_run.id}, Pipeline run version: {pipeline_run.version}. "
+                f"Consider ensuring pipeline_run_id is passed to the DAG."
+            )
+        else:
+            logger.warning(f"Pipeline run not found for product {product_id}, pipeline_run_id={pipeline_run_id}, version={version}")
+            pipeline_run = None
 
     # Create storage adapter
     storage = AirdStorageAdapter(
@@ -2291,6 +2323,8 @@ def task_indexing(**context) -> Dict[str, Any]:
             "chunking_config": chunking_config,
             "playbook": playbook,
             "playbook_id": playbook_id,
+            "db": db,  # Add db to context for IndexingStage
+            "pipeline_run": aird_context.get("pipeline_run"),  # Add pipeline_run to use correct version
         }
 
         result = indexing_stage.execute(stage_context)
@@ -2351,6 +2385,15 @@ def task_indexing(**context) -> Dict[str, Any]:
                     logger.info(f"Updated product {product_id} readiness_fingerprint with vector/RAG metrics")
             except Exception as e:
                 logger.warning(f"Failed to persist vector/RAG metrics into readiness_fingerprint: {e}", exc_info=True)
+
+        # Store collection_name in PipelineRun (enterprise-grade solution)
+        if result.status == StageStatus.SUCCEEDED and aird_context.get("pipeline_run"):
+            collection_name = result.metrics.get("collection_name")
+            if collection_name:
+                pipeline_run = aird_context["pipeline_run"]
+                pipeline_run.collection_name = collection_name
+                db.commit()
+                logger.info(f"Stored collection_name '{collection_name}' in PipelineRun {pipeline_run.id}")
 
         # Phase 1 & 2: Register artifacts for traceability
         indexing_artifact_ids = []

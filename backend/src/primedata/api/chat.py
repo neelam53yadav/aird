@@ -1,10 +1,8 @@
 """
 Chat API endpoint for RAG queries with LLM generation.
 
-Supports:
-- Open-source LLMs (Ollama/local) by default
-- OpenAI/Anthropic when API keys provided
-- Custom LLM endpoints
+Uses OpenAI API for LLM generation and evaluations.
+Requires OPENAI_API_KEY to be configured.
 """
 
 import hashlib
@@ -114,81 +112,49 @@ class OpenAILLMClient(LLMClient):
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"LLM generation failed: {str(e)}")
 
 
-class OllamaLLMClient(LLMClient):
-    """Ollama LLM client (open-source default)."""
-
-    def __init__(self, base_url: str = "http://localhost:11434", model: str = "llama2"):
-        self.base_url = base_url
-        self.model = model
-
-    def generate(self, prompt: str, temperature: float = 0.7, max_tokens: int = 1000) -> Dict[str, Any]:
-        """Generate using Ollama."""
-        try:
-            import httpx
-
-            with httpx.Client(timeout=60.0) as client:
-                response = client.post(
-                    f"{self.base_url}/api/generate",
-                    json={
-                        "model": self.model,
-                        "prompt": prompt,
-                        "stream": False,
-                        "options": {
-                            "temperature": temperature,
-                            "num_predict": max_tokens,
-                        },
-                    },
-                )
-                response.raise_for_status()
-                result = response.json()
-                return {
-                    "text": result.get("response", ""),
-                    "tokens_used": None,  # Ollama doesn't always return token count
-                    "model": self.model,
-                }
-        except Exception as e:
-            logger.error(f"Ollama generation error: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"LLM generation failed: {str(e)}. Make sure Ollama is running at {self.base_url}",
-            )
-
-
 def get_llm_client(workspace: Workspace, model: Optional[str] = None) -> LLMClient:
     """
-    Get LLM client based on workspace settings.
+    Get LLM client using OpenAI API.
     
-    Priority:
-    1. OpenAI if API key configured
-    2. Ollama (open-source default)
+    Requires OPENAI_API_KEY to be configured either in workspace settings or environment variable.
     """
     # Check for OpenAI API key
     openai_key = workspace.settings.get("openai_api_key") if workspace.settings else None
     if not openai_key:
         openai_key = os.getenv("OPENAI_API_KEY")
 
-    if openai_key:
-        model_name = model or workspace.settings.get("chat_model", "gpt-3.5-turbo") if workspace.settings else "gpt-3.5-turbo"
-        return OpenAILLMClient(api_key=openai_key, model=model_name)
+    if not openai_key:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="OpenAI API key is required. Please configure OPENAI_API_KEY in workspace settings or environment variables.",
+        )
 
-    # Default to Ollama
-    ollama_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-    model_name = model or os.getenv("OLLAMA_MODEL", "llama2")
-    return OllamaLLMClient(base_url=ollama_url, model=model_name)
+    model_name = model or workspace.settings.get("chat_model", "gpt-3.5-turbo") if workspace.settings else "gpt-3.5-turbo"
+    return OpenAILLMClient(api_key=openai_key, model=model_name)
 
 
 def build_rag_prompt(query: str, chunks: List[Dict[str, Any]]) -> str:
     """Build RAG prompt from query and retrieved chunks."""
     context = "\n\n".join([f"[{i+1}] {chunk.get('text', '')}" for i, chunk in enumerate(chunks)])
     
-    prompt = f"""Answer the following question using only the provided context. If the answer is not in the context, say "I don't have enough information to answer this question."
+    prompt = f"""You are answering a question using the provided context. You MUST cite your sources.
+
+RULES FOR CITATIONS:
+1. Every factual claim or piece of information you use from the context MUST be followed by a citation in the format [1], [2], [3], etc.
+2. The citation number corresponds to the numbered chunk above (e.g., [1] refers to the first chunk, [2] to the second, etc.).
+3. Place citations immediately after the information you're citing, like this: "Amazon's revenue was $574.8 billion [1]."
+4. If you use information from multiple chunks, cite all of them: "The company reported strong growth [1][2]."
+
+EXAMPLE:
+Question: What was Amazon's revenue?
+Answer: Amazon's total revenue in 2024 was $574.8 billion [1]. This represents significant growth compared to previous years [2].
 
 Context:
 {context}
 
 Question: {query}
 
-Answer:"""
+Answer (MUST include citations [1], [2], [3] etc. after every fact from the context):"""
     return prompt
 
 
@@ -202,10 +168,7 @@ async def chat_query(
     """
     Chat endpoint for RAG queries with LLM generation.
     
-    Supports:
-    - Open-source LLMs (Ollama) by default
-    - OpenAI when API key configured
-    - Custom LLM endpoints (via environment variables)
+    Uses OpenAI API for LLM generation. Requires OPENAI_API_KEY to be configured.
     """
     start_time = time.time()
     
@@ -262,7 +225,7 @@ async def chat_query(
         model_name = embedding_config.get("embedder_name", "minilm")
         
         embedder = EmbeddingGenerator(model_name=model_name, workspace_id=product.workspace_id, db=db)
-        query_embedding = embedder.generate_embeddings([request.query])[0]
+        query_embedding = embedder.embed_batch([request.query])[0]
 
         # Search Qdrant
         search_results = qdrant_client.search(

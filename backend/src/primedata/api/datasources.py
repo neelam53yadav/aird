@@ -2,7 +2,7 @@
 DataSources API router.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from uuid import UUID
@@ -888,6 +888,7 @@ async def upload_files(
                 )
 
                 if not existing:
+                    # Create new RawFile record
                     raw_file = RawFile(
                         workspace_id=datasource.workspace_id,
                         product_id=datasource.product_id,
@@ -908,8 +909,23 @@ async def upload_files(
                     )
                     uploaded_files.append({"filename": filename, "size": file_size, "key": key})
                 else:
-                    logger.warning(f"File {filename} already exists in version {version}")
-                    errors.append(f"File {filename} already exists")
+                    # Update existing RawFile record (S3 file is already overwritten)
+                    existing.workspace_id = datasource.workspace_id
+                    existing.product_id = datasource.product_id
+                    existing.data_source_id = datasource.id
+                    existing.filename = filename
+                    existing.storage_key = key
+                    existing.storage_bucket = "primedata-raw"
+                    existing.file_size = file_size
+                    existing.content_type = content_type
+                    existing.status = RawFileStatus.INGESTED
+                    existing.file_checksum = file_checksum
+                    # Update ingested_at to reflect the new upload
+                    existing.ingested_at = datetime.now(timezone.utc)
+                    logger.info(
+                        f"Updated RawFile record for {filename} (version {version}, datasource {datasource_id}, key: {key})"
+                    )
+                    uploaded_files.append({"filename": filename, "size": file_size, "key": key})
             else:
                 errors.append(f"Failed to upload {file.filename}")
 
@@ -936,7 +952,7 @@ async def delete_datasource(
     datasource_id: UUID, request: Request, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)
 ):
     """
-    Delete a data source.
+    Delete a data source and all associated raw files.
     """
     import logging
 
@@ -950,15 +966,14 @@ async def delete_datasource(
     # Ensure user has access to the product
     ensure_product_access(db, request, datasource.product_id)
 
-    # Check if there are any raw files associated with this data source
+    # Get all raw files associated with this data source
     raw_files_count = db.query(RawFile).filter(RawFile.data_source_id == datasource_id).count()
 
     if raw_files_count > 0:
-        # Set data_source_id to NULL for all associated raw files
-        db.query(RawFile).filter(RawFile.data_source_id == datasource_id).update(
-            {RawFile.data_source_id: None}, synchronize_session=False
-        )
-        logger.info(f"Unlinked {raw_files_count} raw files from data source {datasource_id}")
+        # Delete all RawFile records associated with this datasource
+        # This allows the same file to be re-uploaded later (S3 allows overwriting)
+        db.query(RawFile).filter(RawFile.data_source_id == datasource_id).delete(synchronize_session=False)
+        logger.info(f"Deleted {raw_files_count} RawFile records for data source {datasource_id}")
 
     # Delete the data source
     db.delete(datasource)

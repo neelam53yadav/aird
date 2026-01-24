@@ -101,13 +101,15 @@ class CitationCoverageMetric:
 
     def _extract_claims(self, text: str) -> List[str]:
         """Extract claims from text."""
-        sentences = re.split(r'[.!?]+', text)
-        claims = [s.strip() for s in sentences if len(s.strip()) > 20]
-        return claims[:10]
+        # Split by sentence boundaries more carefully
+        sentences = re.split(r'[.!?]+\s+', text)
+        # Lower threshold to catch more claims (15 chars instead of 20)
+        claims = [s.strip() for s in sentences if len(s.strip()) > 15]
+        return claims[:15]  # Increase limit to 15
 
     def _extract_citations(self, text: str) -> List[str]:
         """Extract citations from answer text."""
-        # Look for [1], [2], etc.
+        # Look for [1], [2], etc. - be more flexible with spacing
         citation_pattern = r'\[(\d+)\]'
         citations = re.findall(citation_pattern, text)
         return citations
@@ -120,14 +122,18 @@ class CitationCoverageMetric:
         
         claim_end = claim_start + len(claim)
         
-        # Check if any citation appears within 50 chars of claim
+        # Increase proximity window to 100 chars (was 50) to be more lenient
         for citation in citations:
             citation_pos = full_answer.find(f"[{citation}]")
             if citation_pos != -1:
-                if abs(citation_pos - claim_start) < 50 or abs(citation_pos - claim_end) < 50:
+                # Check if citation is before, within, or shortly after the claim
+                if (abs(citation_pos - claim_start) < 100 or 
+                    abs(citation_pos - claim_end) < 100 or
+                    (citation_pos >= claim_start and citation_pos <= claim_end + 50)):
                     return True
         
         return False
+
 
 
 

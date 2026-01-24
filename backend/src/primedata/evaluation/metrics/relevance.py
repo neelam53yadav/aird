@@ -56,7 +56,7 @@ class RelevanceMetric:
         if self.embedding_generator:
             # Use embedding similarity
             try:
-                query_embedding = self.embedding_generator.generate_embeddings([query])[0]
+                query_embedding = self.embedding_generator.embed_batch([query])[0]
                 similarities = []
                 
                 for chunk in retrieved_chunks:
@@ -68,7 +68,7 @@ class RelevanceMetric:
                     if "embedding" in chunk:
                         chunk_embedding = chunk["embedding"]
                     else:
-                        chunk_embeddings = self.embedding_generator.generate_embeddings([chunk_text])
+                        chunk_embeddings = self.embedding_generator.embed_batch([chunk_text])
                         chunk_embedding = chunk_embeddings[0] if chunk_embeddings else None
                     
                     if chunk_embedding is not None:
@@ -139,10 +139,9 @@ class RelevanceMetric:
                 details={"error": "Missing query or answer"},
             )
 
+        # Use LLM-based evaluation if available, otherwise fallback to keyword matching
         if self.llm_client:
-            # Use LLM-based evaluation (would need LLM client implementation)
-            # For now, use simple heuristic
-            score = self._simple_answer_relevance(query, answer)
+            score = self._llm_answer_relevance(query, answer)
         else:
             score = self._simple_answer_relevance(query, answer)
 
@@ -151,6 +150,7 @@ class RelevanceMetric:
         details = {
             "query_length": len(query),
             "answer_length": len(answer),
+            "evaluation_method": "llm" if self.llm_client else "keyword",
         }
 
         return MetricScore(
@@ -159,6 +159,51 @@ class RelevanceMetric:
             passed=passed,
             details=details,
         )
+
+    def _llm_answer_relevance(self, query: str, answer: str) -> float:
+        """
+        Use LLM-as-judge to evaluate answer relevance.
+        
+        Returns a score from 0.0 to 1.0 indicating how well the answer addresses the query.
+        """
+        try:
+            prompt = f"""You are evaluating how well an answer addresses a question.
+
+Question: {query}
+
+Answer: {answer}
+
+Rate how well the answer addresses the question on a scale of 0.0 to 1.0, where:
+- 1.0 = The answer fully and directly addresses the question
+- 0.7-0.9 = The answer mostly addresses the question but may be incomplete or slightly off-topic
+- 0.4-0.6 = The answer partially addresses the question but misses key aspects
+- 0.0-0.3 = The answer does not address the question or is irrelevant
+
+Respond with ONLY a number between 0.0 and 1.0 (e.g., "0.85"). Do not provide explanation."""
+            
+            response = self.llm_client.generate(
+                prompt=prompt,
+                temperature=0.0,  # Deterministic
+                max_tokens=10,  # Just need a number
+            )
+            
+            answer_text = response.get("text", "").strip()
+            
+            # Extract numeric score
+            import re
+            match = re.search(r'0?\.?\d+', answer_text)
+            if match:
+                score = float(match.group())
+                # Clamp to [0, 1]
+                return max(0.0, min(1.0, score))
+            
+            # If parsing fails, return moderate score
+            logger.warning(f"Failed to parse LLM relevance score from: {answer_text}")
+            return 0.5
+            
+        except Exception as e:
+            logger.warning(f"LLM-based answer relevance check failed: {e}, falling back to keyword matching")
+            return self._simple_answer_relevance(query, answer)
 
     def _simple_answer_relevance(self, query: str, answer: str) -> float:
         """Simple keyword-based answer relevance."""
@@ -175,6 +220,7 @@ class RelevanceMetric:
         # Combined score
         score = (keyword_coverage * 0.7 + length_score * 0.3)
         return max(0.0, min(1.0, score))
+
 
 
 

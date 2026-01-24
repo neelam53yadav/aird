@@ -15,6 +15,7 @@ import AppLayout from '@/components/layout/AppLayout'
 import { apiClient } from '@/lib/api-client'
 import { CardSkeleton } from '@/components/ui/skeleton'
 import { useToast } from '@/components/ui/toast'
+import { DEFAULT_ITEMS_PER_PAGE } from '@/lib/constants'
 
 interface DatasetItem {
   id: string
@@ -44,6 +45,8 @@ export default function DatasetDetailPage() {
 
   const [dataset, setDataset] = useState<EvaluationDataset | null>(null)
   const [items, setItems] = useState<DatasetItem[]>([])
+  const [currentPage, setCurrentPage] = useState(0)
+  const [totalItems, setTotalItems] = useState(0)
   const [loading, setLoading] = useState(true)
   const [showAddModal, setShowAddModal] = useState(false)
   const [showBulkImportModal, setShowBulkImportModal] = useState(false)
@@ -53,21 +56,30 @@ export default function DatasetDetailPage() {
 
   useEffect(() => {
     if (status === 'authenticated' && datasetId) {
-      loadData()
+      loadData(0, true)
     }
   }, [status, datasetId])
 
-  const loadData = async () => {
-    setLoading(true)
+  const loadData = async (page: number = 0, showLoading = true) => {
+    if (showLoading) setLoading(true)
     try {
       const datasetResponse = await apiClient.getEvaluationDataset(datasetId)
       if (!datasetResponse.error && datasetResponse.data) {
         setDataset(datasetResponse.data as EvaluationDataset)
       }
 
-      const itemsResponse = await apiClient.listDatasetItems(datasetId)
+      const offset = page * DEFAULT_ITEMS_PER_PAGE
+      const itemsResponse = await apiClient.listDatasetItems(datasetId, DEFAULT_ITEMS_PER_PAGE, offset)
       if (!itemsResponse.error && itemsResponse.data) {
-        setItems(itemsResponse.data as DatasetItem[])
+        // Handle both old format (array) and new format (object with items, total, etc.)
+        if (Array.isArray(itemsResponse.data)) {
+          setItems(itemsResponse.data as DatasetItem[])
+          setTotalItems(itemsResponse.data.length)
+        } else {
+          setItems(itemsResponse.data.items || [])
+          setTotalItems(itemsResponse.data.total || 0)
+        }
+        setCurrentPage(page)
       }
     } catch (err) {
       addToast({
@@ -95,7 +107,8 @@ export default function DatasetDetailPage() {
           type: 'success',
           message: 'Item deleted successfully'
         })
-        loadData()
+        // Reload current page after deletion
+        loadData(currentPage, false)
       }
       setShowDeleteModal(false)
       setDeleteItemId(null)
@@ -175,7 +188,7 @@ export default function DatasetDetailPage() {
           <div className="bg-white rounded-lg shadow-sm border border-gray-200">
             <div className="p-4 border-b border-gray-200">
               <h2 className="text-lg font-semibold text-gray-900">
-                Dataset Items ({items.length})
+                Dataset Items ({totalItems})
               </h2>
             </div>
             <div className="divide-y divide-gray-200">
@@ -184,7 +197,9 @@ export default function DatasetDetailPage() {
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="flex items-center mb-2">
-                        <span className="text-sm font-medium text-gray-500 mr-2">#{index + 1}</span>
+                        <span className="text-sm font-medium text-gray-500 mr-2">
+                          #{currentPage * DEFAULT_ITEMS_PER_PAGE + index + 1}
+                        </span>
                         {item.question_type && (
                           <span className="px-2 py-1 text-xs font-medium rounded bg-gray-100 text-gray-800">
                             {item.question_type}
@@ -221,6 +236,36 @@ export default function DatasetDetailPage() {
                 </div>
               ))}
             </div>
+            {/* Pagination Controls */}
+            {totalItems > DEFAULT_ITEMS_PER_PAGE && (
+              <div className="mt-4 flex items-center justify-between border-t border-gray-200 px-6 py-4 bg-white">
+                <div className="text-sm text-gray-700">
+                  Showing {currentPage * DEFAULT_ITEMS_PER_PAGE + 1} to{' '}
+                  {Math.min((currentPage + 1) * DEFAULT_ITEMS_PER_PAGE, totalItems)} of{' '}
+                  {totalItems} items
+                </div>
+                <div className="flex space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => loadData(currentPage - 1)}
+                    disabled={currentPage === 0 || loading}
+                    className="px-3 py-1.5"
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => loadData(currentPage + 1)}
+                    disabled={(currentPage + 1) * DEFAULT_ITEMS_PER_PAGE >= totalItems || loading}
+                    className="px-3 py-1.5"
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
@@ -243,7 +288,7 @@ export default function DatasetDetailPage() {
             datasetType={dataset.dataset_type}
             onClose={() => {
               setShowAddModal(false)
-              loadData()
+              loadData(currentPage, false)
             }}
           />
         )}
@@ -254,7 +299,7 @@ export default function DatasetDetailPage() {
             datasetType={dataset.dataset_type}
             onClose={() => {
               setShowBulkImportModal(false)
-              loadData()
+              loadData(currentPage, false)
             }}
           />
         )}

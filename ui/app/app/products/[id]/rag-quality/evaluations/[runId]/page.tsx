@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useParams } from 'next/navigation'
@@ -11,6 +11,7 @@ import AppLayout from '@/components/layout/AppLayout'
 import { apiClient } from '@/lib/api-client'
 import { CardSkeleton } from '@/components/ui/skeleton'
 import { StatusBadge } from '@/components/ui/status-badge'
+import { DEFAULT_ITEMS_PER_PAGE } from '@/lib/constants'
 
 interface EvaluationRun {
   id: string
@@ -33,12 +34,16 @@ interface EvaluationRun {
         details?: any
       }>
       error?: string
+      retrieved_chunks_count?: number
+      answer_method?: string
     }>
   }
   started_at?: string
   finished_at?: string
   created_at: string
   report_path?: string
+  dataset_name?: string | null
+  pipeline_version?: number | null
 }
 
 // Map evaluation status to StatusBadge status type
@@ -69,19 +74,71 @@ export default function EvaluationRunDetailPage() {
   const [loading, setLoading] = useState(true)
   const [downloadingReport, setDownloadingReport] = useState(false)
   const [polling, setPolling] = useState(false)
+  const [perQuery, setPerQuery] = useState<Array<{
+    item_id: string
+    query: string
+    metrics: Record<string, {
+      score: number
+      passed: boolean
+      details?: any
+    }>
+    error?: string
+    retrieved_chunks_count?: number
+    answer_method?: string
+  }>>([])
+  const [currentPage, setCurrentPage] = useState(0)
+  const [totalQueries, setTotalQueries] = useState(0)
+  const [loadingQueries, setLoadingQueries] = useState(false)
   
   // Ref to track the polling interval
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
+
+  const loadQueries = useCallback(async (page: number = 0) => {
+    setLoadingQueries(true)
+    try {
+      const offset = page * DEFAULT_ITEMS_PER_PAGE
+      const response = await apiClient.getEvaluationRunQueries(runId, DEFAULT_ITEMS_PER_PAGE, offset)
+      if (!response.error && response.data) {
+        setPerQuery(response.data.queries || [])
+        setTotalQueries(response.data.total || 0)
+        setCurrentPage(page)
+      }
+    } catch (err) {
+      console.error('Failed to load evaluation queries:', err)
+    } finally {
+      setLoadingQueries(false)
+    }
+  }, [runId])
+
+  const loadData = useCallback(async (showLoading = true) => {
+    if (showLoading) setLoading(true)
+    try {
+      const response = await apiClient.getEvaluationRun(runId)
+      if (!response.error && response.data) {
+        setRun(response.data as EvaluationRun)
+        // Load paginated queries if evaluation is completed
+        const evalRun = response.data as EvaluationRun
+        if (evalRun.status === 'completed') {
+          loadQueries(0)
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load evaluation run:', err)
+    } finally {
+      if (showLoading) setLoading(false)
+    }
+  }, [runId, loadQueries])
 
   useEffect(() => {
     if (status === 'authenticated' && runId) {
       loadData()
     }
-  }, [status, runId])
+  }, [status, runId, loadData])
 
   // Auto-refresh if evaluation is running
   useEffect(() => {
     const isRunning = run?.status === 'running' || run?.status === 'queued' || run?.status === 'pending'
+    const isCompleted = run?.status === 'completed'
     
     if (isRunning && !intervalRef.current) {
       setPolling(true)
@@ -94,45 +151,56 @@ export default function EvaluationRunDetailPage() {
       setPolling(false)
     }
 
+    // Load queries when evaluation completes
+    if (isCompleted && totalQueries === 0 && !loadingQueries) {
+      loadQueries(0)
+    }
+
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current)
         intervalRef.current = null
       }
     }
-  }, [run?.status])
-
-  const loadData = async (showLoading = true) => {
-    if (showLoading) setLoading(true)
-    try {
-      const response = await apiClient.getEvaluationRun(runId)
-      if (!response.error && response.data) {
-        setRun(response.data as EvaluationRun)
-      }
-    } catch (err) {
-      console.error('Failed to load evaluation run:', err)
-    } finally {
-      if (showLoading) setLoading(false)
-    }
-  }
+  }, [run?.status, totalQueries, loadingQueries, loadQueries, loadData])
 
   const handleDownloadReport = async () => {
     setDownloadingReport(true)
     try {
-      const blob = await apiClient.downloadEvaluationReport(runId)
+      const result = await apiClient.downloadEvaluationReport(runId)
       
-      if (!blob) {
+      if (!result || !result.blob) {
         throw new Error('Failed to download report')
       }
 
-      // Determine file extension from report_path or default to csv
-      const extension = run?.report_path?.endsWith('.csv') ? 'csv' : 
-                      run?.report_path?.endsWith('.pdf') ? 'pdf' : 'csv'
+      // Determine filename and extension from response, report_path, or default
+      let filename: string
+      let extension: string
+      
+      if (result.filename) {
+        // Use filename from Content-Disposition header
+        filename = result.filename
+        extension = filename.split('.').pop() || 'csv'
+      } else {
+        // Determine extension from content type or report_path
+        if (result.contentType?.includes('text/csv')) {
+          extension = 'csv'
+        } else if (result.contentType?.includes('application/pdf')) {
+          extension = 'pdf'
+        } else if (run?.report_path?.endsWith('.csv')) {
+          extension = 'csv'
+        } else if (run?.report_path?.endsWith('.pdf')) {
+          extension = 'pdf'
+        } else {
+          extension = 'csv' // Default to CSV as that's what's generated
+        }
+        filename = `evaluation-report-${runId}.${extension}`
+      }
 
-      const url = window.URL.createObjectURL(blob)
+      const url = window.URL.createObjectURL(result.blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `evaluation-report-${runId}.${extension}`
+      a.download = filename
       document.body.appendChild(a)
       a.click()
       window.URL.revokeObjectURL(url)
@@ -213,7 +281,6 @@ export default function EvaluationRunDetailPage() {
   }
 
   const aggregate = run.metrics?.aggregate || {}
-  const perQuery = run.metrics?.per_query || []
   const isRunning = run.status === 'running' || run.status === 'queued' || run.status === 'pending'
   const isCompleted = run.status === 'completed'
 
@@ -237,6 +304,22 @@ export default function EvaluationRunDetailPage() {
             <p className="mt-2 text-sm text-gray-600">
               Version {run.version} • {new Date(run.created_at).toLocaleString()}
             </p>
+            {(run.dataset_name || run.pipeline_version !== null) && (
+              <div className="mt-2 flex items-center gap-4 text-sm text-gray-600">
+                {run.dataset_name && (
+                  <span className="flex items-center gap-1">
+                    <span className="font-medium">Dataset:</span>
+                    <span>{run.dataset_name}</span>
+                  </span>
+                )}
+                {run.pipeline_version !== null && run.pipeline_version !== undefined && (
+                  <span className="flex items-center gap-1">
+                    <span className="font-medium">Pipeline Version:</span>
+                    <span>v{run.pipeline_version}</span>
+                  </span>
+                )}
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-3">
             <StatusBadge status={mapEvaluationStatus(run.status)} />
@@ -298,61 +381,145 @@ export default function EvaluationRunDetailPage() {
         {isCompleted && aggregate && Object.keys(aggregate).length > 0 && (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Aggregate Metrics</h2>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-              {Object.entries(aggregate).map(([metricName, data]) => (
-                <div key={metricName} className="border border-gray-200 rounded-lg p-4">
-                  <p className="text-xs text-gray-500 mb-1 capitalize">{metricName.replace(/_/g, ' ')}</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {(data.mean * 100).toFixed(1)}%
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Min: {(data.min * 100).toFixed(1)}% • Max: {(data.max * 100).toFixed(1)}%
-                  </p>
-                  <p className="text-xs text-gray-500">Count: {data.count}</p>
-                </div>
-              ))}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+              {Object.entries(aggregate).map(([metricName, data]) => {
+                // Sort metrics: standard metrics first, then retrieval metrics
+                const isStandardMetric = ['groundedness', 'context_relevance', 'answer_relevance', 'citation_coverage', 'refusal_correctness'].includes(metricName)
+                const isRetrievalMetric = metricName.startsWith('retrieval_')
+                
+                return (
+                  <div 
+                    key={metricName} 
+                    className={`border border-gray-200 rounded-lg p-4 ${
+                      isStandardMetric ? 'bg-blue-50 border-blue-300' : 
+                      isRetrievalMetric ? 'bg-purple-50 border-purple-300' : 
+                      'bg-gray-50'
+                    }`}
+                  >
+                    <p className="text-xs font-medium text-gray-700 mb-1 capitalize">
+                      {metricName.replace(/_/g, ' ')}
+                    </p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {(data.mean * 100).toFixed(1)}%
+                    </p>
+                    <p className="text-xs text-gray-600 mt-1">
+                      Min: {(data.min * 100).toFixed(1)}% • Max: {(data.max * 100).toFixed(1)}%
+                    </p>
+                    <p className="text-xs text-gray-500">Count: {data.count}</p>
+                  </div>
+                )
+              })}
             </div>
           </div>
         )}
 
         {/* Per-Query Results */}
-        {isCompleted && perQuery.length > 0 && (
+        {isCompleted && totalQueries > 0 && (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200">
             <div className="p-4 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900">Per-Query Results</h2>
+              <h2 className="text-lg font-semibold text-gray-900">
+                Per-Query Results ({totalQueries})
+              </h2>
             </div>
-            <div className="divide-y divide-gray-200">
-              {perQuery.map((result, index) => (
+            {loadingQueries ? (
+              <div className="p-8 text-center">
+                <Loader2 className="h-6 w-6 animate-spin mx-auto text-gray-400" />
+                <p className="text-sm text-gray-500 mt-2">Loading queries...</p>
+              </div>
+            ) : (
+              <>
+                <div className="divide-y divide-gray-200">
+                  {perQuery.map((result, index) => (
                 <div key={result.item_id || index} className="p-4">
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex-1">
                       <p className="text-sm font-medium text-gray-900 mb-2">{result.query}</p>
                       {result.error ? (
-                        <p className="text-sm text-red-600">Error: {result.error}</p>
+                        <div className="bg-red-50 border border-red-200 rounded p-3">
+                          <p className="text-sm font-medium text-red-900 mb-1">Error</p>
+                          <p className="text-sm text-red-700">{result.error}</p>
+                        </div>
                       ) : (
-                        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                          {Object.entries(result.metrics || {}).map(([metricName, metricData]) => (
-                            <div key={metricName} className="flex items-center">
-                              {metricData.passed ? (
-                                <CheckCircle2 className="h-4 w-4 text-green-600 mr-2" />
-                              ) : (
-                                <XCircle className="h-4 w-4 text-red-600 mr-2" />
-                              )}
-                              <div>
-                                <p className="text-xs text-gray-500 capitalize">{metricName.replace(/_/g, ' ')}</p>
-                                <p className="text-sm font-medium text-gray-900">
-                                  {(metricData.score * 100).toFixed(1)}%
-                                </p>
-                              </div>
+                        <div>
+                          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 mb-3">
+                            {Object.entries(result.metrics || {}).map(([metricName, metricData]) => {
+                              // Handle both dict format (with score, passed) and direct score value
+                              const score = typeof metricData === 'object' && metricData !== null 
+                                ? (metricData.score ?? metricData) 
+                                : metricData
+                              const passed = typeof metricData === 'object' && metricData !== null 
+                                ? (metricData.passed ?? false)
+                                : undefined
+                              const displayScore = typeof score === 'number' ? score : 0
+                              
+                              return (
+                                <div key={metricName} className="flex items-start border border-gray-200 rounded p-2 bg-gray-50">
+                                  {passed !== undefined && (
+                                    <div className="mr-2 mt-0.5">
+                                      {passed ? (
+                                        <CheckCircle2 className="h-4 w-4 text-green-600" />
+                                      ) : (
+                                        <XCircle className="h-4 w-4 text-red-600" />
+                                      )}
+                                    </div>
+                                  )}
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs text-gray-500 capitalize truncate" title={metricName.replace(/_/g, ' ')}>
+                                      {metricName.replace(/_/g, ' ')}
+                                    </p>
+                                    <p className="text-sm font-medium text-gray-900">
+                                      {(displayScore * 100).toFixed(1)}%
+                                    </p>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                          {result.retrieved_chunks_count !== undefined && (
+                            <div className="text-xs text-gray-500 mt-2">
+                              Retrieved {result.retrieved_chunks_count} chunk{result.retrieved_chunks_count !== 1 ? 's' : ''} • 
+                              Answer method: {result.answer_method || 'N/A'}
                             </div>
-                          ))}
+                          )}
                         </div>
                       )}
                     </div>
                   </div>
                 </div>
-              ))}
-            </div>
+                  ))}
+                </div>
+                {/* Pagination Controls */}
+                {totalQueries > DEFAULT_ITEMS_PER_PAGE && (
+                  <div className="mt-4 flex items-center justify-between border-t border-gray-200 px-6 py-4 bg-white">
+                    <div className="text-sm text-gray-700">
+                      Showing {currentPage * DEFAULT_ITEMS_PER_PAGE + 1} to{' '}
+                      {Math.min((currentPage + 1) * DEFAULT_ITEMS_PER_PAGE, totalQueries)} of{' '}
+                      {totalQueries} queries
+                    </div>
+                    <div className="flex space-x-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => loadQueries(currentPage - 1)}
+                        disabled={currentPage === 0 || loadingQueries}
+                        className="px-3 py-1.5"
+                      >
+                        Previous
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => loadQueries(currentPage + 1)}
+                        disabled={(currentPage + 1) * DEFAULT_ITEMS_PER_PAGE >= totalQueries || loadingQueries}
+                        className="px-3 py-1.5"
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         )}
 

@@ -51,9 +51,7 @@ export default function BillingPage() {
     try {
       setLoading(true)
       const response = await apiClient.get(`/api/v1/billing/limits?workspace_id=${workspaceId}`)
-      console.log('Billing limits response:', response.data)
     } catch (err) {
-      console.error('Failed to load billing limits:', err)
       setError('Failed to load billing information')
     } finally {
       setLoading(false)
@@ -61,7 +59,6 @@ export default function BillingPage() {
   }
 
   const handleUpgrade = async (plan: string) => {
-    console.log(`Upgrading to ${plan} plan`)
     alert(`Upgrading to ${plan} plan - This would redirect to Stripe checkout`)
   }
 

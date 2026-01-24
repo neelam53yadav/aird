@@ -169,7 +169,6 @@ export default function SettingsPage() {
         setTimeout(() => setSaveMessage(null), 3000)
       } else {
         // For other sections, use existing mock behavior
-        console.log(`Saving ${section} settings:`, settings)
         setSaveMessage({type: 'success', text: `${section} settings saved!`})
         setTimeout(() => setSaveMessage(null), 3000)
       }

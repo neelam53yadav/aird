@@ -209,7 +209,8 @@ class DataQualityComplianceReport(Base):
     period_end = Column(DateTime(timezone=True), nullable=False)
 
     # Report data
-    report_data = Column(JSON, nullable=False)
+    report_data = Column(JSON, nullable=True)  # Small summary only (full data in S3)
+    report_data_path = Column(String(1000), nullable=False)  # S3 path to full report data
     summary = Column(Text, nullable=True)
 
     # Generation metadata

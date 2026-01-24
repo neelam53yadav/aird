@@ -112,17 +112,27 @@ def task_run_evaluation(**context) -> Dict[str, Any]:
         if not eval_run:
             raise ValueError(f"EvalRun {eval_run_id} not found")
 
-        # Update status to running
-        eval_run.status = "running"
-        eval_run.started_at = datetime.utcnow()
-        db.commit()
-
-        logger.info(f"Starting evaluation run {eval_run_id} for dataset {dataset_id}")
-
-        # Get dataset from database
+        # Get dataset from database (needed for logging and to populate fields)
         dataset = db.query(EvalDataset).filter(EvalDataset.id == dataset_id).first()
         if not dataset:
             raise ValueError(f"Dataset {dataset_id} not found")
+
+        # Update status to running and ensure dataset_name and pipeline_version are set
+        eval_run.status = "running"
+        eval_run.started_at = datetime.utcnow()
+        # Populate dataset_name and pipeline_version if not already set (for backward compatibility)
+        if not eval_run.dataset_name:
+            eval_run.dataset_name = dataset.name
+        if eval_run.pipeline_version is None:
+            eval_run.pipeline_version = version
+        db.commit()
+
+        logger.info("=" * 80)
+        logger.info(f"Starting evaluation run {eval_run_id} for dataset {dataset_id}")
+        logger.info(f"  Product ID: {product_id}")
+        logger.info(f"  Version: {version}")
+        logger.info(f"  Dataset: {dataset.name}")
+        logger.info("=" * 80)
 
         # Get dataset items from database
         items = db.query(EvalDatasetItem).filter(EvalDatasetItem.dataset_id == dataset_id).all()
@@ -208,7 +218,15 @@ def task_run_evaluation(**context) -> Dict[str, Any]:
         eval_run.finished_at = datetime.utcnow()
         db.commit()
 
+        logger.info("=" * 80)
         logger.info(f"Completed evaluation run {eval_run_id}")
+        logger.info(f"  Items evaluated: {len(items)}")
+        if eval_run.metrics and eval_run.metrics.get("aggregate"):
+            logger.info(f"  Aggregate metrics: {len(eval_run.metrics['aggregate'])} metric types")
+            for metric_name, metric_data in eval_run.metrics["aggregate"].items():
+                if isinstance(metric_data, dict):
+                    logger.info(f"    {metric_name}: mean={metric_data.get('mean', 0):.4f}, count={metric_data.get('count', 0)}")
+        logger.info("=" * 80)
 
         return {
             "eval_run_id": str(eval_run_id),
@@ -412,17 +430,29 @@ def generate_csv_report(eval_run: EvalRun, product: Product) -> str:
     per_query = metrics.get("per_query", [])
     
     if per_query:
+        # Collect all metric names dynamically from all results
+        all_metric_names = set()
+        for result in per_query:
+            if "error" not in result:
+                item_metrics = result.get("metrics", {})
+                all_metric_names.update(item_metrics.keys())
+        
+        # Sort metric names for consistent ordering
+        # Put standard metrics first, then retrieval metrics
+        standard_metrics = ["groundedness", "context_relevance", "answer_relevance", "citation_coverage", "refusal_correctness"]
+        sorted_metrics = []
+        for metric in standard_metrics:
+            if metric in all_metric_names:
+                sorted_metrics.append(metric)
+        for metric in sorted(all_metric_names):
+            if metric not in standard_metrics:
+                sorted_metrics.append(metric)
+        
         # Write header
-        writer.writerow([
-            "Item ID",
-            "Query",
-            "Groundedness",
-            "Context Relevance",
-            "Answer Relevance",
-            "Citation Coverage",
-            "Refusal Correctness",
-            "Error"
-        ])
+        header = ["Item ID", "Query", "Answer Method", "Retrieved Chunks Count"]
+        header.extend([metric.replace("_", " ").title() for metric in sorted_metrics])
+        header.append("Error")
+        writer.writerow(header)
         
         # Write data rows
         for result in per_query:
@@ -436,16 +466,15 @@ def generate_csv_report(eval_run: EvalRun, product: Product) -> str:
                     return f"{score:.4f}"
                 return "N/A"
             
-            writer.writerow([
+            row = [
                 result.get("item_id", ""),
                 result.get("query", ""),
-                get_score("groundedness"),
-                get_score("context_relevance"),
-                get_score("answer_relevance"),
-                get_score("citation_coverage"),
-                get_score("refusal_correctness"),
-                result.get("error", "")
-            ])
+                result.get("answer_method", "N/A"),
+                result.get("retrieved_chunks_count", 0),
+            ]
+            row.extend([get_score(metric_name) for metric_name in sorted_metrics])
+            row.append(result.get("error", ""))
+            writer.writerow(row)
     
     return output.getvalue()
 

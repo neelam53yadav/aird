@@ -60,9 +60,16 @@ async def get_playbook_yaml(
 
             if custom_playbook:
                 from primedata.core.scope import ensure_workspace_access
+                from primedata.services.s3_content_storage import load_text_from_s3
 
                 ensure_workspace_access(db, request, custom_playbook.workspace_id)
-                return {"yaml": custom_playbook.yaml_content, "is_custom": True}
+                # Load YAML content from S3
+                yaml_content = load_text_from_s3(custom_playbook.yaml_content_path)
+                if yaml_content is None:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND, detail=f"Playbook YAML content not found in storage"
+                    )
+                return {"yaml": yaml_content, "is_custom": True}
         except Exception as db_error:
             # If table doesn't exist or other DB error, log and continue to file-based lookup
             if "does not exist" in str(db_error) or "UndefinedTable" in str(type(db_error).__name__):
@@ -195,9 +202,17 @@ async def get_playbook(
 
                 ensure_workspace_access(db, request, custom_playbook.workspace_id)
 
-                # Parse YAML content
+                # Load and parse YAML content from S3
+                from primedata.services.s3_content_storage import load_text_from_s3
+
+                yaml_content = load_text_from_s3(custom_playbook.yaml_content_path)
+                if yaml_content is None:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND, detail=f"Playbook YAML content not found in storage"
+                    )
+
                 try:
-                    config = yaml.safe_load(custom_playbook.yaml_content)
+                    config = yaml.safe_load(yaml_content)
                     return PlaybookResponse(
                         id=config.get("id", custom_playbook.playbook_id),
                         description=custom_playbook.description or config.get("description", "Custom playbook"),
@@ -257,11 +272,20 @@ class CustomPlaybookResponse(BaseModel):
     name: str
     playbook_id: str
     description: Optional[str]
-    yaml_content: str
+    yaml_content_path: str
     base_playbook_id: Optional[str]
     is_active: bool
     created_at: datetime
     updated_at: Optional[datetime]
+    
+    @property
+    def yaml_content(self) -> str:
+        """Load YAML content from S3 (for backward compatibility)."""
+        from primedata.services.s3_content_storage import load_text_from_s3
+        content = load_text_from_s3(self.yaml_content_path)
+        if content is None:
+            raise ValueError(f"YAML content not found at {self.yaml_content_path}")
+        return content
 
 
 @router.post("/custom", response_model=CustomPlaybookResponse, status_code=status.HTTP_201_CREATED)
@@ -277,6 +301,7 @@ async def create_custom_playbook(
     """
     from primedata.core.scope import ensure_workspace_access
     from primedata.core.user_utils import get_user_id
+    from primedata.services.s3_content_storage import CONTENT_BUCKET
 
     ensure_workspace_access(db, request, workspace_id)
 
@@ -320,20 +345,39 @@ async def create_custom_playbook(
         # Re-raise other database errors
         raise
 
-    # Create custom playbook
+    # Create custom playbook first to get the ID
     custom_playbook = CustomPlaybook(
         workspace_id=workspace_id,
         owner_user_id=get_user_id(current_user),
         name=request_body.name,
         playbook_id=request_body.playbook_id.upper(),
         description=request_body.description,
-        yaml_content=request_body.yaml_content,
+        yaml_content_path="",  # Temporary, will be set after saving to S3
         config=config,  # Store parsed YAML for quick access
         base_playbook_id=request_body.base_playbook_id.upper() if request_body.base_playbook_id else None,
         is_active=True,
     )
 
     db.add(custom_playbook)
+    db.flush()  # Flush to get the ID without committing
+    
+    # Save YAML content to S3 with actual playbook ID
+    from primedata.services.s3_content_storage import (
+        get_playbook_yaml_path,
+        save_text_to_s3,
+    )
+
+    yaml_content_path = get_playbook_yaml_path(workspace_id, custom_playbook.id)
+    
+    # Save YAML to S3
+    if not save_text_to_s3(yaml_content_path, request_body.yaml_content, "application/x-yaml"):
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to save playbook YAML to storage"
+        )
+
+    # Update the path
+    custom_playbook.yaml_content_path = yaml_content_path
     db.commit()
     db.refresh(custom_playbook)
 
@@ -456,7 +500,20 @@ async def update_custom_playbook(
                 config = yaml.safe_load(request_body.yaml_content)
                 if not isinstance(config, dict):
                     raise ValueError("YAML must be a dictionary")
-                custom_playbook.yaml_content = request_body.yaml_content
+                
+                # Save updated YAML to S3
+                from primedata.services.s3_content_storage import (
+                    get_playbook_yaml_path,
+                    save_text_to_s3,
+                )
+                
+                yaml_content_path = get_playbook_yaml_path(custom_playbook.workspace_id, custom_playbook.id)
+                if not save_text_to_s3(yaml_content_path, request_body.yaml_content, "application/x-yaml"):
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to save playbook YAML to storage"
+                    )
+                
+                custom_playbook.yaml_content_path = yaml_content_path
                 custom_playbook.config = config
                 flag_modified(custom_playbook, "config")
             except yaml.YAMLError as e:

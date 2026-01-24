@@ -75,15 +75,21 @@ export default function RecommendationsPage() {
       }
 
       // Get latest evaluation run to generate recommendations
-      const runsResponse = await apiClient.listEvaluationRuns(productId)
-      if (!runsResponse.error && runsResponse.data && runsResponse.data.length > 0) {
-        const latestRun = runsResponse.data[0]
-        if (latestRun.status === 'completed' && latestRun.metrics) {
-          // Generate recommendations based on latest evaluation
-          const recResponse = await apiClient.getRAGRecommendations(productId)
-          if (!recResponse.error && recResponse.data) {
-            const recData = recResponse.data as RecommendationsResponse
-            setRecommendations(recData.recommendations || [])
+      const runsResponse = await apiClient.listEvaluationRuns(productId, 1, 0)
+      if (!runsResponse.error && runsResponse.data) {
+        // Handle both old format (array) and new format (object with runs, total, etc.)
+        const runsData = Array.isArray(runsResponse.data) 
+          ? runsResponse.data 
+          : (runsResponse.data as any)?.runs || []
+        if (runsData.length > 0) {
+          const latestRun = runsData[0]
+          if (latestRun.status === 'completed' && latestRun.metrics) {
+            // Generate recommendations based on latest evaluation
+            const recResponse = await apiClient.getRAGRecommendations(productId)
+            if (!recResponse.error && recResponse.data) {
+              const recData = recResponse.data as RecommendationsResponse
+              setRecommendations(recData.recommendations || [])
+            }
           }
         }
       }
@@ -176,7 +182,7 @@ export default function RecommendationsPage() {
         <div className="flex items-center mb-6">
           <Link href={`/app/products/${productId}/rag-quality`} className="flex items-center text-sm text-gray-500 hover:text-gray-700 transition-colors">
             <ArrowLeft className="h-4 w-4 mr-1" />
-            RAG Quality
+            Retrieval Evaluation
           </Link>
           <span className="mx-2 text-gray-400">/</span>
           <span className="text-sm font-medium text-gray-900">Recommendations</span>
@@ -186,7 +192,7 @@ export default function RecommendationsPage() {
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-gray-900">Improvement Recommendations</h1>
           <p className="text-gray-600 mt-1">
-            View and apply recommendations to improve your RAG system quality based on evaluation results.
+            View and apply recommendations to improve your retrieval system performance based on evaluation results.
           </p>
         </div>
 
@@ -247,7 +253,7 @@ export default function RecommendationsPage() {
             <Lightbulb className="h-12 w-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No recommendations available</h3>
             <p className="text-gray-600 mb-6">
-              Run an evaluation first to get recommendations based on your RAG system's performance.
+              Run an evaluation first to get recommendations based on your retrieval system's performance.
             </p>
             <Link href={`/app/products/${productId}/rag-quality/evaluations`}>
               <Button className="bg-blue-600 hover:bg-blue-700 text-white">
@@ -259,21 +265,22 @@ export default function RecommendationsPage() {
 
         {showApplyModal && selectedRecommendation && (
           <ConfirmModal
+            isOpen={showApplyModal}
             title="Apply Recommendation"
             message={`Are you sure you want to apply this recommendation? This will update your product configuration and trigger a pipeline re-run.`}
             onConfirm={handleApply}
-            onCancel={() => {
+            onClose={() => {
               setShowApplyModal(false)
               setSelectedRecommendation(null)
             }}
             confirmText="Apply"
             cancelText="Cancel"
-            loading={applying === selectedRecommendation.type}
           />
         )}
 
         {showResultModal && resultModalData && (
           <ResultModal
+            isOpen={showResultModal}
             type={resultModalData.type}
             title={resultModalData.title}
             message={resultModalData.message}

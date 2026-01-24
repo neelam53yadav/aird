@@ -331,6 +331,35 @@ class QdrantClient:
             logger.error(f"Failed to search points in collection {collection_name}: {e}", exc_info=True)
             raise RuntimeError(f"Search failed for collection {collection_name}: {str(e)}") from e
 
+    def search(
+        self,
+        collection_name: str,
+        query_vector: List[float],
+        limit: int = 10,
+        score_threshold: Optional[float] = None,
+        filter_conditions: Optional[Dict] = None,
+    ) -> List[Dict]:
+        """
+        Search for similar points in a collection (alias for search_points for compatibility).
+        
+        Args:
+            collection_name: Name of the collection
+            query_vector: Query vector for similarity search
+            limit: Maximum number of results to return
+            score_threshold: Minimum similarity score threshold
+            filter_conditions: Optional filter conditions
+            
+        Returns:
+            List of search results with 'id', 'score', and 'payload' keys
+        """
+        return self.search_points(
+            collection_name=collection_name,
+            query_vector=query_vector,
+            limit=limit,
+            score_threshold=score_threshold,
+            filter_conditions=filter_conditions,
+        )
+
     def get_collection_info(self, collection_name: str) -> Optional[Dict[str, Any]]:
         """
         Get information about a collection.

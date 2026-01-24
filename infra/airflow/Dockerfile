@@ -3,16 +3,18 @@ FROM apache/airflow:2.7.1-python3.11
 # Switch to root to install system packages
 USER root
 
-# Install system dependencies
+# Install system dependencies (including fonts for matplotlib PDF generation)
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
+    fontconfig \
+    fonts-dejavu \
     && rm -rf /var/lib/apt/lists/*
 
 # Switch back to airflow user
 USER airflow
 
-# CRITICAL: Install/upgrade email-validator FIRST (before pydantic)
+# Install/upgrade email-validator FIRST (before pydantic)
 # The base Airflow image may have an older version that needs upgrading
 RUN pip install --no-cache-dir --upgrade "email-validator>=2.0"
 
@@ -38,7 +40,8 @@ RUN pip install --no-cache-dir \
     PyJWT \
     cryptography \
     loguru \
-    pypdf
+    pypdf \
+    matplotlib>=3.7.0
 
 # Set the working directory
 WORKDIR /opt/airflow

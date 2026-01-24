@@ -59,7 +59,13 @@ def load_playbook_yaml(playbook_id: Optional[str], workspace_id: Optional[str] =
 
             if custom_playbook:
                 try:
-                    return yaml.safe_load(custom_playbook.yaml_content)
+                    from primedata.services.s3_content_storage import load_text_from_s3
+                    yaml_content = load_text_from_s3(custom_playbook.yaml_content_path)
+                    if yaml_content is None:
+                        logger.error(f"Failed to load YAML content from S3 for playbook {playbook_id}")
+                        # Fall through to try built-in playbook
+                    else:
+                        return yaml.safe_load(yaml_content)
                 except yaml.YAMLError as e:
                     logger.error(f"Failed to parse custom playbook YAML for {playbook_id}: {e}")
                     # Fall through to try built-in playbook

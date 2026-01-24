@@ -449,14 +449,10 @@ class PipelineRun(Base):
     started_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())  # Always has start time
     finished_at = Column(DateTime(timezone=True), nullable=True)
     dag_run_id = Column(String(255), nullable=False, default="", index=True)  # Required for Airflow tracking
-    metrics = Column(JSON, nullable=False, default=dict)  # Recent runs only (<90 days)
-    metrics_path = Column(String(1000), nullable=True, default=None)  # S3 path for archived metrics
+    metrics = Column(JSON, nullable=True, default=None)  # Small summary only (full data in S3)
+    metrics_path = Column(String(1000), nullable=False)  # S3 path for metrics JSON
     archived_at = Column(DateTime(timezone=True), nullable=True)  # When metrics were moved to S3
-    # AIRD stage tracking fields (M0)
-    stage_metrics = Column(JSON, nullable=True, default=None)  # Per-stage metrics (deprecated, use metrics.aird_stages)
-    aird_stages_completed = Column(
-        JSON, nullable=True, default=None
-    )  # List of completed stage names (deprecated, use metrics.aird_stages_completed)
+    collection_name = Column(String(500), nullable=True, index=True)  # Qdrant collection name (set during indexing stage)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -489,8 +485,8 @@ class CustomPlaybook(Base):
     name = Column(String(255), nullable=False)  # User-friendly name
     playbook_id = Column(String(100), nullable=False)  # Unique identifier (e.g., "CUSTOM_MY_PLAYBOOK")
     description = Column(Text, nullable=True)  # Optional description
-    yaml_content = Column(Text, nullable=False)  # Full YAML content
-    config = Column(JSON, nullable=True)  # Parsed YAML as JSON for quick access
+    yaml_content_path = Column(String(1000), nullable=False)  # S3 path to YAML content
+    config = Column(JSON, nullable=True)  # Parsed YAML as JSON for quick access (small summary only)
     base_playbook_id = Column(String(50), nullable=True)  # Original playbook this was based on (e.g., "ACADEMIC")
     is_active = Column(Boolean, nullable=False, default=True)  # Soft delete flag
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -694,12 +690,15 @@ class EvalRun(Base):
     version = Column(Integer, nullable=False)
     pipeline_run_id = Column(UUID(as_uuid=True), ForeignKey("pipeline_runs.id", ondelete="SET NULL"), nullable=True)
     dataset_id = Column(UUID(as_uuid=True), ForeignKey("eval_datasets.id", ondelete="SET NULL"), nullable=True, index=True)  # Dataset used for evaluation
+    dataset_name = Column(String(255), nullable=True)  # Denormalized dataset name for easy display
+    pipeline_version = Column(Integer, nullable=True)  # Pipeline version that was evaluated
     dag_run_id = Column(String(255), nullable=True)  # Airflow DAG run ID for tracking
     status = Column(String(50), nullable=False, server_default='pending')  # 'pending', 'running', 'completed', 'failed'
-    metrics = Column(JSONB, nullable=True)  # Per-query and aggregate metrics (kept in DB for recent runs)
+    metrics = Column(JSONB, nullable=True)  # Small summary only (full data in S3)
     metrics_path = Column(String(1000), nullable=True)  # Path to metrics JSON in S3 (date-partitioned structure)
     report_path = Column(String(1000), nullable=True)  # Path to generated report in storage
-    trend_data = Column(JSONB, nullable=True)  # Trend analysis results
+    trend_data = Column(JSONB, nullable=True)  # Small summary only (full data in S3)
+    trend_data_path = Column(String(1000), nullable=True)  # S3 path for full trend data
     started_at = Column(DateTime(timezone=True), nullable=True)
     finished_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -739,7 +738,11 @@ class EvalDataset(Base):
     description = Column(Text, nullable=True)
     dataset_type = Column(String(50), nullable=False)  # 'golden_qa', 'golden_retrieval', 'adversarial'
     version = Column(Integer, nullable=True)  # Product version this dataset is for (null = all versions)
-    status = Column(SQLEnum(EvalDatasetStatus), nullable=False, default=EvalDatasetStatus.DRAFT)
+    status = Column(
+        SQLEnum(EvalDatasetStatus, native_enum=True, values_callable=lambda obj: [e.value for e in EvalDatasetStatus]),
+        nullable=False,
+        default=EvalDatasetStatus.DRAFT
+    )
     extra_metadata = Column(JSON, nullable=True, default=dict)  # Additional metadata
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -749,8 +752,10 @@ class EvalDataset(Base):
     product = relationship("Product")
     items = relationship("EvalDatasetItem", back_populates="dataset", cascade="all, delete-orphan")
 
+    # Unique constraint: dataset names must be unique per product
     # Indexes
     __table_args__ = (
+        UniqueConstraint("product_id", "name", name="unique_product_dataset_name"),
         Index("idx_eval_datasets_product", "product_id"),
         Index("idx_eval_datasets_workspace", "workspace_id"),
         Index("idx_eval_datasets_type", "dataset_type"),
@@ -766,7 +771,7 @@ class EvalDatasetItem(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
     dataset_id = Column(UUID(as_uuid=True), ForeignKey("eval_datasets.id", ondelete="CASCADE"), nullable=False, index=True)
     query = Column(Text, nullable=False)
-    expected_answer = Column(Text, nullable=True)  # For golden_qa datasets
+    expected_answer_path = Column(String(1000), nullable=True)  # S3 path to expected answer (for golden_qa datasets)
     expected_chunks = Column(JSON, nullable=True)  # List of expected chunk IDs
     expected_docs = Column(JSON, nullable=True)  # List of expected document IDs
     question_type = Column(String(50), nullable=True)  # 'factual', 'summarization', 'policy', etc.
@@ -813,7 +818,7 @@ class RAGRequestLog(Base):
     max_tokens = Column(Integer, nullable=True)
     
     # Response details
-    response = Column(Text, nullable=True)  # Generated response
+    response_path = Column(String(1000), nullable=True)  # S3 path to generated response
     response_tokens = Column(Integer, nullable=True)
     latency_ms = Column(Float, nullable=True)  # Total latency in milliseconds
     

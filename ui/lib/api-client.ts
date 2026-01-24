@@ -601,11 +601,14 @@ class ApiClient {
     return this.get(`/api/v1/pipeline/runs/${runId}/chunking-config`)
   }
 
-  async getPipelineArtifacts(productId: string, version?: number): Promise<ApiResponse> {
+  async getPipelineArtifacts(productId: string, version?: number, pipelineRunId?: string): Promise<ApiResponse> {
     const params = new URLSearchParams()
     params.append('product_id', productId)
     if (version !== undefined) {
       params.append('version', version.toString())
+    }
+    if (pipelineRunId) {
+      params.append('pipeline_run_id', pipelineRunId)
     }
     return this.get(`/api/v1/pipeline/artifacts?${params.toString()}`)
   }
@@ -785,8 +788,8 @@ class ApiClient {
     return this.post(`/api/v1/rag-evaluation/datasets/${datasetId}/items`, { items })
   }
 
-  async listDatasetItems(datasetId: string): Promise<ApiResponse> {
-    return this.get(`/api/v1/rag-evaluation/datasets/${datasetId}/items`)
+  async listDatasetItems(datasetId: string, limit: number = 10, offset: number = 0): Promise<ApiResponse> {
+    return this.get(`/api/v1/rag-evaluation/datasets/${datasetId}/items?limit=${limit}&offset=${offset}`)
   }
 
   async deleteDatasetItem(datasetId: string, itemId: string): Promise<ApiResponse> {
@@ -920,15 +923,62 @@ class ApiClient {
     return this.get(`/api/v1/rag-evaluation/runs/${runId}`)
   }
 
-  async listEvaluationRuns(productId: string, version?: number): Promise<ApiResponse> {
-    const params = new URLSearchParams({ product_id: productId })
+  async getEvaluationRunQueries(runId: string, limit: number = 10, offset: number = 0): Promise<ApiResponse> {
+    return this.get(`/api/v1/rag-evaluation/runs/${runId}/queries?limit=${limit}&offset=${offset}`)
+  }
+
+  async listEvaluationRuns(productId: string, limit: number = 10, offset: number = 0, version?: number): Promise<ApiResponse> {
+    const params = new URLSearchParams({ 
+      product_id: productId,
+      limit: limit.toString(),
+      offset: offset.toString()
+    })
     if (version) params.append('version', version.toString())
     return this.get(`/api/v1/rag-evaluation/products/${productId}/runs?${params.toString()}`)
   }
 
-  async downloadEvaluationReport(runId: string): Promise<Blob | null> {
-    const response = await this.get<Blob>(`/api/v1/rag-evaluation/runs/${runId}/report`)
-    return response.data || null
+  async downloadEvaluationReport(runId: string): Promise<{ blob: Blob | null, contentType?: string, filename?: string } | null> {
+    const apiUrl = getApiUrl()
+    
+    // Get token from cookie for Authorization header
+    const cookieToken = (() => {
+      if (typeof document === 'undefined') return null
+      const cookie = document.cookie
+        .split('; ')
+        .find(row => row.startsWith('primedata_api_token='))
+      if (!cookie) return null
+      const value = cookie.split('=').slice(1).join('=') // Handle = in token
+      return value ? decodeURIComponent(value) : null
+    })()
+    
+    const headers: Record<string, string> = {}
+    if (cookieToken) {
+      headers['Authorization'] = `Bearer ${cookieToken}`
+    }
+
+    try {
+      const response = await fetch(`${apiUrl}/api/v1/rag-evaluation/runs/${runId}/report`, { headers })
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`Failed to download report: ${response.status} ${response.statusText} - ${errorText}`)
+      }
+      
+      const blob = await response.blob()
+      const contentType = response.headers.get('content-type') || ''
+      const contentDisposition = response.headers.get('content-disposition') || ''
+      
+      // Extract filename from Content-Disposition header if available
+      let filename: string | undefined
+      const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/i)
+      if (filenameMatch) {
+        filename = filenameMatch[1]
+      }
+      
+      return { blob, contentType, filename }
+    } catch (error) {
+      console.error('Failed to download evaluation report:', error)
+      throw error // Re-throw so the UI can handle it
+    }
   }
 
   // RAG Quality Gates

@@ -127,9 +127,11 @@ AirdOps follows a **microservices architecture** with clear separation of concer
 - **CI/CD**: GitHub Actions with Workload Identity Federation
 
 #### Database
-- **Primary**: PostgreSQL 13+ (metadata, users, products, configurations)
+- **Primary**: PostgreSQL 13+ (metadata, users, products, configurations, S3 paths for large content)
 - **Vector**: Qdrant (embeddings, chunk metadata, search indices)
-- **Object**: MinIO/GCS (raw files, processed data, artifacts)
+- **Object**: MinIO/GCS (raw files, processed data, artifacts, large JSON/YAML/text content)
+  - Enterprise hierarchical structure: `ws/{workspace_id}/prod/{product_id}/v/{version}/...`
+  - Hybrid storage: Small data in DB, large data in S3 with path references
 
 ---
 
@@ -557,8 +559,97 @@ Each stage:
 #### Three-Tier Storage Strategy
 
 1. **PostgreSQL**: Metadata, configurations, user data (fast queries, ACID compliance)
+   - Small JSON summaries and configuration data
+   - S3 paths for large content (JSON, YAML, text files)
 2. **Qdrant**: Vector embeddings, chunk metadata, search indices (high-performance similarity search)
-3. **MinIO/GCS**: Raw files, processed data, artifacts (scalable object storage)
+3. **MinIO/GCS**: Raw files, processed data, artifacts, large content (scalable object storage)
+   - Enterprise-level hierarchical structure
+   - Large JSON, YAML, and text content stored in S3
+   - Database stores only S3 paths for large content
+
+#### Enterprise S3 Storage Structure
+
+All object storage follows a consistent enterprise-level hierarchical structure organized by workspace, product, and resource type:
+
+```
+Bucket: primedata-raw
+└── ws/{workspace_id}/
+    └── prod/{product_id}/
+        └── v/{version}/
+            └── raw/
+                └── {filename}.txt
+
+Bucket: primedata-clean
+└── ws/{workspace_id}/
+    └── prod/{product_id}/
+        └── v/{version}/
+            ├── clean/
+            │   └── {processed_files}.jsonl
+            └── metrics.json
+
+Bucket: primedata-exports
+└── ws/{workspace_id}/
+    ├── playbooks/
+    │   └── {playbook_id}/
+    │       └── content.yaml
+    ├── prod/{product_id}/
+    │   └── v/{version}/
+    │       ├── pipeline_runs/
+    │       │   └── {pipeline_run_id}/
+    │       │       └── metrics.json
+    │       ├── eval/
+    │       │   └── {eval_run_id}/
+    │       │       ├── metrics.json
+    │       │       └── trend_data.json
+    │       ├── rag_logs/
+    │       │   └── {log_id}/
+    │       │       └── response.txt
+    │       ├── eval_datasets/
+    │       │   └── {dataset_id}/
+    │       │       └── items/
+    │       │           └── {item_id}/
+    │       │               └── expected_answer.txt
+    │       ├── raw/          (raw data files)
+    │       ├── clean/        (processed data)
+    │       ├── chunk/        (chunked data)
+    │       ├── embed/        (embedding data)
+    │       └── export/       (export bundles)
+    └── compliance/
+        └── reports/
+            └── {report_id}/
+                └── report_data.json
+```
+
+#### Storage Path Patterns
+
+**Pipeline Data:**
+- Raw files: `ws/{workspace_id}/prod/{product_id}/v/{version}/raw/{filename}`
+- Processed chunks: `ws/{workspace_id}/prod/{product_id}/v/{version}/clean/{filename}.jsonl`
+- Pipeline metrics: `ws/{workspace_id}/prod/{product_id}/v/{version}/pipeline_runs/{run_id}/metrics.json`
+
+**Evaluation Data:**
+- Eval metrics: `ws/{workspace_id}/prod/{product_id}/v/{version}/eval/{eval_run_id}/metrics.json`
+- Trend data: `ws/{workspace_id}/prod/{product_id}/v/{version}/eval/{eval_run_id}/trend_data.json`
+- Dataset items: `ws/{workspace_id}/prod/{product_id}/eval_datasets/{dataset_id}/items/{item_id}/expected_answer.txt`
+
+**Workspace Resources:**
+- Custom playbooks: `ws/{workspace_id}/playbooks/{playbook_id}/content.yaml`
+- Compliance reports: `ws/{workspace_id}/compliance/reports/{report_id}/report_data.json`
+
+**RAG Logs:**
+- Request responses: `ws/{workspace_id}/prod/{product_id}/v/{version}/rag_logs/{log_id}/response.txt`
+
+#### Hybrid Storage Pattern
+
+The platform uses a **hybrid storage pattern** for optimal performance and cost:
+
+- **Small Data (< 1MB)**: Stored directly in PostgreSQL JSON/JSONB columns
+- **Large Data (≥ 1MB)**: Stored in S3, with S3 path stored in PostgreSQL
+- **Benefits**:
+  - Fast queries for small metadata
+  - Cost-effective storage for large content
+  - Scalable architecture
+  - Easy archival and lifecycle management
 
 #### Data Flow
 
@@ -566,7 +657,7 @@ Each stage:
 Data Source → MinIO (raw bucket) → 
 Processing Pipeline → MinIO (clean bucket) → 
 Embedding Generation → Qdrant (vectors) + 
-Metadata → PostgreSQL
+Metadata → PostgreSQL (with S3 paths for large content)
 ```
 
 ### Security Architecture

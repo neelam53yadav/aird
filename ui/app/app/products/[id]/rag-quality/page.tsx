@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, CheckCircle2, XCircle, AlertTriangle, TrendingUp, BarChart3, Settings, FileText, Lightbulb, Play, Loader2 } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, XCircle, AlertTriangle, TrendingUp, BarChart3, Settings, FileText, Lightbulb, Play, Loader2, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ResultModal } from '@/components/ui/modal'
 import AppLayout from '@/components/layout/AppLayout'
@@ -47,10 +47,13 @@ interface EvaluationRun {
 interface QualityGate {
   all_passed: boolean
   blocking: boolean
+  evaluated?: boolean  // New optional field to indicate if evaluation has been run
+  message?: string     // Optional message from backend
   gates: Record<string, {
     threshold: number
-    actual: number
+    actual: number | null
     passed: boolean
+    evaluated?: boolean  // New optional field for individual gates
   }>
 }
 
@@ -80,6 +83,7 @@ export default function RAGQualityPage() {
   const [product, setProduct] = useState<Product | null>(null)
   const [datasets, setDatasets] = useState<EvaluationDataset[]>([])
   const [runs, setRuns] = useState<EvaluationRun[]>([])
+  const [totalRuns, setTotalRuns] = useState(0)
   const [qualityGates, setQualityGates] = useState<QualityGate | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadingGates, setLoadingGates] = useState(false)
@@ -120,10 +124,20 @@ export default function RAGQualityPage() {
         setDatasets(datasetsResponse.data as EvaluationDataset[])
       }
 
-      // Load recent runs
-      const runsResponse = await apiClient.listEvaluationRuns(productId)
+      // Load recent runs - backend returns total count in paginated response
+      const runsResponse = await apiClient.listEvaluationRuns(productId, 5, 0)
       if (!runsResponse.error && runsResponse.data) {
-        setRuns((runsResponse.data as EvaluationRun[]).slice(0, 5))
+        // Handle both old format (array) and new format (object with runs, total, etc.)
+        if (Array.isArray(runsResponse.data)) {
+          // Old format fallback
+          setRuns(runsResponse.data.slice(0, 5))
+          setTotalRuns(runsResponse.data.length)
+        } else {
+          // New paginated format - extract both runs and total
+          const responseData = runsResponse.data as any
+          setRuns(responseData.runs || [])
+          setTotalRuns(responseData.total || 0) // Extract total from response
+        }
       }
 
       // Load quality gates
@@ -180,7 +194,7 @@ export default function RAGQualityPage() {
             <AlertTriangle className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
             <h2 className="text-xl font-semibold text-gray-900 mb-2">Vector Creation Disabled</h2>
             <p className="text-gray-600 mb-6">
-              RAG Quality evaluation requires vector creation to be enabled for this product. 
+              Retrieval Evaluation requires vector creation to be enabled for this product. 
               Please enable vector creation in the product settings to use this feature.
             </p>
             <div className="flex gap-4 justify-center">
@@ -210,14 +224,14 @@ export default function RAGQualityPage() {
             {product.name}
           </Link>
           <span className="mx-2 text-gray-400">/</span>
-          <span className="text-sm font-medium text-gray-900">RAG Quality</span>
+          <span className="text-sm font-medium text-gray-900">Retrieval Evaluation</span>
         </div>
 
         {/* Page Header */}
         <div className="mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">RAG Quality Metrics</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Retrieval Evaluation</h1>
           <p className="text-gray-600 mt-1">
-            Evaluate and monitor the quality of your RAG system with comprehensive metrics and quality gates. 
+            Evaluate and monitor retrieval system performance with comprehensive metrics and quality gates. 
             Quality gates must pass before promoting versions to production.
           </p>
         </div>
@@ -225,33 +239,59 @@ export default function RAGQualityPage() {
         {/* Quality Gates Status */}
         {qualityGates && (
           <div className="mb-6">
-            <div className={`rounded-lg border p-6 ${qualityGates.all_passed ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  {qualityGates.all_passed ? (
-                    <CheckCircle2 className="h-6 w-6 text-green-600 mr-3" />
-                  ) : (
-                    <XCircle className="h-6 w-6 text-red-600 mr-3" />
-                  )}
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900">
-                      Quality Gates: {qualityGates.all_passed ? 'Passed' : 'Failed'}
-                    </h3>
-                    <p className="text-sm text-gray-600 mt-1">
-                      {qualityGates.blocking 
-                        ? 'Blocking promotion to production - Quality gates must pass before promotion' 
-                        : 'Ready for production - All quality gates passed'}
-                    </p>
+            {!qualityGates.evaluated ? (
+              // Show info message when no evaluation has been run
+              <div className="rounded-lg border p-6 bg-blue-50 border-blue-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    <AlertTriangle className="h-6 w-6 text-blue-600 mr-3" />
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900">
+                        Quality Gates: Not Evaluated
+                      </h3>
+                      <p className="text-sm text-gray-600 mt-1">
+                        {qualityGates.message || "No evaluation run found. Create a dataset and run an evaluation to check quality gates."}
+                      </p>
+                    </div>
                   </div>
+                  <Link href={`/app/products/${productId}/rag-quality/datasets`}>
+                    <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white">
+                      <Play className="h-4 w-4 mr-2" />
+                      Create Dataset
+                    </Button>
+                  </Link>
                 </div>
-                <Link href={`/app/products/${productId}/rag-quality/settings`}>
-                  <Button variant="outline" size="sm">
-                    <Settings className="h-4 w-4 mr-2" />
-                    Configure Thresholds
-                  </Button>
-                </Link>
               </div>
-            </div>
+            ) : (
+              // Show normal quality gates status when evaluated
+              <div className={`rounded-lg border p-6 ${qualityGates.all_passed ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    {qualityGates.all_passed ? (
+                      <CheckCircle2 className="h-6 w-6 text-green-600 mr-3" />
+                    ) : (
+                      <XCircle className="h-6 w-6 text-red-600 mr-3" />
+                    )}
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900">
+                        Quality Gates: {qualityGates.all_passed ? 'Passed' : 'Failed'}
+                      </h3>
+                      <p className="text-sm text-gray-600 mt-1">
+                        {qualityGates.blocking 
+                          ? 'Blocking promotion to production - Quality gates must pass before promotion' 
+                          : 'Ready for production - All quality gates passed'}
+                      </p>
+                    </div>
+                  </div>
+                  <Link href={`/app/products/${productId}/rag-quality/settings`}>
+                    <Button variant="outline" size="sm">
+                      <Settings className="h-4 w-4 mr-2" />
+                      Configure Thresholds
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -270,7 +310,7 @@ export default function RAGQualityPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-500">Evaluation Runs</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">{runs.length}</p>
+                <p className="text-2xl font-bold text-gray-900 mt-1">{totalRuns}</p>
               </div>
               <BarChart3 className="h-8 w-8 text-purple-600" />
             </div>
@@ -386,12 +426,16 @@ export default function RAGQualityPage() {
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                           {duration}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          <Link
-                            href={`/app/products/${productId}/rag-quality/evaluations/${run.id}`}
-                            className="text-blue-600 hover:text-blue-900 text-sm font-medium"
-                          >
-                            View Details
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <Link href={`/app/products/${productId}/rag-quality/evaluations/${run.id}`}>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="h-8 w-8 p-0"
+                              title="View Details"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
                           </Link>
                         </td>
                       </tr>
@@ -420,6 +464,7 @@ export default function RAGQualityPage() {
 
         {showResultModal && resultModalData && (
           <ResultModal
+            isOpen={showResultModal}
             type={resultModalData.type}
             title={resultModalData.title}
             message={resultModalData.message}

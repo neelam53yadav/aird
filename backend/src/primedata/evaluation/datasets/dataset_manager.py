@@ -180,18 +180,37 @@ class DatasetManager:
         if not dataset:
             raise ValueError(f"Dataset {dataset_id} not found")
 
+        from primedata.services.s3_content_storage import (
+            get_eval_dataset_item_answer_path,
+            save_text_to_s3,
+        )
+        
         created_items = []
         for item_data in items:
+            # Create item first to get ID
             item = EvalDatasetItem(
                 dataset_id=dataset_id,
                 query=item_data["query"],
-                expected_answer=item_data.get("expected_answer"),
+                expected_answer_path=None,  # Will be set after saving to S3
                 expected_chunks=item_data.get("expected_chunks"),
                 expected_docs=item_data.get("expected_docs"),
                 question_type=item_data.get("question_type"),
                 extra_metadata=item_data.get("metadata", {}),
             )
             db.add(item)
+            db.flush()  # Flush to get the ID
+            
+            # Save expected_answer to S3 if provided
+            if item_data.get("expected_answer"):
+                expected_answer_path = get_eval_dataset_item_answer_path(
+                    dataset.workspace_id, dataset.product_id, dataset_id, item.id
+                )
+                if save_text_to_s3(expected_answer_path, item_data["expected_answer"], "text/plain"):
+                    item.expected_answer_path = expected_answer_path
+                else:
+                    logger.warning(f"Failed to save expected_answer to S3 for item {item.id}")
+            
+            db.flush()
             created_items.append(item)
 
         db.commit()
@@ -202,9 +221,26 @@ class DatasetManager:
         return created_items
 
     @staticmethod
-    def list_items(db: Session, dataset_id: UUID) -> List[EvalDatasetItem]:
-        """List all items in a dataset."""
-        return db.query(EvalDatasetItem).filter(EvalDatasetItem.dataset_id == dataset_id).all()
+    def list_items(
+        db: Session, 
+        dataset_id: UUID, 
+        limit: Optional[int] = None, 
+        offset: Optional[int] = None
+    ) -> List[EvalDatasetItem]:
+        """List items in a dataset with optional pagination."""
+        query = db.query(EvalDatasetItem).filter(EvalDatasetItem.dataset_id == dataset_id)
+        
+        if offset is not None:
+            query = query.offset(offset)
+        if limit is not None:
+            query = query.limit(limit)
+            
+        return query.all()
+    
+    @staticmethod
+    def count_items(db: Session, dataset_id: UUID) -> int:
+        """Get total count of items in a dataset."""
+        return db.query(EvalDatasetItem).filter(EvalDatasetItem.dataset_id == dataset_id).count()
 
     @staticmethod
     def delete_item(db: Session, item_id: UUID) -> bool:
