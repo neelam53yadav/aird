@@ -478,6 +478,21 @@ class PreprocessStage(AirdStage):
             failure_reason = "No records produced from preprocessing"
             if last_exception:
                 failure_reason = f"{failure_reason}. Last error: {last_exception}"
+
+            # If all failures are due to scanned/image-only PDFs (OCR required), return SKIPPED instead of FAILED
+            if failed_files and last_exception and "OCR required" in last_exception:
+                return self._create_result(
+                    status=StageStatus.SKIPPED,
+                    metrics={
+                        "processed_files": len(processed_files),
+                        "failed_files": len(failed_files),
+                        "failed_file_list": failed_files,
+                        "reason": "scanned_pdf_needs_ocr",
+                    },
+                    error=failure_reason,
+                    started_at=started_at,
+                )
+
             return self._create_result(
                 status=StageStatus.FAILED,
                 metrics={
@@ -671,14 +686,18 @@ class PreprocessStage(AirdStage):
                 error_msg = (
                     msg_base
                     + f"Extracted only {actual_len} characters of actual content; this is likely a scanned/image-only PDF. "
-                    + "Please OCR the document (e.g., OCRmyPDF/Tesseract/Textract) and re-upload a searchable PDF."
+                    + "Please OCR the document (e.g., OCRmyPDF/Tesseract/Textract) and re-upload a searchable PDF. "
+                    + "Marking file as OCR_REQUIRED."
                 )
+                self.logger.error(error_msg)
+                std_logger.error(error_msg)
+                # Raise a specific exception so the caller can treat this as a soft failure (needs OCR)
+                raise RuntimeError("OCR required: scanned or image-only PDF")
             else:
                 error_msg = msg_base + "Text may have been removed by cleaning or PDF structure is incompatible."
-
-            self.logger.error(error_msg)
-            std_logger.error(error_msg)
-            return [], {"sections": 0, "chunks": 0, "mid_sentence_ends": 0, "chunking_config_used": {}}
+                self.logger.error(error_msg)
+                std_logger.error(error_msg)
+                return [], {"sections": 0, "chunks": 0, "mid_sentence_ends": 0, "chunking_config_used": {}}
 
         # Combine pages back into single text for optimization (which works at document level)
         # Add page markers back so they can be detected during re-splitting after optimization
