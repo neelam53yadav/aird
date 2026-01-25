@@ -104,14 +104,19 @@ def calculate_keyword_boost(text: str, query_terms: List[str], original_query: s
     
     # 4. Entity/name matching (for queries like "CEO of AWS")
     # Check if query contains entity indicators and text contains those entities
-    entity_patterns = [
-        (r'\b(?:ceo|chief executive officer)\b.*?\b(?:of|for)\b.*?\b(aws|amazon web services)\b', r'\baws\b|\bamazon web services\b'),
-        (r'\b(?:ceo|chief executive officer)\b.*?\b(?:of|for)\b.*?\b(amazon)\b', r'\bamazon\.com\b|\bamazon inc\b'),
-    ]
+    # Give higher boost for exact entity relationship matches
     
-    for query_pattern, text_pattern in entity_patterns:
-        if re.search(query_pattern, original_query_lower):
-            if re.search(text_pattern, text_lower):
-                boost += 0.03  # Small boost for entity context match
+    # Check for "CEO of AWS" pattern in query
+    if re.search(r'\b(?:ceo|chief executive officer)\b.*?\b(?:of|for)\b.*?\b(aws|amazon web services)\b', original_query_lower):
+        # Look for exact pattern in text: "CEO Amazon Web Services" or "CEO AWS" or "chief executive officer AWS"
+        if re.search(r'\b(?:ceo|chief executive officer)\b.*?\b(?:amazon web services|aws)\b', text_lower, re.IGNORECASE):
+            boost += 0.10  # High boost for exact entity relationship match
+        elif re.search(r'\b(?:aws|amazon web services)\b', text_lower):
+            boost += 0.05  # Medium boost if AWS is mentioned
+    
+    # Check for "CEO of Amazon" pattern in query (different from AWS)
+    elif re.search(r'\b(?:ceo|chief executive officer)\b.*?\b(?:of|for)\b.*?\bamazon\b', original_query_lower):
+        if re.search(r'\b(?:ceo|chief executive officer)\b.*?\b(?:amazon\.com|amazon inc)\b', text_lower, re.IGNORECASE):
+            boost += 0.08  # Boost for CEO of Amazon.com match
     
     return min(boost, max_boost)
