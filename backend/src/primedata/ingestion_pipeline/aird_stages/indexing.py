@@ -717,12 +717,11 @@ class IndexingStage(AirdStage):
                     qn = float(len(rag_eval_candidates))
                     recall_at_k = (hits / qn) * 100.0 if qn > 0 else 0.0
                     avg_precision_at_k = (ap_sum / qn) * 100.0 if qn > 0 else 0.0
-                    coverage = recall_at_k  # For self-retrieval, coverage == hit rate
+                    # Note: For self-retrieval evaluation, coverage == recall_at_k, so we only report Retrieval_Recall_At_K
                     
                     rag_metrics = {
                         "Retrieval_Recall_At_K": round(recall_at_k, 2),
                         "Average_Precision_At_K": round(avg_precision_at_k, 2),
-                        "Query_Coverage": round(coverage, 2),
                         "rag_metrics_details": {
                             "top_k": top_k,
                             "queries_evaluated": int(qn),
@@ -734,8 +733,7 @@ class IndexingStage(AirdStage):
                     self.logger.info(
                         f"RAG metrics calculated: "
                         f"Recall@K={rag_metrics['Retrieval_Recall_At_K']}%, "
-                        f"Precision@K={rag_metrics['Average_Precision_At_K']}%, "
-                        f"Coverage={rag_metrics['Query_Coverage']}%"
+                        f"Precision@K={rag_metrics['Average_Precision_At_K']}%"
                     )
             except Exception as e:
                 self.logger.warning(f"RAG metric evaluation failed (non-fatal): {e}", exc_info=True)

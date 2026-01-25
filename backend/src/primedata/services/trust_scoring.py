@@ -338,18 +338,10 @@ def aggregate_metrics_with_ai_ready(
     agg = aggregate_metrics(metrics)
     
     # Add AI-Ready aggregate metrics
+    # Note: Chunk_Coherence and Noise_Free_Score are already averaged by aggregate_metrics()
+    # so we don't need separate "Avg_" versions
     
-    # 1. Average Chunk Coherence
-    coherence_scores = [m.get("Chunk_Coherence", 0) for m in metrics if "Chunk_Coherence" in m]
-    if coherence_scores:
-        agg["Avg_Chunk_Coherence"] = round(sum(coherence_scores) / len(coherence_scores), 2)
-    
-    # 2. Average Noise-Free Score
-    noise_scores = [m.get("Noise_Free_Score", 100) for m in metrics if "Noise_Free_Score" in m]
-    if noise_scores:
-        agg["Avg_Noise_Free_Score"] = round(sum(noise_scores) / len(noise_scores), 2)
-    
-    # 3. Chunk Boundary Quality (from preprocessing stats)
+    # Chunk Boundary Quality (from preprocessing stats)
     if preprocessing_stats:
         mid_sentence_rate = preprocessing_stats.get("mid_sentence_boundary_rate", 0.0)
         # Convert to score: 0% mid-sentence breaks = 100 score

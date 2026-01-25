@@ -68,11 +68,9 @@ const METRIC_CATEGORIES: Record<string, MetricCategoryConfig> = {
     name: 'Chunking & Structure',
     icon: Layers,
     metrics: [
-      { key: 'Chunk_Coherence', name: 'Chunk Coherence', description: 'Measures semantic cohesion within chunks. Uses embedding similarity to ensure chunks stay on one topic. Higher scores indicate better topic consistency.' },
-      { key: 'Noise_Free_Score', name: 'Noise-Free Score', description: 'Percentage of content free from boilerplate, navigation elements, and legal footer text. Higher scores indicate cleaner, more useful content.' },
+      { key: 'Chunk_Coherence', name: 'Chunk Coherence', description: 'Measures semantic cohesion within chunks. Uses embedding similarity to ensure chunks stay on one topic. Higher scores indicate better topic consistency. This metric represents the average coherence across all chunks.' },
+      { key: 'Noise_Free_Score', name: 'Noise-Free Score', description: 'Percentage of content free from boilerplate, navigation elements, and legal footer text. Higher scores indicate cleaner, more useful content. This metric represents the average noise-free score across all chunks.' },
       { key: 'Chunk_Boundary_Quality', name: 'Chunk Boundary Quality', description: 'Assesses quality of chunk boundaries. Lower mid-sentence breaks indicate better chunking strategy. Score = 100 - (mid_sentence_rate × 100).' },
-      { key: 'Avg_Chunk_Coherence', name: 'Avg Chunk Coherence', description: 'Average coherence score across all chunks. Provides overall assessment of chunk quality at the product level.' },
-      { key: 'Avg_Noise_Free_Score', name: 'Avg Noise-Free Score', description: 'Average noise-free score across all chunks. Indicates overall content cleanliness for the entire product.' },
     ],
   },
   vector: {
@@ -91,9 +89,8 @@ const METRIC_CATEGORIES: Record<string, MetricCategoryConfig> = {
     name: 'RAG Performance',
     icon: Search,
     metrics: [
-      { key: 'Retrieval_Recall_At_K', name: 'Retrieval Recall@K', description: 'Percentage of relevant documents retrieved in top K results. Measures how often the correct chunk appears in search results. Higher scores indicate better retrieval accuracy.' },
+      { key: 'Retrieval_Recall_At_K', name: 'Retrieval Recall@K', description: 'Percentage of relevant documents retrieved in top K results. Measures how often the correct chunk appears in search results. Higher scores indicate better retrieval accuracy. For self-retrieval evaluation, this also represents query coverage (percentage of queries with at least one relevant result).' },
       { key: 'Average_Precision_At_K', name: 'Average Precision@K', description: 'Average precision across top K retrieved results. Measures ranking quality - how high relevant results appear in the list. Higher scores indicate better ranking.' },
-      { key: 'Query_Coverage', name: 'Query Coverage', description: 'Percentage of queries with at least one relevant result retrieved. Indicates how well your data covers different query types. Higher scores indicate better coverage.' },
     ],
     note: 'These metrics are only available when vector creation is enabled. They use self-retrieval evaluation to assess RAG performance.',
   },

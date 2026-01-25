@@ -2355,7 +2355,6 @@ def task_indexing(**context) -> Dict[str, Any]:
                         "Semantic_Search_Readiness",
                         "Retrieval_Recall_At_K",
                         "Average_Precision_At_K",
-                        "Query_Coverage",
                     ]
                     for k in keys_to_merge:
                         if k in result.metrics:
