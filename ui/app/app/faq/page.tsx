@@ -395,6 +395,86 @@ export default function FAQPage() {
         </div>
       ),
     },
+    {
+      category: 'metrics',
+      question: 'How are RAG Performance metrics calculated?',
+      answer: (
+        <div className="space-y-2">
+          <p className="text-gray-700">
+            RAG Performance metrics are calculated during the Indexing stage using <strong>self-retrieval evaluation</strong>:
+          </p>
+          <ul className="list-disc list-inside space-y-1 text-gray-700 ml-4">
+            <li><strong>Retrieval Recall@K:</strong> For each chunk, the first sentence is embedded and used as a query. The system searches for the top K results and checks if the original chunk appears in those results. Recall@K = (number of chunks that successfully retrieved themselves) / (total chunks evaluated) × 100%</li>
+            <li><strong>Average Precision@K:</strong> For each successful retrieval, precision is calculated based on the position of the correct chunk in the results. Higher positions (rank 1, 2, 3) contribute more to precision. The average across all queries gives the final score.</li>
+          </ul>
+          <p className="text-gray-700 text-sm bg-blue-50 p-3 rounded-lg border border-blue-200 mt-3">
+            <strong>💡 Note:</strong> These metrics evaluate how well your indexed data can retrieve itself, which is a proxy for how well it will perform in real RAG applications. Higher scores indicate better retrieval accuracy and ranking quality.
+          </p>
+        </div>
+      ),
+    },
+    {
+      category: 'metrics',
+      question: "What's the difference between RAG Performance metrics and similarity scores?",
+      answer: (
+        <div className="space-y-2">
+          <p className="text-gray-700">
+            These are two different types of measurements:
+          </p>
+          <div className="space-y-3">
+            <div>
+              <p className="text-gray-700 font-semibold mb-1">RAG Performance Metrics (Retrieval Recall@K, Average Precision@K):</p>
+              <ul className="list-disc list-inside space-y-1 text-gray-700 ml-4">
+                <li><strong>Purpose:</strong> Evaluate overall system performance and data quality</li>
+                <li><strong>When calculated:</strong> During the Indexing stage, using self-retrieval evaluation</li>
+                <li><strong>What they measure:</strong> How often chunks can retrieve themselves and how well they rank</li>
+                <li><strong>Scope:</strong> Product-level metrics that assess your entire dataset</li>
+                <li><strong>Display:</strong> Shown in the AI Trust Score tab under "RAG Performance"</li>
+              </ul>
+            </div>
+            <div>
+              <p className="text-gray-700 font-semibold mb-1">Similarity Scores (e.g., 49.8%, 72.3%):</p>
+              <ul className="list-disc list-inside space-y-1 text-gray-700 ml-4">
+                <li><strong>Purpose:</strong> Show relevance of individual search results to a specific query</li>
+                <li><strong>When calculated:</strong> In real-time when you search in the RAG Playground</li>
+                <li><strong>What they measure:</strong> Cosine similarity between the query embedding and each result's embedding (0-100% scale)</li>
+                <li><strong>Scope:</strong> Per-query, per-result scores for individual searches</li>
+                <li><strong>Display:</strong> Shown next to each result in the Playground search results</li>
+              </ul>
+            </div>
+          </div>
+          <p className="text-gray-700 text-sm bg-green-50 p-3 rounded-lg border border-green-200 mt-3">
+            <strong>📊 In Summary:</strong> RAG Performance metrics tell you "Is my data good for RAG?" while similarity scores tell you "How relevant is this specific result to my query?"
+          </p>
+        </div>
+      ),
+    },
+    {
+      category: 'metrics',
+      question: "What does 'AI-ready' mean and how does AIRDOps make my data AI-ready?",
+      answer: (
+        <div className="space-y-2">
+          <p className="text-gray-700">
+            <strong>"AI-ready"</strong> means your data is prepared, optimized, and validated for use in AI applications like RAG (Retrieval-Augmented Generation), chatbots, and knowledge bases.
+          </p>
+          <p className="text-gray-700">
+            AIRDOps makes your data AI-ready through a comprehensive pipeline:
+          </p>
+          <ol className="list-decimal list-inside space-y-2 text-gray-700 ml-4">
+            <li><strong>Data Ingestion & Preprocessing:</strong> Extracts content from various sources, normalizes text, removes noise, and structures data for processing</li>
+            <li><strong>Intelligent Chunking:</strong> Splits content into optimal-sized chunks (around 900 tokens) with proper boundaries, maintaining semantic coherence within each chunk</li>
+            <li><strong>Quality Scoring:</strong> Calculates 19 quality metrics covering governance, content quality, and chunking structure to identify issues and areas for improvement</li>
+            <li><strong>Vector Embedding (if enabled):</strong> Converts text chunks into high-dimensional vectors using embedding models, enabling semantic search</li>
+            <li><strong>Vector Database Storage:</strong> Stores embeddings in Qdrant with metadata for fast, accurate retrieval</li>
+            <li><strong>RAG Evaluation:</strong> Tests retrieval performance using self-retrieval to ensure your data will work well in production RAG systems</li>
+            <li><strong>Optimization Recommendations:</strong> Provides actionable suggestions to improve chunk size, overlap, metadata extraction, and other parameters</li>
+          </ol>
+          <p className="text-gray-700 text-sm bg-purple-50 p-3 rounded-lg border border-purple-200 mt-3">
+            <strong>🎯 Result:</strong> Your data is cleaned, chunked, embedded, indexed, and validated - ready to power AI applications with high-quality, relevant search results and accurate responses.
+          </p>
+        </div>
+      ),
+    },
     // Troubleshooting
     {
       category: 'troubleshooting',
