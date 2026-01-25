@@ -663,7 +663,19 @@ class PreprocessStage(AirdStage):
         )
         
         if len(pages_with_content) == 0:
-            error_msg = f"❌ No pages with content after cleaning for {file_stem}. All pages are empty."
+            # Provide a clearer hint for scanned/image-only PDFs (very low extracted text)
+            actual_content = raw_text.replace("=== PAGE", "").replace("===", "").strip() if raw_text else ""
+            actual_len = len(actual_content)
+            msg_base = f"❌ No pages with content after cleaning for {file_stem}. All pages are empty. "
+            if actual_len < 500:
+                error_msg = (
+                    msg_base
+                    + f"Extracted only {actual_len} characters of actual content; this is likely a scanned/image-only PDF. "
+                    + "Please OCR the document (e.g., OCRmyPDF/Tesseract/Textract) and re-upload a searchable PDF."
+                )
+            else:
+                error_msg = msg_base + "Text may have been removed by cleaning or PDF structure is incompatible."
+
             self.logger.error(error_msg)
             std_logger.error(error_msg)
             return [], {"sections": 0, "chunks": 0, "mid_sentence_ends": 0, "chunking_config_used": {}}

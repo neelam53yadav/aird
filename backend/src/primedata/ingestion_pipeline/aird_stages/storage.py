@@ -223,6 +223,22 @@ class AirdStorageAdapter:
                                 success_msg = f"[get_raw_text] Successfully extracted {len(extracted_text)} characters from PDF: {minio_key}"
                                 self.logger.info(success_msg)
                                 std_logger.info(success_msg)
+
+                                # Heuristic: if text is suspiciously small, likely scanned → placeholder for OCR
+                                actual_content = extracted_text.replace("=== PAGE", "").replace("===", "").strip()
+                                actual_len = len(actual_content)
+                                page_count = extracted_text.count("=== PAGE") or 1
+                                chars_per_page = actual_len / page_count if page_count else actual_len
+                                if actual_len < 500 or chars_per_page < 50:
+                                    warn_msg = (
+                                        f"[get_raw_text] Low-text PDF detected ({actual_len} chars, "
+                                        f"{chars_per_page:.1f} chars/page). Likely scanned/image-only; "
+                                        f"OCR is recommended. No OCR fallback is configured here."
+                                    )
+                                    self.logger.warning(warn_msg)
+                                    std_logger.warning(warn_msg)
+                                    # If/when OCR is added, invoke it here and return OCR text on success.
+
                                 return extracted_text
                             else:
                                 warn_msg = f"[get_raw_text] PDF extraction returned empty text for {minio_key} - PDF may be image-based, encrypted, or corrupted"
@@ -332,9 +348,28 @@ class AirdStorageAdapter:
                     preview_text = extracted_text[:200].replace("=== PAGE", "[PAGE").replace("===\n", "]")
                     # Count total pages extracted
                     page_count = extracted_text.count("=== PAGE")
-                    success_msg = f"[_extract_pdf_text] Successfully extracted text ({page_count} pages, {len(extracted_text)} chars). Preview: {preview_text}..."
+                    success_msg = (
+                        f"[_extract_pdf_text] Successfully extracted text ({page_count} pages, "
+                        f"{len(extracted_text)} chars). Preview: {preview_text}..."
+                    )
                     self.logger.info(success_msg)
                     std_logger.info(success_msg)
+
+                    # Heuristic: detect likely scanned/image-only PDFs (large file, tiny text)
+                    pdf_size_mb = len(pdf_data) / (1024 * 1024)
+                    actual_content = extracted_text.replace("=== PAGE", "").replace("===", "").strip()
+                    actual_content_length = len(actual_content)
+                    pages = max(1, page_count)
+                    chars_per_page = actual_content_length / pages if pages else actual_content_length
+
+                    if (pdf_size_mb > 1.0 and actual_content_length < 1000) or chars_per_page < 50:
+                        warn_msg = (
+                            f"[_extract_pdf_text] ⚠️ PDF is {pdf_size_mb:.2f} MB but has very little text "
+                            f"({actual_content_length} chars, {chars_per_page:.1f} chars/page). "
+                            f"Likely scanned/image-only; OCR is recommended."
+                        )
+                        self.logger.warning(warn_msg)
+                        std_logger.warning(warn_msg)
 
                 return extracted_text
             except ImportError:
