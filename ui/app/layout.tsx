@@ -6,7 +6,7 @@ import { Providers } from './providers'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'AIRDOps - Making Data AI-Ready',
+  title: 'PrimeData - Making Data AI-Ready',
   description: 'Ingest, clean, chunk, embed & index. Test and export with confidence.',
 }
 

@@ -354,7 +354,7 @@ export default function HelpPage() {
     // Getting Started
     {
       category: 'getting-started',
-      question: 'How do I get started with AIRDOps?',
+      question: 'How do I get started with PrimeData?',
       answer: (
         <div className="space-y-4">
           <p className="text-gray-700">Follow these steps to get started:</p>
@@ -370,7 +370,7 @@ export default function HelpPage() {
     },
     {
       category: 'getting-started',
-      question: 'What is a Product in AIRDOps?',
+      question: 'What is a Product in PrimeData?',
       answer: (
         <div className="space-y-2">
           <p className="text-gray-700">
@@ -397,7 +397,7 @@ export default function HelpPage() {
             <strong>You can:</strong>
           </p>
           <ul className="list-disc list-inside space-y-1 text-gray-700 ml-4">
-            <li>Let AIRDOps auto-detect the best playbook based on your content</li>
+            <li>Let PrimeData auto-detect the best playbook based on your content</li>
             <li>Manually select a playbook during product creation</li>
             <li>Use the default playbook if none is specified</li>
           </ul>
@@ -442,7 +442,7 @@ export default function HelpPage() {
       question: 'What data sources can I connect?',
       answer: (
         <div className="space-y-2">
-          <p className="text-gray-700">AIRDOps supports multiple data source types:</p>
+          <p className="text-gray-700">PrimeData supports multiple data source types:</p>
           <ul className="list-disc list-inside space-y-1 text-gray-700 ml-4">
             <li><strong>Web:</strong> Websites, documentation sites, blogs</li>
             <li><strong>Database:</strong> SQL databases (PostgreSQL, MySQL, etc.)</li>
@@ -539,7 +539,7 @@ export default function HelpPage() {
       answer: (
         <div className="space-y-4">
           <p className="text-gray-700">
-            AIRDOps provides <strong>26 comprehensive metrics</strong> organized into 5 categories. 
+            PrimeData provides <strong>26 comprehensive metrics</strong> organized into 5 categories. 
             All metrics are scored on a 0-100 scale, where higher scores indicate better quality.
           </p>
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
@@ -755,14 +755,14 @@ export default function HelpPage() {
     },
     {
       category: 'metrics',
-      question: "What does 'AI-ready' mean and how does AIRDOps make my data AI-ready?",
+      question: "What does 'AI-ready' mean and how does PrimeData make my data AI-ready?",
       answer: (
         <div className="space-y-2">
           <p className="text-gray-700">
             <strong>"AI-ready"</strong> means your data is prepared, optimized, and validated for use in AI applications like RAG (Retrieval-Augmented Generation), chatbots, and knowledge bases.
           </p>
           <p className="text-gray-700">
-            AIRDOps makes your data AI-ready through a comprehensive pipeline:
+            PrimeData makes your data AI-ready through a comprehensive pipeline:
           </p>
           <ol className="list-decimal list-inside space-y-2 text-gray-700 ml-4">
             <li><strong>Data Ingestion & Preprocessing:</strong> Extracts content from various sources, normalizes text, removes noise, and structures data for processing</li>
@@ -1035,7 +1035,7 @@ export default function HelpPage() {
                     Complete Metrics Reference
                   </h2>
                   <p className="text-gray-600 mb-6">
-                    AIRDOps provides 26 comprehensive metrics organized into 5 categories. 
+                    PrimeData provides 26 comprehensive metrics organized into 5 categories. 
                     All metrics are scored on a 0-100 scale, where higher scores indicate better quality.
                   </p>
                   

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-AIRDops Development/Production Wrapper Script
+PrimeData Development/Production Wrapper Script
 
 Simplified version that uses .env.local files
 
@@ -232,7 +232,7 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(
-        description="AIRDops Development/Production Wrapper",
+        description="PrimeData Development/Production Wrapper",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -254,7 +254,7 @@ Examples:
     
     args = parser.parse_args()
     
-    print_header(f"AIRDops - {args.mode.upper()} Mode")
+    print_header(f"PrimeData - {args.mode.upper()} Mode")
     
     # Check prerequisites
     if not check_docker():

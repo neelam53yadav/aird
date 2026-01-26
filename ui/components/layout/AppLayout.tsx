@@ -36,7 +36,6 @@ const navigation = [
   { name: 'Products', href: '/app/products', icon: Package },
   { name: 'Data Sources', href: '/app/datasources', icon: Database },
   { name: 'Analytics', href: '/app/analytics', icon: BarChart3 },
-  { name: 'Billing', href: '/app/billing', icon: CreditCard },
   { name: 'Team', href: '/app/team', icon: Users, comingSoon: true },
   { name: 'Settings', href: '/app/settings', icon: Settings },
 ]
@@ -140,7 +139,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 </span>
               </div>
               <p className="text-sm font-medium flex-1 text-center">
-                You're using AIRDOps Beta. We're actively improving features and performance. 
+                You're using PrimeData Beta. We're actively improving features and performance. 
                 <span className="hidden sm:inline"> Your feedback helps us build better.</span>
               </p>
               <button
@@ -175,7 +174,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
           {!sidebarCollapsed && (
             <div>
               <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-                AIRDOps
+                PrimeData
               </h1>
               <p className="text-xs text-gray-500 mt-0.5">Making Data AI-Ready</p>
             </div>
@@ -248,7 +247,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 <Menu className="h-6 w-6" />
               </button>
               <h2 className="ml-2 text-xl font-semibold text-gray-900">
-                {navigation.find(item => item.href === pathname)?.name || 'AIRDOps'}
+                {navigation.find(item => item.href === pathname)?.name || 'PrimeData'}
               </h2>
             </div>
             
@@ -412,7 +411,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
         <footer className="bg-white border-t border-gray-200 py-4">
           <div className="container mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center text-sm text-gray-500">
-              © {new Date().getFullYear()} AIRDOps. All rights reserved.
+              © {new Date().getFullYear()} PrimeData. All rights reserved.
             </div>
           </div>
         </footer>

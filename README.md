@@ -1,8 +1,8 @@
-# AirdOps: Enterprise AI-Ready Data Platform
+# PrimeData: Enterprise AI-Ready Data Platform
 
 **Transform raw data into production-ready AI applications with enterprise-grade quality, governance, and scalability.**
 
-AirdOps is a comprehensive data platform designed to ingest, process, vectorize, and optimize data for AI/ML applications. Built with enterprise architecture principles, it provides end-to-end data processing workflows from ingestion to vectorization, with integrated quality management, team collaboration, and advanced analytics.
+PrimeData is a comprehensive data platform designed to ingest, process, vectorize, and optimize data for AI/ML applications. Built with enterprise architecture principles, it provides end-to-end data processing workflows from ingestion to vectorization, with integrated quality management, team collaboration, and advanced analytics.
 
 ---
 
@@ -21,9 +21,9 @@ AirdOps is a comprehensive data platform designed to ingest, process, vectorize,
 
 ## Platform Overview
 
-### What is AirdOps?
+### What is PrimeData?
 
-AirdOps is an enterprise-grade data processing platform that transforms unstructured and structured data sources into AI-ready formats. The platform handles the complete data lifecycle—from ingestion and preprocessing to vectorization and quality assessment—enabling organizations to build production-ready RAG (Retrieval-Augmented Generation) applications and AI systems with confidence.
+PrimeData is an enterprise-grade data processing platform that transforms unstructured and structured data sources into AI-ready formats. The platform handles the complete data lifecycle—from ingestion and preprocessing to vectorization and quality assessment—enabling organizations to build production-ready RAG (Retrieval-Augmented Generation) applications and AI systems with confidence.
 
 ### Key Value Propositions
 
@@ -49,7 +49,7 @@ AirdOps is an enterprise-grade data processing platform that transforms unstruct
 
 ### System Architecture
 
-AirdOps follows a **microservices architecture** with clear separation of concerns:
+PrimeData follows a **microservices architecture** with clear separation of concerns:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -139,7 +139,7 @@ AirdOps follows a **microservices architecture** with clear separation of concer
 
 ### 1. Data Ingestion & Connectors
 
-AirdOps supports multiple data source types with extensible connector architecture:
+PrimeData supports multiple data source types with extensible connector architecture:
 
 #### Supported Data Sources
 
@@ -492,7 +492,7 @@ openssl rand -base64 16
 
 ### Database Schema
 
-AirdOps uses PostgreSQL for metadata storage with the following core tables:
+PrimeData uses PostgreSQL for metadata storage with the following core tables:
 
 - **users**: User accounts and authentication
 - **workspaces**: Workspace/organization definitions
@@ -682,7 +682,7 @@ Metadata → PostgreSQL (with S3 paths for large content)
 
 ### Production Deployment (GCP)
 
-AirdOps is designed for deployment on Google Cloud Platform using Infrastructure as Code (Terraform) and CI/CD (GitHub Actions).
+PrimeData is designed for deployment on Google Cloud Platform using Infrastructure as Code (Terraform) and CI/CD (GitHub Actions).
 
 #### Architecture Components
 
@@ -824,5 +824,5 @@ Authorization: Bearer <jwt_token>
 
 ---
 
-**AirdOps** - Enterprise AI-Ready Data Platform  
+**PrimeData** - Enterprise AI-Ready Data Platform  
 *Transform data into production-ready AI applications with confidence.*

@@ -1,6 +1,6 @@
-# AIRDops Infrastructure as Code
+# PrimeData Infrastructure as Code
 
-This directory contains Terraform configuration for deploying AIRDops infrastructure on GCP.
+This directory contains Terraform configuration for deploying PrimeData infrastructure on GCP.
 
 ## Prerequisites
 

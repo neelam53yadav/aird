@@ -7,7 +7,7 @@ export default withAuth(
     const token = req.nextauth.token
 
             // Protected routes
-            const protectedRoutes = ["/app", "/account", "/billing", "/dashboard"]
+            const protectedRoutes = ["/app", "/account", "/dashboard"]
             const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route))
 
     if (isProtectedRoute && !token) {
@@ -20,7 +20,7 @@ export default withAuth(
     callbacks: {
               authorized: ({ token, req }) => {
                 const { pathname } = req.nextUrl
-                const protectedRoutes = ["/app", "/account", "/billing", "/dashboard"]
+                const protectedRoutes = ["/app", "/account", "/dashboard"]
                 const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route))
         
         if (isProtectedRoute) {

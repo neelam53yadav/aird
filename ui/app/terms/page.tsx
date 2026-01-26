@@ -9,7 +9,7 @@ import {
 } from 'lucide-react'
 
 // Constants
-const BETA_BANNER_TEXT = "AIRDOps Beta Release - We're actively improving based on your feedback"
+const BETA_BANNER_TEXT = "PrimeData Beta Release - We're actively improving based on your feedback"
 const LAST_UPDATED = new Date().toLocaleDateString('en-US', { 
   year: 'numeric', 
   month: 'long', 
@@ -49,7 +49,7 @@ function TermsSection({ id, title, children }: TermsSectionProps) {
 /**
  * Terms and Conditions Page Component
  * 
- * Displays legal terms and conditions for AIRDOps platform.
+ * Displays legal terms and conditions for PrimeData platform.
  * Follows enterprise best practices with proper accessibility
  * and semantic HTML structure.
  */
@@ -67,7 +67,7 @@ export default function TermsPage() {
               <span className="text-sm text-gray-600 hover:text-gray-900 transition-colors">Back to Home</span>
             </Link>
             <Link href="/" className="text-2xl font-bold bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent">
-              AIRDOps
+              PrimeData
             </Link>
             <div className="w-24"></div> {/* Spacer for centering */}
           </div>
@@ -94,19 +94,19 @@ export default function TermsPage() {
           <div className="prose prose-lg max-w-none space-y-8 text-gray-700">
             <TermsSection id="acceptance" title="1. Acceptance of Terms">
               <p>
-                By accessing and using AIRDOps ("Service"), you accept and agree to be bound by the terms and provision of this agreement. 
+                By accessing and using PrimeData ("Service"), you accept and agree to be bound by the terms and provision of this agreement. 
                 If you do not agree to abide by the above, please do not use this service.
               </p>
             </TermsSection>
 
             <TermsSection id="use-license" title="2. Use License">
               <p>
-                Permission is granted to temporarily use AIRDOps for personal and commercial purposes. This is the grant of a license, not a transfer of title, and under this license you may not:
+                Permission is granted to temporarily use PrimeData for personal and commercial purposes. This is the grant of a license, not a transfer of title, and under this license you may not:
               </p>
               <ul className="list-disc pl-6 space-y-2 mt-4" role="list">
                 <li>Modify or copy the materials</li>
                 <li>Use the materials for any commercial purpose or for any public display</li>
-                <li>Attempt to reverse engineer any software contained in AIRDOps</li>
+                <li>Attempt to reverse engineer any software contained in PrimeData</li>
                 <li>Remove any copyright or other proprietary notations from the materials</li>
                 <li>Transfer the materials to another person or "mirror" the materials on any other server</li>
               </ul>
@@ -114,7 +114,7 @@ export default function TermsPage() {
 
             <TermsSection id="service-description" title="3. Service Description">
               <p>
-                AIRDOps provides an enterprise AI data platform that enables users to ingest, process, validate, and vectorize data for AI applications. 
+                PrimeData provides an enterprise AI data platform that enables users to ingest, process, validate, and vectorize data for AI applications. 
                 We reserve the right to modify, suspend, or discontinue any aspect of the Service at any time.
               </p>
             </TermsSection>
@@ -134,7 +134,7 @@ export default function TermsPage() {
 
             <TermsSection id="data-privacy" title="5. Data and Privacy">
               <p>
-                Your use of AIRDOps is also governed by our Privacy Policy. Please review our{' '}
+                Your use of PrimeData is also governed by our Privacy Policy. Please review our{' '}
                 <Link href="/privacy" className="text-blue-600 hover:text-blue-700 underline">
                   Privacy Policy
                 </Link>, which also governs your use of the Service, 
@@ -151,14 +151,14 @@ export default function TermsPage() {
 
             <TermsSection id="intellectual-property" title="7. Intellectual Property">
               <p>
-                The Service and its original content, features, and functionality are and will remain the exclusive property of AIRDOps and its licensors. 
+                The Service and its original content, features, and functionality are and will remain the exclusive property of PrimeData and its licensors. 
                 The Service is protected by copyright, trademark, and other laws. Our trademarks and trade dress may not be used without our prior written consent.
               </p>
             </TermsSection>
 
             <TermsSection id="limitation-liability" title="8. Limitation of Liability">
               <p>
-                In no event shall AIRDOps, nor its directors, employees, partners, agents, suppliers, or affiliates, be liable for any indirect, incidental, special, 
+                In no event shall PrimeData, nor its directors, employees, partners, agents, suppliers, or affiliates, be liable for any indirect, incidental, special, 
                 consequential, or punitive damages, including without limitation, loss of profits, data, use, goodwill, or other intangible losses, resulting from your use of the Service.
               </p>
             </TermsSection>

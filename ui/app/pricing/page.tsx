@@ -119,7 +119,7 @@ const FAQ: readonly FAQItem[] = [
   }
 ] as const
 
-const BETA_BANNER_TEXT = "AIRDOps Beta Release - We're actively improving based on your feedback"
+const BETA_BANNER_TEXT = "PrimeData Beta Release - We're actively improving based on your feedback"
 
 // Component: Beta Banner
 function BetaBanner() {
@@ -217,7 +217,7 @@ function FAQSection() {
 /**
  * Pricing Page Component
  * 
- * Displays pricing plans and FAQ for AIRDOps platform.
+ * Displays pricing plans and FAQ for PrimeData platform.
  * Follows enterprise best practices with proper TypeScript types,
  * accessibility, and performance optimizations.
  */
@@ -237,7 +237,7 @@ export default function PricingPage() {
               <span className="text-sm text-gray-600 hover:text-gray-900 transition-colors">Back to Home</span>
             </Link>
             <Link href="/" className="text-2xl font-bold bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent">
-              AIRDOps
+              PrimeData
             </Link>
             <div className="w-24"></div> {/* Spacer for centering */}
           </div>
