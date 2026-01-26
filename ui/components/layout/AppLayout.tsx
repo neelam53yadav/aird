@@ -38,8 +38,6 @@ const navigation = [
   { name: 'Analytics', href: '/app/analytics', icon: BarChart3 },
   { name: 'Billing', href: '/app/billing', icon: CreditCard },
   { name: 'Team', href: '/app/team', icon: Users, comingSoon: true },
-  { name: 'FAQ', href: '/app/faq', icon: BookOpen },
-  { name: 'Support', href: '/app/support', icon: HelpCircle },
   { name: 'Settings', href: '/app/settings', icon: Settings },
 ]
 
@@ -50,6 +48,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [helpMenuOpen, setHelpMenuOpen] = useState(false)
   const [imageError, setImageError] = useState(false)
   const [betaBannerDismissed, setBetaBannerDismissed] = useState(() => {
     // Check localStorage to persist dismissal
@@ -75,13 +74,19 @@ export default function AppLayout({ children }: AppLayoutProps) {
           setUserMenuOpen(false)
         }
       }
+      if (helpMenuOpen) {
+        const target = event.target as Element
+        if (!target.closest('.help-menu')) {
+          setHelpMenuOpen(false)
+        }
+      }
     }
 
-    if (userMenuOpen) {
+    if (userMenuOpen || helpMenuOpen) {
       document.addEventListener('click', handleClickOutside)
       return () => document.removeEventListener('click', handleClickOutside)
     }
-  }, [userMenuOpen])
+  }, [userMenuOpen, helpMenuOpen])
 
   const handleDismissBanner = () => {
     setBetaBannerDismissed(true)
@@ -282,6 +287,56 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 <Bell className="h-5 w-5" />
                 <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full"></span>
               </button>
+              
+              {/* Help menu */}
+              <div className="relative help-menu">
+                <button
+                  onClick={() => setHelpMenuOpen(!helpMenuOpen)}
+                  className="hidden md:flex p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                  aria-label="Help & Support"
+                  title="Help & Support"
+                >
+                  <HelpCircle className="h-5 w-5" />
+                </button>
+                
+                {helpMenuOpen && (
+                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border-2 border-gray-100 z-50 overflow-hidden">
+                    <div className="py-2">
+                      <Link
+                        href="/app/help"
+                        onClick={() => {
+                          setHelpMenuOpen(false)
+                          // Force hash update if already on help page
+                          if (pathname === '/app/help' && typeof window !== 'undefined') {
+                            window.location.hash = ''
+                            window.dispatchEvent(new HashChangeEvent('hashchange'))
+                          }
+                        }}
+                        className="flex items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                      >
+                        <BookOpen className="h-4 w-4 mr-3 text-gray-400" />
+                        FAQ & Support
+                      </Link>
+                      <Link
+                        href="/app/help#contact"
+                        onClick={(e) => {
+                          setHelpMenuOpen(false)
+                          // If already on help page, manually update hash and trigger change
+                          if (pathname === '/app/help' && typeof window !== 'undefined') {
+                            e.preventDefault()
+                            window.location.hash = 'contact'
+                            window.dispatchEvent(new HashChangeEvent('hashchange'))
+                          }
+                        }}
+                        className="flex items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                      >
+                        <HelpCircle className="h-4 w-4 mr-3 text-gray-400" />
+                        Contact Support
+                      </Link>
+                    </div>
+                  </div>
+                )}
+              </div>
               
               {/* Enhanced User menu */}
               <div className="relative user-menu">
