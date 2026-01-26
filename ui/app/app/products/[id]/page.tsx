@@ -1538,15 +1538,13 @@ export default function ProductDetailPage() {
                   variant="compact"
                   message=""
                 />
-                {(product.vector_creation_enabled !== false) && (
-                  <Link href={`/app/products/${productId}/rag-quality`}>
-                    <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer h-full flex flex-col">
-                      <BarChart3 className="h-8 w-8 text-indigo-600 mb-2" />
-                      <h3 className="font-medium text-gray-900">Retrieval Evaluation</h3>
-                      <p className="text-sm text-gray-600">Evaluate retrieval system performance and quality metrics</p>
-                    </div>
-                  </Link>
-                )}
+                <ComingSoonBadge
+                  title="Retrieval Evaluation"
+                  description="Evaluate retrieval system performance and quality metrics"
+                  icon={BarChart3}
+                  variant="compact"
+                  message=""
+                />
                 <Link href={`/app/products/${productId}/pipeline-runs`}>
                   <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer h-full flex flex-col">
                     <GitBranch className="h-8 w-8 text-indigo-600 mb-2" />
