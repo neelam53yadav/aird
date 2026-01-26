@@ -3,6 +3,26 @@ import GoogleProvider from "next-auth/providers/google"
 import CredentialsProvider from "next-auth/providers/credentials"
 import { getApiUrl } from "@/lib/config"
 
+// Helper function to decode JWT token without verification (for extracting workspace_ids)
+function decodeJWT(token: string): any {
+  try {
+    const parts = token.split('.')
+    if (parts.length !== 3) return null
+    
+    // Decode base64url payload (second part)
+    const payload = parts[1]
+    // Replace URL-safe base64 characters
+    const base64 = payload.replace(/-/g, '+').replace(/_/g, '/')
+    // Add padding if needed
+    const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4)
+    const decoded = Buffer.from(padded, 'base64').toString('utf-8')
+    return JSON.parse(decoded)
+  } catch (error) {
+    console.error('Failed to decode JWT:', error)
+    return null
+  }
+}
+
 const handler = NextAuth({
   providers: [
     GoogleProvider({
@@ -13,7 +33,8 @@ const handler = NextAuth({
       name: "Credentials",
       credentials: {
         email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" }
+        password: { label: "Password", type: "password" },
+        invitation_token: { label: "Invitation Token", type: "text" }
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
@@ -23,7 +44,17 @@ const handler = NextAuth({
         try {
           // Call your backend login API
           const apiUrl = getApiUrl()
-          const res = await fetch(`${apiUrl}/api/v1/auth/login`, {
+          let loginUrl = `${apiUrl}/api/v1/auth/login`
+          
+          // Add invitation_token as query parameter if provided
+          if (credentials.invitation_token) {
+            console.log('[NextAuth] Passing invitation_token to backend:', credentials.invitation_token.substring(0, 20) + '...')
+            loginUrl += `?invitation_token=${encodeURIComponent(credentials.invitation_token)}`
+          } else {
+            console.log('[NextAuth] No invitation_token provided in credentials')
+          }
+          
+          const res = await fetch(loginUrl, {
             method: "POST",
             headers: { 
               "Content-Type": "application/json",
@@ -80,7 +111,7 @@ const handler = NextAuth({
     strategy: "jwt",
   },
   callbacks: {
-    jwt: async ({ token, user, account }) => {
+    jwt: async ({ token, user, account, trigger }) => {
       if (user) {
         token.iss = "https://nextauth.local"
         token.email = user.email
@@ -92,8 +123,31 @@ const handler = NextAuth({
         // Store backend access token for credentials provider
         if ((user as any).access_token) {
           token.backend_access_token = (user as any).access_token
+          
+          // Decode backend JWT to extract workspace_ids
+          const decoded = decodeJWT((user as any).access_token)
+          if (decoded && decoded.workspaces) {
+            token.workspace_ids = decoded.workspaces
+          }
         }
       }
+      
+      // If this is a session update (e.g., after token exchange), refresh workspace_ids
+      if (trigger === "update") {
+        // Try to get the latest backend token from the request
+        // The exchange endpoint sets primedata_api_token cookie with fresh token
+        // We'll decode the stored backend_access_token first, then try to get a fresh one
+        if (token.backend_access_token) {
+          const decoded = decodeJWT(token.backend_access_token as string)
+          if (decoded && decoded.workspaces) {
+            token.workspace_ids = decoded.workspaces
+          }
+        }
+        // Note: The exchange endpoint gets a fresh token with updated workspace_ids
+        // The token is stored in primedata_api_token cookie, but we can't access it here
+        // The workspace_ids should be updated when the token is initially set during login
+      }
+      
       return token
     },
     session: async ({ session, token }) => {
@@ -108,6 +162,7 @@ const handler = NextAuth({
         (session as any).iss = token.iss as string
         (session.user as any).roles = token.roles as string[]
         (session.user as any).google_sub = token.google_sub as string | null
+        (session.user as any).workspace_ids = (token.workspace_ids as string[]) || []
       }
       return session
     },

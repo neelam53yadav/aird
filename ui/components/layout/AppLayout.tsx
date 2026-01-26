@@ -37,7 +37,7 @@ const navigation = [
   { name: 'Data Sources', href: '/app/datasources', icon: Database },
   { name: 'Analytics', href: '/app/analytics', icon: BarChart3 },
   { name: 'Billing', href: '/app/billing', icon: CreditCard },
-  { name: 'Team', href: '/app/team', icon: Users, comingSoon: true },
+  { name: 'Team', href: '/app/team', icon: Users },
   { name: 'Settings', href: '/app/settings', icon: Settings },
 ]
 

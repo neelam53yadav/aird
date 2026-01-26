@@ -3,8 +3,13 @@
 import { AuthButtons } from "@/components/AuthButtons"
 import { Sparkles, ArrowLeft } from "lucide-react"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
+import { Suspense } from "react"
 
-export default function SignInPage() {
+function SignInContent() {
+  const searchParams = useSearchParams()
+  const token = searchParams.get('token')
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex flex-col">
       {/* Beta Badge - Top Banner */}
@@ -47,7 +52,7 @@ export default function SignInPage() {
 
           {/* Auth Card */}
           <div className="bg-white rounded-2xl shadow-2xl border-2 border-gray-100 p-8">
-            <AuthButtons />
+            <AuthButtons invitationToken={token || undefined} />
           </div>
 
           {/* Footer Links */}
@@ -66,5 +71,20 @@ export default function SignInPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function SignInPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    }>
+      <SignInContent />
+    </Suspense>
   )
 }

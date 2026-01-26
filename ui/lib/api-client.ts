@@ -86,6 +86,18 @@ export type TeamMemberResponse = {
   created_at: string
 }
 
+export type Invitation = {
+  id: string
+  email: string
+  role: string
+  status: 'pending' | 'accepted' | 'expired' | 'cancelled'
+  invited_by: string
+  invited_by_name: string
+  expires_at: string
+  created_at: string
+  accepted_at: string | null
+}
+
 export type ACL = {
   id?: string
   name?: string
@@ -675,6 +687,19 @@ class ApiClient {
 
   async removeWorkspaceMember(workspaceId: string, memberId: string): Promise<ApiResponse> {
     return this.delete(`/api/v1/workspaces/${workspaceId}/members/${memberId}`)
+  }
+
+  // Workspace Invitations API
+  async getWorkspaceInvitations(workspaceId: string): Promise<ApiResponse<Invitation[]>> {
+    return this.get(`/api/v1/workspaces/${workspaceId}/invitations`)
+  }
+
+  async resendInvitation(workspaceId: string, invitationId: string): Promise<ApiResponse<{ message: string; expires_at: string }>> {
+    return this.post(`/api/v1/workspaces/${workspaceId}/invitations/${invitationId}/resend`)
+  }
+
+  async cancelInvitation(workspaceId: string, invitationId: string): Promise<ApiResponse<{ message: string }>> {
+    return this.post(`/api/v1/workspaces/${workspaceId}/invitations/${invitationId}/cancel`)
   }
 
   // User Profile API

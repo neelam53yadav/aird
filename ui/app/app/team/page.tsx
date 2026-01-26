@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Users, UserPlus, Shield, Mail, MoreVertical, Trash2, Edit, Search, CheckCircle, XCircle } from 'lucide-react'
+import { Users, UserPlus, Shield, Mail, MoreVertical, Trash2, Edit, Search, CheckCircle, XCircle, RefreshCw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Modal, ConfirmModal } from '@/components/ui/modal'
@@ -9,7 +9,7 @@ import { ErrorState } from '@/components/ui/error-state'
 import { ListSkeleton } from '@/components/ui/skeleton'
 import { StatusBadge } from '@/components/ui/status-badge'
 import AppLayout from '@/components/layout/AppLayout'
-import { apiClient } from '@/lib/api-client'
+import { apiClient, Invitation } from '@/lib/api-client'
 import { useSession } from 'next-auth/react'
 interface TeamMember {
   id: string
@@ -23,7 +23,9 @@ interface TeamMember {
 export default function TeamPage() {
   const { data: session } = useSession()
   const [members, setMembers] = useState<TeamMember[]>([])
+  const [invitations, setInvitations] = useState<Invitation[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingInvitations, setLoadingInvitations] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [showInviteModal, setShowInviteModal] = useState(false)
@@ -33,6 +35,10 @@ export default function TeamPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [memberToDelete, setMemberToDelete] = useState<TeamMember | null>(null)
   const [removing, setRemoving] = useState(false)
+  const [resending, setResending] = useState<string | null>(null)
+  const [cancelling, setCancelling] = useState<string | null>(null)
+  const [showCancelModal, setShowCancelModal] = useState(false)
+  const [invitationToCancel, setInvitationToCancel] = useState<Invitation | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [workspaceId, setWorkspaceId] = useState<string | null>(null)
 
@@ -67,6 +73,7 @@ export default function TeamPage() {
   useEffect(() => {
     if (workspaceId) {
       loadTeamMembers()
+      loadInvitations()
     }
   }, [workspaceId])
 
@@ -97,6 +104,25 @@ export default function TeamPage() {
     }
   }
 
+  const loadInvitations = async () => {
+    if (!workspaceId) return
+    
+    try {
+      setLoadingInvitations(true)
+      const response = await apiClient.getWorkspaceInvitations(workspaceId)
+      
+      if (response.error) {
+        console.error('Failed to load invitations:', response.error)
+      } else if (response.data) {
+        setInvitations(response.data)
+      }
+    } catch (err: unknown) {
+      console.error('Failed to load invitations:', err)
+    } finally {
+      setLoadingInvitations(false)
+    }
+  }
+
   const handleInviteMember = async () => {
     if (!inviteEmail || !inviteRole) {
       setMessage({ type: 'error', text: 'Please provide email and role' })
@@ -122,6 +148,7 @@ export default function TeamPage() {
         setInviteEmail('')
         setInviteRole('viewer')
         loadTeamMembers()
+        loadInvitations()
       }
       setTimeout(() => setMessage(null), 5000)
     } catch (err: unknown) {
@@ -173,6 +200,80 @@ export default function TeamPage() {
     setShowDeleteModal(false)
     setMemberToDelete(null)
   }
+
+  const handleResendInvitation = async (invitation: Invitation) => {
+    if (!workspaceId) return
+    
+    try {
+      setResending(invitation.id)
+      const response = await apiClient.resendInvitation(workspaceId, invitation.id)
+      
+      if (response.error) {
+        setMessage({ type: 'error', text: `Failed to resend invitation: ${response.error}` })
+      } else {
+        setMessage({ type: 'success', text: `Invitation resent to ${invitation.email}` })
+        loadInvitations()
+      }
+      setTimeout(() => setMessage(null), 5000)
+    } catch (err: unknown) {
+      console.error('Failed to resend invitation:', err)
+      setMessage({ type: 'error', text: 'Failed to resend invitation' })
+      setTimeout(() => setMessage(null), 5000)
+    } finally {
+      setResending(null)
+    }
+  }
+
+  const handleCancelInvitation = (invitation: Invitation) => {
+    setInvitationToCancel(invitation)
+    setShowCancelModal(true)
+  }
+
+  const confirmCancelInvitation = async () => {
+    if (!invitationToCancel || !workspaceId) return
+    
+    try {
+      setCancelling(invitationToCancel.id)
+      const response = await apiClient.cancelInvitation(workspaceId, invitationToCancel.id)
+      
+      if (response.error) {
+        setMessage({ type: 'error', text: `Failed to cancel invitation: ${response.error}` })
+      } else {
+        setMessage({ type: 'success', text: `Invitation cancelled for ${invitationToCancel.email}` })
+        loadInvitations()
+      }
+      setTimeout(() => setMessage(null), 5000)
+    } catch (err: unknown) {
+      console.error('Failed to cancel invitation:', err)
+      setMessage({ type: 'error', text: 'Failed to cancel invitation' })
+      setTimeout(() => setMessage(null), 5000)
+    } finally {
+      setCancelling(null)
+      setShowCancelModal(false)
+      setInvitationToCancel(null)
+    }
+  }
+
+  const cancelCancelInvitation = () => {
+    setShowCancelModal(false)
+    setInvitationToCancel(null)
+  }
+
+  const getInvitationStatusColor = (status: string) => {
+    switch (status) {
+      case 'pending': return 'bg-yellow-100 text-yellow-800 border-yellow-200'
+      case 'accepted': return 'bg-green-100 text-green-800 border-green-200'
+      case 'expired': return 'bg-red-100 text-red-800 border-red-200'
+      case 'cancelled': return 'bg-gray-100 text-gray-800 border-gray-200'
+      default: return 'bg-gray-100 text-gray-800 border-gray-200'
+    }
+  }
+
+  const isInvitationExpired = (expiresAt: string) => {
+    return new Date(expiresAt) < new Date()
+  }
+
+  const pendingInvitations = invitations.filter(inv => inv.status === 'pending')
 
   const getRoleBadgeColor = (role: string) => {
     switch (role) {
@@ -348,6 +449,83 @@ export default function TeamPage() {
             )}
           </div>
 
+          {/* Pending Invitations Section */}
+          {pendingInvitations.length > 0 && (
+            <div className="mt-8">
+              <div className="mb-4">
+                <h2 className="text-xl font-semibold text-gray-900">Pending Invitations</h2>
+                <p className="text-sm text-gray-600">{pendingInvitations.length} pending invitation{pendingInvitations.length !== 1 ? 's' : ''}</p>
+              </div>
+              <div className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden">
+                <div className="divide-y divide-gray-100">
+                  {pendingInvitations.map((invitation) => {
+                    const expired = isInvitationExpired(invitation.expires_at)
+                    return (
+                      <div key={invitation.id} className="px-6 py-4 hover:bg-blue-50/30 transition-colors">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-4 flex-1">
+                            <div className="flex-shrink-0">
+                              <div className="h-12 w-12 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center ring-2 ring-gray-200">
+                                <Mail className="h-6 w-6 text-white" />
+                              </div>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center space-x-3 mb-1">
+                                <h3 className="text-base font-semibold text-gray-900">{invitation.email}</h3>
+                                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${getRoleBadgeColor(invitation.role)}`}>
+                                  {getRoleIcon(invitation.role)}
+                                  <span className="ml-1 capitalize">{invitation.role}</span>
+                                </span>
+                                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border ${getInvitationStatusColor(invitation.status)}`}>
+                                  {expired ? 'Expired' : 'Pending'}
+                                </span>
+                              </div>
+                              <p className="text-sm text-gray-600">
+                                Invited by {invitation.invited_by_name} • {new Date(invitation.created_at).toLocaleDateString()}
+                              </p>
+                              <p className="text-xs text-gray-400 mt-1">
+                                {expired ? 'Expired' : 'Expires'} {new Date(invitation.expires_at).toLocaleDateString()}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            {!expired && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleResendInvitation(invitation)}
+                                disabled={resending === invitation.id}
+                                className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 border-blue-200"
+                                title="Resend invitation email"
+                              >
+                                {resending === invitation.id ? (
+                                  <RefreshCw className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <RefreshCw className="h-4 w-4" />
+                                )}
+                                <span className="ml-2">Resend</span>
+                              </Button>
+                            )}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleCancelInvitation(invitation)}
+                              disabled={cancelling === invitation.id}
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                              title="Cancel invitation"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Role Permissions Info */}
           <div className="mt-8 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl p-6">
             <h3 className="text-lg font-semibold text-blue-900 mb-4">Role Permissions</h3>
@@ -461,6 +639,22 @@ export default function TeamPage() {
             }
             confirmText={removing ? 'Removing...' : 'Remove Member'}
             cancelText="Cancel"
+            variant="danger"
+          />
+
+          {/* Cancel Invitation Confirmation Modal */}
+          <ConfirmModal
+            isOpen={showCancelModal}
+            onClose={cancelCancelInvitation}
+            onConfirm={confirmCancelInvitation}
+            title="Cancel Invitation"
+            message={
+              invitationToCancel
+                ? `Are you sure you want to cancel the invitation for ${invitationToCancel.email}? They will not be able to join using this invitation.`
+                : ''
+            }
+            confirmText={cancelling ? 'Cancelling...' : 'Cancel Invitation'}
+            cancelText="Keep Invitation"
             variant="danger"
           />
         </div>

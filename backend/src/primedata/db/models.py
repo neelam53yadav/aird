@@ -59,6 +59,15 @@ class WorkspaceRole(str, Enum):
     VIEWER = "viewer"
 
 
+class InvitationStatus(str, Enum):
+    """Workspace invitation status enum."""
+
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    EXPIRED = "expired"
+    CANCELLED = "cancelled"
+
+
 class ProductStatus(str, Enum):
     """Product status enum."""
 
@@ -235,6 +244,38 @@ class WorkspaceMember(Base):
     __table_args__ = (
         UniqueConstraint("workspace_id", "user_id", name="unique_workspace_user"),
         Index("idx_workspace_members_user_id", "user_id"),  # For fast user workspace membership lookups
+    )
+
+
+class WorkspaceInvitation(Base):
+    """Workspace invitation model for team invitations."""
+
+    __tablename__ = "workspace_invitations"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+    workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id"), nullable=False, index=True)
+    email = Column(String(255), nullable=False, index=True)
+    role = Column(SQLEnum(WorkspaceRole), nullable=False)
+    invitation_token = Column(String(255), unique=True, nullable=False, index=True)
+    invited_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    status = Column(SQLEnum(InvitationStatus), nullable=False, default=InvitationStatus.PENDING, index=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    accepted_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    workspace = relationship("Workspace")
+    inviter = relationship("User", foreign_keys=[invited_by])
+
+    # Indexes and constraints
+    __table_args__ = (
+        Index("idx_workspace_invitations_workspace_id", "workspace_id"),
+        Index("idx_workspace_invitations_email", "email"),
+        Index("idx_workspace_invitations_status", "status"),
+        Index("idx_workspace_invitations_token", "invitation_token"),
+        Index("idx_workspace_invitations_expires_at", "expires_at"),
+        Index("idx_workspace_invitations_invited_by", "invited_by"),
     )
 
 

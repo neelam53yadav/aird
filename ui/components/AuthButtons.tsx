@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { signIn } from "next-auth/react"
+import { useState, useEffect } from "react"
+import { signIn, useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Button } from "./ui/button"
@@ -12,6 +12,7 @@ import { Mail, Lock, User, CheckCircle2, X, RefreshCw } from "lucide-react"
 
 interface AuthButtonsProps {
   className?: string
+  invitationToken?: string
 }
 
 // Password complexity requirements
@@ -23,7 +24,8 @@ interface PasswordRequirements {
   hasSpecialChar: boolean
 }
 
-export function AuthButtons({ className }: AuthButtonsProps) {
+export function AuthButtons({ className, invitationToken }: AuthButtonsProps) {
+  const { update: updateSession } = useSession()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
@@ -37,6 +39,13 @@ export function AuthButtons({ className }: AuthButtonsProps) {
   const [resendLoading, setResendLoading] = useState(false)
   const [resendSuccess, setResendSuccess] = useState(false)
   const router = useRouter()
+
+  // Auto-switch to signup mode if invitation token is provided
+  useEffect(() => {
+    if (invitationToken && !isSignUp) {
+      setIsSignUp(true)
+    }
+  }, [invitationToken, isSignUp])
 
   // Check password complexity
   const checkPasswordRequirements = (pwd: string): PasswordRequirements => {
@@ -165,7 +174,13 @@ export function AuthButtons({ className }: AuthButtonsProps) {
         const response = await fetch(`${apiUrl}/api/v1/auth/signup`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password, first_name: firstName, last_name: lastName }),
+          body: JSON.stringify({ 
+            email, 
+            password, 
+            first_name: firstName, 
+            last_name: lastName,
+            invitation_token: invitationToken || null
+          }),
         })
 
         if (!response.ok) {
@@ -191,21 +206,43 @@ export function AuthButtons({ className }: AuthButtonsProps) {
 
         if (result?.ok) {
           await exchangeToken()
+          
+          // If invitation token was used, update session to refresh workspace_ids
+          if (invitationToken) {
+            await updateSession()
+          }
+          
           await new Promise((resolve) => setTimeout(resolve, 100))
           router.push("/dashboard")
         } else {
           throw new Error("Failed to sign in after signup")
         }
       } else {
-        // Sign in with email/password using NextAuth credentials provider
+        // Sign in with email/password
+        // Pass invitation_token to NextAuth, which will handle the backend login with the token
+        if (invitationToken) {
+          console.log('[AuthButtons] Invitation token present, passing to NextAuth:', invitationToken.substring(0, 20) + '...')
+        } else {
+          console.log('[AuthButtons] No invitation token in URL')
+        }
+        
         const result = await signIn("credentials", {
           email,
           password,
+          invitation_token: invitationToken || undefined,
           redirect: false,
         })
 
         if (result?.ok) {
           await exchangeToken()
+          
+          // If invitation token was used, update session to refresh workspace_ids
+          if (invitationToken) {
+            // Wait a bit for the token exchange to complete
+            await new Promise((resolve) => setTimeout(resolve, 200))
+            await updateSession()
+          }
+          
           await new Promise((resolve) => setTimeout(resolve, 100))
           router.push("/dashboard")
         } else {

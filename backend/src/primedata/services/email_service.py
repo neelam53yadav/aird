@@ -6,10 +6,31 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from typing import Optional
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 from loguru import logger
 
 from primedata.core.settings import get_settings
+
+
+def _extract_domain_from_url(url: str) -> str:
+    """
+    Extract domain from FRONTEND_URL for use in email footers.
+    Handles both http://localhost:3000 and https://airdop.com formats.
+    
+    Args:
+        url: Full URL (e.g., "http://localhost:3000" or "https://airdop.com")
+        
+    Returns:
+        Domain string (e.g., "localhost:3000" or "airdop.com")
+    """
+    try:
+        parsed = urlparse(url)
+        if parsed.port:
+            return f"{parsed.hostname}:{parsed.port}"
+        return parsed.hostname or url.split('//')[-1].split('/')[0]
+    except Exception:
+        # Fallback to simple string splitting
+        return url.split('//')[-1].split('/')[0]
 
 
 def send_verification_email(email: str, verification_token: str, user_name: str = None) -> bool:
@@ -34,6 +55,7 @@ def send_verification_email(email: str, verification_token: str, user_name: str 
     try:
         # Get frontend URL for verification link
         frontend_url = settings.FRONTEND_URL.rstrip('/')
+        domain = _extract_domain_from_url(frontend_url)
         # URL-encode the token to handle special characters safely
         verification_link = f"{frontend_url}/verify-email?token={quote(verification_token)}"
         
@@ -106,7 +128,7 @@ def send_verification_email(email: str, verification_token: str, user_name: str 
                 <p>This link will expire in 24 hours.</p>
                 <p>If you didn't create an account with AIRDops, please ignore this email.</p>
                 <div class="footer">
-                    <p>© {settings.FRONTEND_URL.split('//')[-1].split('/')[0]} AIRDops. All rights reserved.</p>
+                    <p>© {domain} AIRDops. All rights reserved.</p>
                 </div>
             </div>
         </body>
@@ -175,6 +197,7 @@ def send_password_reset_email(email: str, reset_token: str, user_name: str = Non
     
     try:
         frontend_url = settings.FRONTEND_URL.rstrip('/')
+        domain = _extract_domain_from_url(frontend_url)
         # URL-encode the token to handle special characters safely
         reset_link = f"{frontend_url}/reset-password?token={quote(reset_token)}"
         
@@ -237,6 +260,9 @@ def send_password_reset_email(email: str, reset_token: str, user_name: str = Non
                 <p style="word-break: break-all; color: #667eea;">{reset_link}</p>
                 <p>This link will expire in 1 hour.</p>
                 <p>If you didn't request a password reset, please ignore this email.</p>
+                <div class="footer" style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; font-size: 12px; color: #666;">
+                    <p>© {domain} AIRDops. All rights reserved.</p>
+                </div>
             </div>
         </body>
         </html>
@@ -434,4 +460,171 @@ def send_contact_email(user_name: str, user_email: str, feedback: str) -> bool:
         
     except Exception as e:
         logger.error(f"Failed to send contact form email from {user_email}: {str(e)}")
+        return False
+
+
+def send_invitation_email(email: str, invitation_token: str, workspace_name: str, inviter_name: str, role: str) -> bool:
+    """
+    Send workspace invitation email to user.
+    
+    Args:
+        email: User's email address
+        invitation_token: Unique invitation token
+        workspace_name: Name of the workspace
+        inviter_name: Name of the person who sent the invitation
+        role: Role assigned to the user (admin, editor, viewer)
+        
+    Returns:
+        True if email sent successfully, False otherwise
+    """
+    settings = get_settings()
+    
+    if not settings.SMTP_ENABLED:
+        logger.warning("SMTP is disabled. Invitation email not sent.")
+        return False
+    
+    try:
+        frontend_url = settings.FRONTEND_URL.rstrip('/')
+        domain = _extract_domain_from_url(frontend_url)
+        # URL-encode the token to handle special characters safely
+        signup_link = f"{frontend_url}/signin?token={quote(invitation_token)}"
+        login_link = f"{frontend_url}/signin?token={quote(invitation_token)}"
+        
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = f"You've been invited to join {workspace_name} on AIRDops"
+        msg['From'] = settings.SMTP_FROM_EMAIL
+        msg['To'] = email
+        
+        html_body = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <style>
+                body {{
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+                    line-height: 1.6;
+                    color: #333;
+                    max-width: 600px;
+                    margin: 0 auto;
+                    padding: 20px;
+                }}
+                .container {{
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    padding: 30px;
+                    border-radius: 10px;
+                    color: white;
+                }}
+                .content {{
+                    background: white;
+                    padding: 30px;
+                    border-radius: 8px;
+                    margin-top: 20px;
+                    color: #333;
+                }}
+                .button {{
+                    display: inline-block;
+                    padding: 12px 30px;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white;
+                    text-decoration: none;
+                    border-radius: 5px;
+                    margin: 20px 0;
+                    font-weight: bold;
+                }}
+                .info-box {{
+                    background: #f5f5f5;
+                    padding: 15px;
+                    border-radius: 5px;
+                    margin: 15px 0;
+                    border-left: 4px solid #667eea;
+                }}
+                .footer {{
+                    margin-top: 30px;
+                    padding-top: 20px;
+                    border-top: 1px solid #eee;
+                    font-size: 12px;
+                    color: #666;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1 style="margin: 0; color: white;">AIRDops</h1>
+            </div>
+            <div class="content">
+                <h2>You've been invited!</h2>
+                <p>Hello,</p>
+                <p><strong>{inviter_name}</strong> has invited you to join the workspace <strong>{workspace_name}</strong> on AIRDops as a <strong>{role}</strong>.</p>
+                
+                <div class="info-box">
+                    <p><strong>Workspace:</strong> {workspace_name}</p>
+                    <p><strong>Role:</strong> {role.capitalize()}</p>
+                    <p><strong>Invited by:</strong> {inviter_name}</p>
+                </div>
+                
+                <p>Click the button below to accept the invitation:</p>
+                <p style="text-align: center;">
+                    <a href="{signup_link}" class="button">Accept Invitation</a>
+                </p>
+                
+                <p>Or use one of these links:</p>
+                <ul>
+                    <li><a href="{signup_link}">Sign up to join</a> (if you don't have an account)</li>
+                    <li><a href="{login_link}">Log in to join</a> (if you already have an account)</li>
+                </ul>
+                
+                <p>This invitation will expire in 7 days.</p>
+                <p>If you didn't expect this invitation, you can safely ignore this email.</p>
+                
+                <div class="footer">
+                    <p>© {domain} AIRDops. All rights reserved.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        text_body = f"""
+        You've been invited to join {workspace_name} on AIRDops
+        
+        Hello,
+        
+        {inviter_name} has invited you to join the workspace {workspace_name} on AIRDops as a {role}.
+        
+        Workspace: {workspace_name}
+        Role: {role.capitalize()}
+        Invited by: {inviter_name}
+        
+        Accept the invitation:
+        - Sign up: {signup_link}
+        - Log in: {login_link}
+        
+        This invitation will expire in 7 days.
+        
+        If you didn't expect this invitation, you can safely ignore this email.
+        """
+        
+        msg.attach(MIMEText(text_body, 'plain'))
+        msg.attach(MIMEText(html_body, 'html'))
+        
+        if settings.SMTP_USE_TLS:
+            server = smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT)
+            server.starttls()
+        elif settings.SMTP_USE_SSL:
+            server = smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT)
+        else:
+            server = smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT)
+        
+        if settings.SMTP_USERNAME and settings.SMTP_PASSWORD:
+            server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
+        
+        server.send_message(msg)
+        server.quit()
+        
+        logger.info(f"Invitation email sent successfully to {email}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Failed to send invitation email to {email}: {str(e)}")
         return False

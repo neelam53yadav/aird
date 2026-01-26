@@ -9,14 +9,14 @@ from typing import Any, Dict, List, Optional
 
 import dns.resolver
 from email_validator import validate_email, EmailNotValidError
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from loguru import logger
 from primedata.core.jwt_keys import sign_jwt
 from primedata.core.nextauth_verify import verify_nextauth_token
 from primedata.core.password import hash_password, verify_password
 from primedata.core.security import get_current_user
 from primedata.db.database import get_db
-from primedata.db.models import AuthProvider, User, Workspace, WorkspaceMember, WorkspaceRole
+from primedata.db.models import AuthProvider, InvitationStatus, User, Workspace, WorkspaceInvitation, WorkspaceMember, WorkspaceRole
 from primedata.services.email_service import send_verification_email, send_password_reset_email
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -68,6 +68,7 @@ class SignupRequest(BaseModel):
     password: str
     first_name: str
     last_name: str
+    invitation_token: Optional[str] = None  # Optional invitation token
 
 
 class LoginRequest(BaseModel):
@@ -215,6 +216,7 @@ async def signup(request: SignupRequest, db: Session = Depends(get_db)):
     """
     Register a new user with email and password.
     Creates account but requires email verification.
+    If invitation_token is provided, validates it and auto-joins the workspace.
     """
     # Check if user already exists
     existing_user = db.query(User).filter(User.email == request.email).first()
@@ -227,6 +229,44 @@ async def signup(request: SignupRequest, db: Session = Depends(get_db)):
         email = validation.normalized
     except EmailNotValidError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    # Handle invitation token if provided
+    invitation = None
+    if request.invitation_token:
+        invitation = (
+            db.query(WorkspaceInvitation)
+            .filter(WorkspaceInvitation.invitation_token == request.invitation_token)
+            .first()
+        )
+
+        if not invitation:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid invitation token",
+            )
+
+        # Check if invitation is still pending
+        if invitation.status != InvitationStatus.PENDING:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invitation is no longer valid. Status: {invitation.status.value}",
+            )
+
+        # Check if invitation has expired
+        if invitation.expires_at < datetime.now(timezone.utc):
+            invitation.status = InvitationStatus.EXPIRED
+            db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invitation has expired. Please request a new invitation.",
+            )
+
+        # Verify email matches invitation
+        if invitation.email.lower() != email.lower():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email does not match the invitation",
+            )
 
     # Create new user (marked as unverified)
     password_hash = hash_password(request.password)
@@ -252,16 +292,33 @@ async def signup(request: SignupRequest, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(user)
 
-    # Create default workspace
-    workspace = Workspace(name=f"{user.name}'s Workspace")
-    db.add(workspace)
-    db.commit()
-    db.refresh(workspace)
+    # If invitation token provided, join the workspace instead of creating default
+    if invitation:
+        # Create workspace membership with role from invitation
+        membership = WorkspaceMember(
+            workspace_id=invitation.workspace_id,
+            user_id=user.id,
+            role=invitation.role,
+        )
+        db.add(membership)
 
-    # Add user as owner
-    membership = WorkspaceMember(workspace_id=workspace.id, user_id=user.id, role=WorkspaceRole.OWNER)
-    db.add(membership)
-    db.commit()
+        # Mark invitation as accepted
+        invitation.status = InvitationStatus.ACCEPTED
+        invitation.accepted_at = datetime.now(timezone.utc)
+        db.commit()
+
+        logger.info(f"User {user.email} signed up and joined workspace {invitation.workspace_id} via invitation")
+    else:
+        # Create default workspace
+        workspace = Workspace(name=f"{user.name}'s Workspace")
+        db.add(workspace)
+        db.commit()
+        db.refresh(workspace)
+
+        # Add user as owner
+        membership = WorkspaceMember(workspace_id=workspace.id, user_id=user.id, role=WorkspaceRole.OWNER)
+        db.add(membership)
+        db.commit()
 
     # Send verification email (use first name for personalization)
     email_sent = send_verification_email(user.email, verification_token, user.first_name)
@@ -354,9 +411,14 @@ async def verify_email(request: VerifyEmailRequest, db: Session = Depends(get_db
 
 
 @router.post("/api/v1/auth/login", response_model=LoginResponse)
-async def login(request: LoginRequest, db: Session = Depends(get_db)):
+async def login(
+    request: LoginRequest,
+    invitation_token: Optional[str] = Query(None, description="Optional invitation token to accept invitation on login"),
+    db: Session = Depends(get_db),
+):
     """
     Login with email and password.
+    If invitation_token is provided, validates it and adds user to workspace if not already a member.
     """
     # Find user by email
     user = db.query(User).filter(User.email == request.email).first()
@@ -391,6 +453,54 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
                 detail="Please verify your email address before logging in. Check your inbox for the verification email.",
                 headers={"X-Verification-Pending": "true"}  # Flag for frontend
             )
+
+    # Handle invitation token if provided
+    if invitation_token:
+        logger.info(f"Processing invitation token during login for user {request.email}")
+        invitation = (
+            db.query(WorkspaceInvitation)
+            .filter(WorkspaceInvitation.invitation_token == invitation_token)
+            .first()
+        )
+
+        if not invitation:
+            logger.warning(f"Invitation token not found: {invitation_token[:20]}...")
+        elif invitation.status != InvitationStatus.PENDING:
+            logger.warning(f"Login with non-pending invitation: {invitation.status.value} for email {invitation.email}")
+        elif invitation.expires_at < datetime.now(timezone.utc):
+            invitation.status = InvitationStatus.EXPIRED
+            db.commit()
+            logger.warning(f"Login with expired invitation for email {invitation.email}")
+        elif invitation.email.lower() != user.email.lower():
+            logger.warning(f"Email mismatch: invitation email '{invitation.email}' does not match user email '{user.email}'")
+        else:
+            # Email matches and invitation is valid
+            # Check if user is already a member
+            existing_membership = (
+                db.query(WorkspaceMember)
+                .filter(
+                    WorkspaceMember.workspace_id == invitation.workspace_id,
+                    WorkspaceMember.user_id == user.id,
+                )
+                .first()
+            )
+
+            if not existing_membership:
+                # Create workspace membership
+                membership = WorkspaceMember(
+                    workspace_id=invitation.workspace_id,
+                    user_id=user.id,
+                    role=invitation.role,
+                )
+                db.add(membership)
+                logger.info(f"Created workspace membership for user {user.email} in workspace {invitation.workspace_id} with role {invitation.role.value}")
+
+            # Mark invitation as accepted
+            invitation.status = InvitationStatus.ACCEPTED
+            invitation.accepted_at = datetime.now(timezone.utc)
+            db.commit()
+
+            logger.info(f"User {user.email} logged in and joined workspace {invitation.workspace_id} via invitation")
 
     # Get workspace memberships
     workspace_memberships = db.query(WorkspaceMember).filter(WorkspaceMember.user_id == user.id).all()
@@ -929,4 +1039,72 @@ async def update_user_profile(
         last_name=db_user.last_name,
         timezone=db_user.timezone,
         picture_url=db_user.picture_url,
+    )
+
+
+class InvitationValidationResponse(BaseModel):
+    """Response model for invitation validation."""
+
+    valid: bool
+    workspace_name: Optional[str] = None
+    role: Optional[str] = None
+    inviter_name: Optional[str] = None
+    message: str
+
+
+@router.get("/api/v1/invitations/validate", response_model=InvitationValidationResponse)
+async def validate_invitation(token: str = Query(..., description="Invitation token to validate"), db: Session = Depends(get_db)):
+    """
+    Validate an invitation token and return invitation details.
+
+    Public endpoint that doesn't require authentication.
+    Used by frontend to show invitation preview before signup/login.
+
+    Args:
+        token: Invitation token
+        db: Database session
+
+    Returns:
+        Invitation validation response with details
+    """
+    # Find invitation by token
+    invitation = (
+        db.query(WorkspaceInvitation, Workspace, User)
+        .join(Workspace, WorkspaceInvitation.workspace_id == Workspace.id)
+        .join(User, WorkspaceInvitation.invited_by == User.id)
+        .filter(WorkspaceInvitation.invitation_token == token)
+        .first()
+    )
+
+    if not invitation:
+        return InvitationValidationResponse(
+            valid=False,
+            message="Invalid invitation token",
+        )
+
+    invitation_obj, workspace, inviter = invitation
+
+    # Check if invitation is still pending
+    if invitation_obj.status != InvitationStatus.PENDING:
+        return InvitationValidationResponse(
+            valid=False,
+            message=f"Invitation is no longer valid. Status: {invitation_obj.status.value}",
+        )
+
+    # Check if invitation has expired
+    if invitation_obj.expires_at < datetime.now(timezone.utc):
+        # Mark as expired
+        invitation_obj.status = InvitationStatus.EXPIRED
+        db.commit()
+        return InvitationValidationResponse(
+            valid=False,
+            message="Invitation has expired",
+        )
+
+    return InvitationValidationResponse(
+        valid=True,
+        workspace_name=workspace.name,
+        role=invitation_obj.role.value,
+        inviter_name=inviter.name if inviter else "Team Admin",
+        message="Invitation is valid",
     )
