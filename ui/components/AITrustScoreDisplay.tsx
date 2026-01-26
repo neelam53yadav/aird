@@ -30,8 +30,6 @@ const METRIC_NAMES: Record<string, string> = {
   Chunk_Coherence: 'Chunk Coherence',
   Noise_Free_Score: 'Noise-Free Score',
   Chunk_Boundary_Quality: 'Chunk Boundary Quality',
-  Avg_Chunk_Coherence: 'Avg Chunk Coherence',
-  Avg_Noise_Free_Score: 'Avg Noise-Free Score',
   // Vector metrics
   Embedding_Dimension_Consistency: 'Embedding Dimension Consistency',
   Embedding_Success_Rate: 'Embedding Success Rate',
@@ -41,7 +39,6 @@ const METRIC_NAMES: Record<string, string> = {
   // RAG metrics
   Retrieval_Recall_At_K: 'Retrieval Recall@K',
   Average_Precision_At_K: 'Average Precision@K',
-  Query_Coverage: 'Query Coverage',
 }
 
 const METRIC_DESCRIPTIONS: Record<string, string> = {
@@ -62,8 +59,6 @@ const METRIC_DESCRIPTIONS: Record<string, string> = {
   Chunk_Coherence: 'Semantic cohesion within chunks',
   Noise_Free_Score: 'Percentage of content free from boilerplate/navigation noise',
   Chunk_Boundary_Quality: 'Quality of chunk boundaries (fewer mid-sentence breaks)',
-  Avg_Chunk_Coherence: 'Average coherence across all chunks',
-  Avg_Noise_Free_Score: 'Average noise-free score across all chunks',
   // Vector metric descriptions
   Embedding_Dimension_Consistency: 'Percentage of vectors with expected dimension',
   Embedding_Success_Rate: 'Percentage of chunks successfully embedded and stored',
@@ -73,7 +68,6 @@ const METRIC_DESCRIPTIONS: Record<string, string> = {
   // RAG metric descriptions
   Retrieval_Recall_At_K: 'Percentage of relevant documents retrieved in top K results',
   Average_Precision_At_K: 'Average precision across top K retrieved results',
-  Query_Coverage: 'Percentage of queries with at least one relevant result retrieved',
 }
 
 // Metric categories for professional organization
@@ -97,7 +91,7 @@ const METRIC_CATEGORIES = {
   chunking: {
     name: 'Chunking & Structure',
     icon: Layers,
-    metrics: ['Chunk_Coherence', 'Noise_Free_Score', 'Chunk_Boundary_Quality', 'Avg_Chunk_Coherence', 'Avg_Noise_Free_Score'],
+    metrics: ['Chunk_Coherence', 'Noise_Free_Score', 'Chunk_Boundary_Quality'],
     headerBg: 'bg-blue-50',
     headerBorder: 'border-blue-200',
     iconClass: 'text-blue-600',
@@ -113,7 +107,7 @@ const METRIC_CATEGORIES = {
   rag: {
     name: 'RAG Performance',
     icon: Search,
-    metrics: ['Retrieval_Recall_At_K', 'Average_Precision_At_K', 'Query_Coverage'],
+    metrics: ['Retrieval_Recall_At_K', 'Average_Precision_At_K'],
     headerBg: 'bg-blue-50',
     headerBorder: 'border-blue-200',
     iconClass: 'text-blue-600',
@@ -317,7 +311,7 @@ export function AITrustScoreDisplay({ productId, showTitle = true }: AITrustScor
 
   // Check if metric should show "Not Evaluated" for vector metrics
   const isNotEvaluated = (key: string, value: number): boolean => {
-    const vectorMetrics = ['Embedding_Dimension_Consistency', 'Embedding_Success_Rate', 'Vector_Quality_Score', 'Embedding_Model_Health', 'Semantic_Search_Readiness', 'Retrieval_Recall_At_K', 'Average_Precision_At_K', 'Query_Coverage']
+    const vectorMetrics = ['Embedding_Dimension_Consistency', 'Embedding_Success_Rate', 'Vector_Quality_Score', 'Embedding_Model_Health', 'Semantic_Search_Readiness', 'Retrieval_Recall_At_K', 'Average_Precision_At_K']
     return vectorMetrics.includes(key) && (value === 0 || value === null || value === undefined)
   }
 

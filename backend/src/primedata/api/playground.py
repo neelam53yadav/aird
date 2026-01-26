@@ -16,6 +16,7 @@ from ..db.database import get_db
 from ..db.models import Product
 from ..indexing.qdrant_client import QdrantClient
 from ..storage.minio_client import MinIOClient
+from .search_utils import expand_query_terms, calculate_keyword_boost
 
 logger = logging.getLogger(__name__)
 
@@ -335,6 +336,10 @@ async def query_playground(
         
         logger.info(f"✅ Query embedding dimension ({query_dimension}) matches collection dimension ({stored_dimension})")
 
+        # Expand query terms for keyword boosting
+        query_terms = expand_query_terms(query_data.query)
+        logger.debug(f"Expanded query terms: {query_terms}")
+
         # Apply ACL filtering (M5) - using Qdrant as single source of truth
         acl_applied = False
         filter_conditions = None
@@ -493,10 +498,15 @@ async def query_playground(
             if token_est:
                 section_label += f" - {token_est} tokens"
 
-            # Create result object
+            # Calculate keyword boost for this result
+            original_score = result.get("score", 0.0)
+            keyword_boost = calculate_keyword_boost(text, query_terms, query_data.query)
+            boosted_score = min(original_score + keyword_boost, 1.0)  # Cap at 1.0
+            
+            # Create result object with boosted score
             playground_result = PlaygroundResult(
                 text=text,
-                score=result.get("score", 0.0),
+                score=boosted_score,
                 doc_path=filename or source_file,
                 section=section_label,
                 meta={
@@ -509,10 +519,15 @@ async def query_playground(
                     "token_est": token_est,
                     "text_length": text_length,
                     "is_truncated": is_truncated,
+                    "original_score": original_score,
+                    "keyword_boost": keyword_boost,
                 },
                 presigned_url=presigned_url,
             )
             results.append(playground_result)
+
+        # Sort results by boosted score (descending)
+        results.sort(key=lambda x: x.score, reverse=True)
 
         # Calculate latency
         latency_ms = (time.time() - start_time) * 1000
