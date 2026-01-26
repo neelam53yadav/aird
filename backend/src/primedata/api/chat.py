@@ -1,8 +1,9 @@
 """
 Chat API endpoint for RAG queries with LLM generation.
 
-Uses OpenAI API for LLM generation and evaluations.
-Requires OPENAI_API_KEY to be configured.
+Supports:
+- OpenAI API for chat/LLM generation (requires OPENAI_API_KEY)
+- Ollama for evaluation metrics (LLM-as-judge) - preferred, falls back to OpenAI if available
 """
 
 import hashlib
@@ -112,25 +113,128 @@ class OpenAILLMClient(LLMClient):
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"LLM generation failed: {str(e)}")
 
 
+class OllamaLLMClient(LLMClient):
+    """Ollama LLM client for evaluation metrics (LLM-as-judge)."""
+
+    def __init__(self, base_url: str = "http://localhost:11434", model: str = "llama2"):
+        self.base_url = base_url
+        self.model = model
+
+    def generate(self, prompt: str, temperature: float = 0.7, max_tokens: int = 1000) -> Dict[str, Any]:
+        """Generate using Ollama."""
+        try:
+            import httpx
+
+            with httpx.Client(timeout=60.0) as client:
+                response = client.post(
+                    f"{self.base_url}/api/generate",
+                    json={
+                        "model": self.model,
+                        "prompt": prompt,
+                        "stream": False,
+                        "options": {
+                            "temperature": temperature,
+                            "num_predict": max_tokens,
+                        },
+                    },
+                )
+                response.raise_for_status()
+                result = response.json()
+                return {
+                    "text": result.get("response", ""),
+                    "tokens_used": None,  # Ollama doesn't always return token count
+                    "model": self.model,
+                }
+        except Exception as e:
+            logger.error(f"Ollama generation error: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"LLM generation failed: {str(e)}. Make sure Ollama is running at {self.base_url}",
+            )
+
+
 def get_llm_client(workspace: Workspace, model: Optional[str] = None) -> LLMClient:
     """
-    Get LLM client using OpenAI API.
+    Get LLM client for chat/answer generation.
     
-    Requires OPENAI_API_KEY to be configured either in workspace settings or environment variable.
+    Priority:
+    1. OpenAI (if API key is available) - preferred for chat
+    2. Ollama (if OpenAI key not available) - fallback
+    
+    Returns:
+        LLMClient instance (OpenAI or Ollama)
     """
-    # Check for OpenAI API key
+    # Check for OpenAI API key first (preferred for chat)
     openai_key = workspace.settings.get("openai_api_key") if workspace.settings else None
     if not openai_key:
         openai_key = os.getenv("OPENAI_API_KEY")
 
-    if not openai_key:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="OpenAI API key is required. Please configure OPENAI_API_KEY in workspace settings or environment variables.",
-        )
+    if openai_key:
+        model_name = model or workspace.settings.get("chat_model", "gpt-3.5-turbo") if workspace.settings else "gpt-3.5-turbo"
+        logger.info("Using OpenAI for chat/answer generation")
+        return OpenAILLMClient(api_key=openai_key, model=model_name)
+    
+    # Fallback to Ollama if OpenAI key not available
+    ollama_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    model_name = model or os.getenv("OLLAMA_MODEL", "llama2")
+    
+    # Check if Ollama is available
+    try:
+        import httpx
+        with httpx.Client(timeout=5.0) as client:
+            response = client.get(f"{ollama_url}/api/tags")
+            if response.status_code == 200:
+                logger.info(f"Using Ollama for chat/answer generation at {ollama_url} (OpenAI key not available)")
+                return OllamaLLMClient(base_url=ollama_url, model=model_name)
+    except Exception as e:
+        logger.debug(f"Ollama not available at {ollama_url}: {e}")
+    
+    # If neither available, raise error
+    raise HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail="No LLM available. Configure OPENAI_API_KEY or ensure Ollama is running at OLLAMA_BASE_URL.",
+    )
 
-    model_name = model or workspace.settings.get("chat_model", "gpt-3.5-turbo") if workspace.settings else "gpt-3.5-turbo"
-    return OpenAILLMClient(api_key=openai_key, model=model_name)
+
+def get_evaluation_llm_client() -> LLMClient:
+    """
+    Get LLM client for evaluation metrics (LLM-as-judge).
+    
+    Priority:
+    1. OpenAI (if API key is available) - preferred
+    2. Ollama (if OpenAI key not available) - fallback
+    
+    Returns:
+        LLMClient instance (OpenAI or Ollama)
+    """
+    # Check for OpenAI API key first (preferred)
+    openai_key = os.getenv("OPENAI_API_KEY")
+    
+    if openai_key:
+        eval_model = os.getenv("OPENAI_EVAL_MODEL", "gpt-3.5-turbo")
+        logger.info("Using OpenAI for evaluation metrics (LLM-as-judge)")
+        return OpenAILLMClient(api_key=openai_key, model=eval_model)
+    
+    # Fallback to Ollama if OpenAI key not available
+    ollama_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    model_name = os.getenv("OLLAMA_MODEL", "llama2")
+    
+    # Check if Ollama is available
+    try:
+        import httpx
+        with httpx.Client(timeout=5.0) as client:
+            response = client.get(f"{ollama_url}/api/tags")
+            if response.status_code == 200:
+                logger.info(f"Using Ollama for evaluation metrics at {ollama_url} (OpenAI key not available)")
+                return OllamaLLMClient(base_url=ollama_url, model=model_name)
+    except Exception as e:
+        logger.debug(f"Ollama not available at {ollama_url}: {e}")
+    
+    # If neither available, raise error
+    raise HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail="No LLM available for evaluation. Configure OPENAI_API_KEY or ensure Ollama is running at OLLAMA_BASE_URL.",
+    )
 
 
 def build_rag_prompt(query: str, chunks: List[Dict[str, Any]]) -> str:

@@ -11,7 +11,7 @@ import numpy as np
 from loguru import logger
 from sqlalchemy.orm import Session
 
-from primedata.api.chat import build_rag_prompt, get_llm_client
+from primedata.api.chat import build_rag_prompt, get_llm_client, get_evaluation_llm_client
 from primedata.db.models import (
     ArtifactStatus,
     EvalDataset,
@@ -177,21 +177,30 @@ class EvaluationRunner:
         
         logger.info(f"Using collection: {collection_name}")
         
-        # Get LLM client (for answer generation and LLM-as-judge)
-        llm_client = None
+        # Get LLM client for answer generation (OpenAI)
+        answer_llm_client = None
         use_llm = True
         try:
-            llm_client = get_llm_client(workspace)
-            logger.info("LLM client initialized for answer generation and evaluation")
+            answer_llm_client = get_llm_client(workspace)
+            logger.info("LLM client initialized for answer generation")
         except Exception as e:
-            logger.warning(f"Failed to initialize LLM client: {e}. Will use template-based answers.")
+            logger.warning(f"Failed to initialize LLM client for answer generation: {e}. Will use template-based answers.")
             use_llm = False
         
-        # Update evaluator with LLM client if available
-        if llm_client:
+        # Get LLM client for evaluation metrics (Ollama first, OpenAI fallback)
+        eval_llm_client = None
+        try:
+            eval_llm_client = get_evaluation_llm_client()
+            logger.info("LLM client initialized for evaluation metrics (LLM-as-judge)")
+        except Exception as e:
+            logger.warning(f"Failed to initialize LLM client for evaluation: {e}. Evaluation metrics will use fallback methods.")
+            eval_llm_client = None
+        
+        # Update evaluator with evaluation LLM client if available
+        if eval_llm_client:
             self.evaluator = Evaluator(
                 embedding_generator=self.evaluator.metric_registry.embedding_generator,
-                llm_client=llm_client,
+                llm_client=eval_llm_client,
             )
         
         # Process each item
@@ -246,12 +255,12 @@ class EvaluationRunner:
                         chunk_ids.append(str(chunk_data["id"]))
                 
                 # Generate answer
-                logger.debug(f"[{i+1}/{len(items)}] Generating answer (LLM available: {use_llm and llm_client is not None})")
-                if use_llm and llm_client and retrieved_chunks:
+                logger.debug(f"[{i+1}/{len(items)}] Generating answer (LLM available: {use_llm and answer_llm_client is not None})")
+                if use_llm and answer_llm_client and retrieved_chunks:
                     # Use LLM to generate answer
                     prompt = build_rag_prompt(item.query, retrieved_chunks)
                     try:
-                        llm_result = llm_client.generate(
+                        llm_result = answer_llm_client.generate(
                             prompt=prompt,
                             temperature=0.7,
                             max_tokens=1000,
@@ -305,7 +314,7 @@ class EvaluationRunner:
                     "answer": answer,
                     "retrieved_chunks_count": len(retrieved_chunks),
                     "retrieved_chunk_ids": chunk_ids,
-                    "answer_method": "llm" if (use_llm and llm_client) else "template",
+                    "answer_method": "llm" if (use_llm and answer_llm_client) else "template",
                     "metrics": metrics,
                 })
             except Exception as e:
@@ -331,7 +340,7 @@ class EvaluationRunner:
                 "version": version,
                 "total_items": len(items),
                 "completed_at": datetime.utcnow().isoformat() + "Z",
-                "answer_method": "llm" if (use_llm and llm_client) else "template",
+                "answer_method": "llm" if (use_llm and answer_llm_client) else "template",
             }
         }
 

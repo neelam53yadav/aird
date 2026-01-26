@@ -15,6 +15,26 @@ services:
     networks:
       - primedata-network
 
+  ollama:
+    image: ollama/ollama:latest
+    container_name: primedata-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+    networks:
+      - primedata-network
+    # Health check to ensure Ollama is ready
+    # Check if Ollama process is running (more reliable than curl/wget which may not be available)
+    # Using ps which is available in most containers
+    healthcheck:
+      test: ["CMD-SHELL", "ps aux | grep -v grep | grep ollama || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
   airflow-webserver:
     image: infra-airflow-webserver:latest
     pull_policy: never
@@ -55,8 +75,11 @@ services:
       PYTHONPATH: /opt/airflow/primedata/src
       GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-}
       GCS_SIGNER_SERVICE_ACCOUNT: ${GCS_SIGNER_SERVICE_ACCOUNT}
-      # OpenAI Configuration (for LLM generation and LLM-as-judge evaluation)
+      # OpenAI Configuration (for LLM generation)
       OPENAI_API_KEY: ${OPENAI_API_KEY}
+      # Ollama Configuration (for LLM-as-judge evaluation)
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama2}
     ports:
       - "8080:8080"
     volumes:
@@ -111,8 +134,11 @@ services:
       PYTHONPATH: /opt/airflow/primedata/src
       GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-}
       GCS_SIGNER_SERVICE_ACCOUNT: ${GCS_SIGNER_SERVICE_ACCOUNT}
-      # OpenAI Configuration (for LLM generation and LLM-as-judge evaluation)
+      # OpenAI Configuration (for LLM generation)
       OPENAI_API_KEY: ${OPENAI_API_KEY}
+      # Ollama Configuration (for LLM-as-judge evaluation)
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama2}
     volumes:
       - airflow_dags:/opt/airflow/dags
       - airflow_logs:/opt/airflow/logs
@@ -170,10 +196,15 @@ services:
       SMTP_USERNAME: ${SMTP_USERNAME}
       SMTP_PASSWORD: ${SMTP_PASSWORD}
       SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL}
-      # OpenAI Configuration (for LLM generation and LLM-as-judge evaluation)
+      # OpenAI Configuration (for LLM generation)
       OPENAI_API_KEY: ${OPENAI_API_KEY}
+      # Ollama Configuration (for LLM-as-judge evaluation)
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama2}
     depends_on:
       qdrant:
+        condition: service_started
+      ollama:
         condition: service_started
     restart: unless-stopped
     healthcheck:
@@ -220,6 +251,8 @@ services:
 
 volumes:
   qdrant_data:
+    driver: local
+  ollama_data:
     driver: local
   airflow_dags:
     driver: local
