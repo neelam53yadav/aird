@@ -424,36 +424,38 @@ export function AITrustScoreDisplay({ productId, showTitle = true }: AITrustScor
       </div>
 
       {/* Policy Status Banner */}
-      <div className={`rounded-lg border p-4 ${getPolicyStatusColor(policy.status || 'unknown')}`}>
-        <div className="flex items-start gap-3">
-          {getPolicyStatusIcon(policy.status || 'unknown')}
-          <div className="flex-1">
-            <h3 className="font-medium mb-1">
-              Policy Evaluation: {policy.status ? (policy.status.charAt(0).toUpperCase() + policy.status.slice(1)) : 'Unknown'}
-            </h3>
-            {policy.violations && policy.violations.length > 0 && (
-              <div className="mt-2">
-                <p className="text-sm font-medium mb-1">Violations:</p>
-                <ul className="list-disc list-inside text-sm space-y-1">
-                  {(policy.violations || []).map((violation: string, idx: number) => (
-                    <li key={idx}>{violation}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {policy.warnings && policy.warnings.length > 0 && (
-              <div className="mt-2">
-                <p className="text-sm font-medium mb-1">Warnings:</p>
-                <ul className="list-disc list-inside text-sm space-y-1">
-                  {(policy.warnings || []).map((warning: string, idx: number) => (
-                    <li key={idx}>{warning}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
+      {policy && (
+        <div className={`rounded-lg border p-4 ${getPolicyStatusColor(policy.status || 'unknown')}`}>
+          <div className="flex items-start gap-3">
+            {getPolicyStatusIcon(policy.status || 'unknown')}
+            <div className="flex-1">
+              <h3 className="font-medium mb-1">
+                Policy Evaluation: {policy.status ? (policy.status.charAt(0).toUpperCase() + policy.status.slice(1)) : 'Unknown'}
+              </h3>
+              {policy.violations && policy.violations.length > 0 && (
+                <div className="mt-2">
+                  <p className="text-sm font-medium mb-1">Violations:</p>
+                  <ul className="list-disc list-inside text-sm space-y-1">
+                    {(policy.violations || []).map((violation: string, idx: number) => (
+                      <li key={idx}>{violation}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {policy.warnings && policy.warnings.length > 0 && (
+                <div className="mt-2">
+                  <p className="text-sm font-medium mb-1">Warnings:</p>
+                  <ul className="list-disc list-inside text-sm space-y-1">
+                    {(policy.warnings || []).map((warning: string, idx: number) => (
+                      <li key={idx}>{warning}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Detailed Metrics Breakdown - Categorized */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
