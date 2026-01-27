@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { signIn, useSession } from 'next-auth/react'
+import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { exchangeToken } from '@/lib/auth-utils'
 import { Footer } from '@/components/Footer'
@@ -50,22 +50,6 @@ export default function HomePage() {
     }, 5000)
     return () => clearInterval(interval)
   }, [])
-
-  const handleGoogleSignIn = async () => {
-    try {
-      const result = await signIn("google", { 
-        callbackUrl: "/dashboard",
-        redirect: false
-      })
-      
-      if (result?.ok) {
-        await exchangeToken()
-        router.push('/dashboard')
-      }
-    } catch (error) {
-      // Sign in error handled silently
-    }
-  }
 
   const handleEmailSignIn = () => {
     router.push("/signin")
